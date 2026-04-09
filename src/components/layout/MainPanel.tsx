@@ -158,6 +158,13 @@ export function MainPanel({
 }
 
 function LogView({ task }: { task: Task }) {
+  const bottomRef = useRef<HTMLDivElement>(null)
+
+  // Auto-scroll to bottom when logs change
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [task.logs.length])
+
   if (task.logs.length === 0) {
     return (
       <div className={styles.emptyContent}>
@@ -199,6 +206,7 @@ function LogView({ task }: { task: Task }) {
           <span className={styles.logContent}>Agent working...</span>
         </div>
       )}
+      <div ref={bottomRef} />
     </div>
   )
 }
