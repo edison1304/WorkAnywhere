@@ -331,10 +331,36 @@ ipcMain.handle('workspace:save', async (_event, workspace) => {
   }
 })
 
-// ─── Local config (connection settings, no password) ───
+// ─── Local persistence ───
 function getConfigPath(): string {
   return join(app.getPath('userData'), 'config.json')
 }
+
+function getDataPath(): string {
+  return join(app.getPath('userData'), 'data.json')
+}
+
+// Project/Phase/Task persistence
+ipcMain.handle('data:load', async () => {
+  const dataPath = getDataPath()
+  try {
+    if (existsSync(dataPath)) {
+      return { success: true, data: JSON.parse(readFileSync(dataPath, 'utf-8')) }
+    }
+    return { success: true, data: null }
+  } catch {
+    return { success: true, data: null }
+  }
+})
+
+ipcMain.handle('data:save', async (_event, data: Record<string, unknown>) => {
+  try {
+    writeFileSync(getDataPath(), JSON.stringify(data, null, 2))
+    return { success: true }
+  } catch (err) {
+    return { success: false, error: String(err) }
+  }
+})
 
 ipcMain.handle('config:load', async () => {
   const configPath = getConfigPath()

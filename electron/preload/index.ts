@@ -85,6 +85,10 @@ const api: IpcApi = {
   configLoad: () => ipcRenderer.invoke('config:load'),
   configSave: (config) => ipcRenderer.invoke('config:save', config),
 
+  // Data persistence (projects/phases/tasks)
+  dataLoad: () => ipcRenderer.invoke('data:load'),
+  dataSave: (data) => ipcRenderer.invoke('data:save', data),
+
   // Remote folder browser
   sshListDir: (path) => ipcRenderer.invoke('ssh:list-dir', path),
   sshMkdir: (path) => ipcRenderer.invoke('ssh:mkdir', path),

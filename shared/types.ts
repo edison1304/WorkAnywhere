@@ -176,6 +176,10 @@ export interface IpcApi {
   configLoad(): Promise<{ success: boolean; config: AppConfig | null }>
   configSave(config: AppConfig): Promise<{ success: boolean }>
 
+  // Data persistence
+  dataLoad(): Promise<{ success: boolean; data: SavedData | null }>
+  dataSave(data: SavedData): Promise<{ success: boolean }>
+
   // Remote folder browser
   sshListDir(path: string): Promise<{ success: boolean; entries?: DirEntry[]; currentPath?: string; error?: string }>
   sshMkdir(path: string): Promise<{ success: boolean; error?: string }>
@@ -219,6 +223,12 @@ export interface DirEntry {
   name: string
   isDir: boolean
   path: string
+}
+
+export interface SavedData {
+  projects: Project[]
+  phases: Phase[]
+  tasks: Task[]
 }
 
 export interface CreateProjectInput {

@@ -19,6 +19,36 @@ export default function App() {
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null)
   const [sidebarView, setSidebarView] = useState<SidebarView>('monitor')
   const [detachedPanels, setDetachedPanels] = useState<Set<string>>(new Set())
+  const [dataLoaded, setDataLoaded] = useState(false)
+
+  // Load saved data on startup
+  useEffect(() => {
+    if (dataLoaded || !window.api) return
+    setDataLoaded(true)
+    window.api.dataLoad().then(result => {
+      if (result.success && result.data) {
+        if (result.data.projects?.length) setProjects(result.data.projects)
+        if (result.data.phases?.length) setPhases(result.data.phases)
+        if (result.data.tasks?.length) {
+          // Reset running tasks to idle (they weren't actually running)
+          setTasks(result.data.tasks.map(t =>
+            t.status === 'running' || t.status === 'queued' ? { ...t, status: 'idle' as const } : t
+          ))
+        }
+        // Auto-select first project
+        if (result.data.projects?.length) {
+          setActiveProjectId(result.data.projects[0].id)
+        }
+      }
+    })
+  }, [dataLoaded])
+
+  // Auto-save data when it changes
+  useEffect(() => {
+    if (!dataLoaded || !window.api) return
+    if (projects.length === 0 && phases.length === 0 && tasks.length === 0) return
+    window.api.dataSave({ projects, phases, tasks })
+  }, [projects, phases, tasks, dataLoaded])
 
   // SSH state
   const [sshConnected, setSshConnected] = useState(false)

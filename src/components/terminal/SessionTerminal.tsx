@@ -15,7 +15,7 @@ export function SessionTerminal({ taskId, isActive }: Props) {
   const fitAddonRef = useRef<FitAddon | null>(null)
 
   useEffect(() => {
-    if (!containerRef.current || !isActive) return
+    if (!containerRef.current || !isActive || !window.api) return
 
     const terminal = new Terminal({
       theme: {
@@ -42,56 +42,41 @@ export function SessionTerminal({ taskId, isActive }: Props) {
 
     const fitAddon = new FitAddon()
     terminal.loadAddon(fitAddon)
-
     terminal.open(containerRef.current)
     fitAddon.fit()
 
     terminalRef.current = terminal
     fitAddonRef.current = fitAddon
 
-    // Send terminal input to PTY via IPC
+    // Send terminal input to PTY
     terminal.onData((data) => {
-      if (window.api) {
-        // @ts-ignore - pty:write is sent via ipcRenderer.send
-        window.api.syncState({ type: 'pty:write', taskId, data })
-      }
+      window.api.ptyWrite(taskId, data)
     })
 
-    // Listen for PTY output
-    let cleanupPty: (() => void) | undefined
-    if (window.api) {
-      cleanupPty = window.api.onStateSync((msg: any) => {
-        if (msg?.type === 'pty:data' && msg.taskId === taskId) {
-          terminal.write(msg.data)
-        }
-      })
-    }
+    // Receive PTY output
+    const cleanupPty = window.api.onPtyData(({ taskId: tid, data }) => {
+      if (tid === taskId) {
+        terminal.write(data)
+      }
+    })
 
     // Handle resize
     const resizeObserver = new ResizeObserver(() => {
       try {
         fitAddon.fit()
-        if (window.api) {
-          // @ts-ignore
-          window.api.syncState({
-            type: 'pty:resize', taskId,
-            cols: terminal.cols, rows: terminal.rows
-          })
-        }
-      } catch { /* ignore resize errors */ }
+        window.api.ptyResize(taskId, terminal.cols, terminal.rows)
+      } catch { /* ignore */ }
     })
     resizeObserver.observe(containerRef.current)
 
-    // Welcome message
     terminal.writeln('\x1b[36m╭─ Workanywhere Terminal ─╮\x1b[0m')
-    terminal.writeln('\x1b[36m│\x1b[0m Connected via SSH')
-    terminal.writeln('\x1b[36m│\x1b[0m Claude Code agent ready')
+    terminal.writeln('\x1b[36m│\x1b[0m Waiting for agent...')
     terminal.writeln('\x1b[36m╰─────────────────────────╯\x1b[0m')
     terminal.writeln('')
 
     return () => {
       resizeObserver.disconnect()
-      cleanupPty?.()
+      cleanupPty()
       terminal.dispose()
       terminalRef.current = null
       fitAddonRef.current = null

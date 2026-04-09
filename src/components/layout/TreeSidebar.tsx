@@ -273,13 +273,13 @@ function ManageView({
                     <span className={styles.manageTaskStatus}>{task.status}</span>
                   </button>
                 ))}
-                <button className={styles.addTaskBtn}>+ New Task</button>
+                <button className={styles.addTaskBtn} onClick={() => { onSelectPhase(phase.id); onSelectTask(null) }}>+ New Task</button>
               </div>
             )}
           </div>
         )
       })}
-      <button className={styles.addPhaseBtn}>+ New Phase</button>
+      <button className={styles.addPhaseBtn} onClick={() => onSelectTask(null)}>+ New Phase</button>
     </>
   )
 }
