@@ -226,6 +226,8 @@ export default function App() {
         sidebarView={sidebarView}
         detachedPanels={detachedPanels}
         sshConnected={sshConnected}
+        sshConnecting={sshConnecting}
+        sshError={sshError}
         claudeVersion={claudeVersion}
         onSidebarViewChange={setSidebarView}
         onSelectProject={(id) => {
@@ -243,10 +245,6 @@ export default function App() {
         onPinTask={handlePinTask}
         onDetach={handleDetach}
         onReattach={handleReattach}
-        sshConnected={sshConnected}
-        sshConnecting={sshConnecting}
-        sshError={sshError}
-        claudeVersion={claudeVersion}
         onRunAgent={handleRunAgent}
         onStopAgent={handleStopAgent}
         onSSHConnect={handleSSHConnect}
