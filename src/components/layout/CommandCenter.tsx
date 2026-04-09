@@ -1,4 +1,4 @@
-import type { Project, Job } from '../../../shared/types'
+import type { Project, Phase, Task } from '../../../shared/types'
 import { ProjectSidebar } from './ProjectSidebar'
 import { StatusRail } from './StatusRail'
 import { MainPanel } from './MainPanel'
@@ -7,25 +7,36 @@ import styles from './CommandCenter.module.css'
 interface Props {
   projects: Project[]
   activeProject: Project | null
-  jobs: Job[]
-  allJobs: Job[]
-  activeJob: Job | null
+  phases: Phase[]
+  activePhase: Phase | null
+  tasks: Task[]
+  allTasks: Task[]
+  activeTask: Task | null
   onSelectProject: (id: string) => void
-  onSelectJob: (id: string | null) => void
+  onSelectPhase: (id: string) => void
+  onSelectTask: (id: string | null) => void
 }
 
 export function CommandCenter({
-  projects, activeProject, jobs, allJobs, activeJob,
-  onSelectProject, onSelectJob
+  projects, activeProject, phases, activePhase, tasks, allTasks, activeTask,
+  onSelectProject, onSelectPhase, onSelectTask
 }: Props) {
   return (
     <div className={styles.root}>
       {/* Titlebar */}
       <div className={styles.titlebar}>
-        <div className="titlebar-drag" style={{ flex: 1 }}>
+        <div className="titlebar-drag" style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
           <span className={styles.titleText}>Workanywhere</span>
           {activeProject && (
-            <span className={styles.titleProject}>{activeProject.name}</span>
+            <span className={styles.breadcrumb}>
+              <span className={styles.breadcrumbItem}>{activeProject.name}</span>
+              {activePhase && (
+                <>
+                  <span className={styles.breadcrumbSep}>/</span>
+                  <span className={styles.breadcrumbItem}>{activePhase.name}</span>
+                </>
+              )}
+            </span>
           )}
         </div>
         <div className="titlebar-nodrag" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -35,21 +46,25 @@ export function CommandCenter({
         </div>
       </div>
 
-      {/* Main layout: sidebar + center + rail */}
+      {/* Main layout */}
       <div className={styles.body}>
         <ProjectSidebar
           projects={projects}
           activeProjectId={activeProject?.id || null}
-          jobs={jobs}
-          activeJobId={activeJob?.id || null}
+          phases={phases}
+          activePhaseId={activePhase?.id || null}
+          tasks={tasks}
+          activeTaskId={activeTask?.id || null}
           onSelectProject={onSelectProject}
-          onSelectJob={onSelectJob}
+          onSelectPhase={onSelectPhase}
+          onSelectTask={onSelectTask}
         />
-        <MainPanel activeJob={activeJob} />
+        <MainPanel activeTask={activeTask} activePhase={activePhase} />
         <StatusRail
-          jobs={allJobs}
-          activeJobId={activeJob?.id || null}
-          onSelectJob={onSelectJob}
+          allTasks={allTasks}
+          phases={phases}
+          activeTaskId={activeTask?.id || null}
+          onSelectTask={onSelectTask}
         />
       </div>
     </div>

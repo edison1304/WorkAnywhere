@@ -1,4 +1,4 @@
-// ─── Project ───
+// ─── 대분류: Project ───
 export interface Project {
   id: string
   name: string
@@ -26,52 +26,61 @@ export interface ProjectSettings {
   autoArtifactScan: boolean
 }
 
-// ─── Job ───
-export interface Job {
+// ─── 중분류: Phase ───
+export interface Phase {
   id: string
   projectId: string
   name: string
-  status: JobStatus
+  description?: string
+  order: number
+  status: PhaseStatus
+  createdAt: string
+  updatedAt: string
+}
+
+export type PhaseStatus = 'active' | 'paused' | 'completed'
+
+// ─── 소분류: Task ───
+export interface Task {
+  id: string
+  phaseId: string
+  projectId: string
+  name: string
+  status: TaskStatus
   sessionId?: string
   prompt: string
-  steps: Step[]
+  logs: LogEntry[]
   artifacts: Artifact[]
   createdAt: string
   updatedAt: string
   completedAt?: string
 }
 
-export type JobStatus =
-  | 'queued'
-  | 'running'
-  | 'waiting'
-  | 'completed'
-  | 'failed'
-  | 'review'
+export type TaskStatus =
+  | 'idle'        // 에이전트 미호출
+  | 'queued'      // 대기 중
+  | 'running'     // 에이전트 실행 중
+  | 'waiting'     // 사용자 입력 대기
+  | 'completed'   // 완료 (에이전트 종료, 로그 보존)
+  | 'failed'      // 실패 (에이전트 종료, 로그 보존)
 
-// ─── Step ───
-export interface Step {
+// ─── Log ───
+export interface LogEntry {
   id: string
-  jobId: string
-  index: number
-  description: string
-  status: 'pending' | 'running' | 'completed' | 'failed'
-  toolCalls: ToolCall[]
-  startedAt?: string
-  completedAt?: string
-}
-
-export interface ToolCall {
-  tool: string
-  input: Record<string, unknown>
-  output?: string
-  duration?: number
+  taskId: string
+  timestamp: string
+  type: 'agent_start' | 'tool_call' | 'text' | 'error' | 'agent_end'
+  content: string
+  meta?: {
+    tool?: string
+    duration?: number
+  }
 }
 
 // ─── Artifact ───
 export interface Artifact {
   id: string
-  jobId: string
+  taskId: string
   filePath: string
   type: ArtifactType
   action: 'created' | 'modified' | 'deleted'
@@ -84,21 +93,28 @@ export type ArtifactType =
 
 // ─── IPC ───
 export interface IpcApi {
-  // Project
+  // Project (대분류)
   projectList(): Promise<Project[]>
   projectCreate(input: CreateProjectInput): Promise<Project>
   projectDelete(id: string): Promise<void>
 
-  // Job
-  jobCreate(projectId: string, prompt: string, name?: string): Promise<Job>
-  jobList(projectId: string): Promise<Job[]>
-  jobSend(jobId: string, message: string): Promise<void>
-  jobStop(jobId: string): Promise<void>
+  // Phase (중분류)
+  phaseList(projectId: string): Promise<Phase[]>
+  phaseCreate(projectId: string, name: string, description?: string): Promise<Phase>
+  phaseUpdate(id: string, patch: Partial<Phase>): Promise<Phase>
+  phaseDelete(id: string): Promise<void>
+
+  // Task (소분류)
+  taskList(phaseId: string): Promise<Task[]>
+  taskCreate(phaseId: string, name: string, prompt: string): Promise<Task>
+  taskRun(taskId: string): Promise<void>        // 에이전트 호출
+  taskSend(taskId: string, message: string): Promise<void>
+  taskStop(taskId: string): Promise<void>        // 에이전트 종료
 
   // Events (Main → Renderer)
-  onJobStatus(cb: (data: { jobId: string; status: JobStatus }) => void): () => void
-  onJobOutput(cb: (data: { jobId: string; text: string }) => void): () => void
-  onArtifactNew(cb: (data: { jobId: string; artifact: Artifact }) => void): () => void
+  onTaskStatus(cb: (data: { taskId: string; status: TaskStatus }) => void): () => void
+  onTaskLog(cb: (data: { taskId: string; log: LogEntry }) => void): () => void
+  onArtifactNew(cb: (data: { taskId: string; artifact: Artifact }) => void): () => void
 }
 
 export interface CreateProjectInput {

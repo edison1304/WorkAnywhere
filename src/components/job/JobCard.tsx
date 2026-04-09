@@ -1,9 +1,9 @@
-import type { Job } from '../../../shared/types'
+import type { Task } from '../../../shared/types'
 import { StatusDot } from './StatusDot'
 import styles from './JobCard.module.css'
 
 interface Props {
-  job: Job
+  task: Task
   isActive: boolean
   onClick: () => void
 }
@@ -18,20 +18,20 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(hours / 24)}d ago`
 }
 
-export function JobCard({ job, isActive, onClick }: Props) {
+export function JobCard({ task, isActive, onClick }: Props) {
   return (
     <button
       className={`${styles.card} ${isActive ? styles.active : ''}`}
-      data-status={job.status}
+      data-status={task.status}
       onClick={onClick}
     >
       <div className={styles.header}>
-        <StatusDot status={job.status} />
-        <span className={styles.name}>{job.name}</span>
+        <StatusDot status={task.status} />
+        <span className={styles.name}>{task.name}</span>
       </div>
       <div className={styles.meta}>
-        <span className={styles.status}>{job.status}</span>
-        <span className={styles.time}>{timeAgo(job.updatedAt)}</span>
+        <span className={styles.status}>{task.status}</span>
+        <span className={styles.time}>{timeAgo(task.updatedAt)}</span>
       </div>
     </button>
   )

@@ -1,16 +1,16 @@
-import type { JobStatus } from '../../../shared/types'
+import type { TaskStatus } from '../../../shared/types'
 
-const STATUS_COLORS: Record<JobStatus, string> = {
+const STATUS_COLORS: Record<TaskStatus, string> = {
+  idle: 'var(--text-muted)',
+  queued: 'var(--text-muted)',
   running: 'var(--accent)',
   waiting: 'var(--warning)',
-  queued: 'var(--text-muted)',
   completed: 'var(--success)',
   failed: 'var(--error)',
-  review: 'var(--info)',
 }
 
 interface Props {
-  status: JobStatus
+  status: TaskStatus
   size?: number
 }
 

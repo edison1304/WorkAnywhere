@@ -27,10 +27,21 @@
   color: var(--text-muted);
   padding: 4px 8px;
   margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
-.projectItem,
-.jobItem {
+.taskCount {
+  font-size: 10px;
+  background: var(--bg-tertiary);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+/* Project items */
+.projectItem {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -46,38 +57,44 @@
   transition: background 0.15s, color 0.15s;
 }
 
-.projectItem:hover,
-.jobItem:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
+.projectItem:hover { background: var(--bg-hover); color: var(--text-primary); }
+.projectItem.active { background: var(--bg-tertiary); color: var(--text-primary); }
 
-.projectItem.active,
-.jobItem.active {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-}
+.projectIcon { font-size: 16px; flex-shrink: 0; }
+.projectName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.projectIcon {
-  font-size: 16px;
-  flex-shrink: 0;
-}
-
-.projectName {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.jobList {
+/* Phase items */
+.phaseItem {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  flex: 1;
-  overflow-y: auto;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  font-size: 13px;
+  transition: background 0.15s, color 0.15s;
 }
 
-.jobInfo {
+.phaseItem:hover { background: var(--bg-hover); color: var(--text-primary); }
+.phaseItem.active { background: var(--bg-tertiary); color: var(--text-primary); }
+
+.phaseStatusIcon {
+  font-size: 10px;
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+  margin-top: 2px;
+}
+.phaseStatusIcon[data-status="active"] { color: var(--success); }
+.phaseStatusIcon[data-status="paused"] { color: var(--warning); }
+.phaseStatusIcon[data-status="completed"] { color: var(--text-muted); }
+
+.phaseInfo {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -85,18 +102,71 @@
   min-width: 0;
 }
 
-.jobName {
+.phaseName {
+  font-size: 13px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.phaseDesc {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Task items */
+.taskList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.taskItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  font-size: 13px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.taskItem:hover { background: var(--bg-hover); color: var(--text-primary); }
+.taskItem.active { background: var(--bg-tertiary); color: var(--text-primary); }
+
+.taskInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.taskName {
   font-size: 13px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.jobStatus {
+.taskStatus {
   font-size: 11px;
   color: var(--text-muted);
 }
 
+/* Add button */
 .addButton {
   display: flex;
   align-items: center;

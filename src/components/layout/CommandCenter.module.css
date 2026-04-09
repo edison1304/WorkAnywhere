@@ -22,12 +22,23 @@
   margin-right: 12px;
 }
 
-.titleProject {
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.breadcrumbItem {
   font-size: 12px;
   color: var(--text-secondary);
   padding: 2px 8px;
   background: var(--bg-tertiary);
   border-radius: 4px;
+}
+
+.breadcrumbSep {
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .connectionBadge {
