@@ -209,11 +209,11 @@ export class SSHService extends EventEmitter {
       if (engine === 'opencode') {
         agentCmd = this.getEngineCmd('opencode', ['-p', JSON.stringify(prompt), '-f', 'json'])
       } else {
-        agentCmd = this.getEngineCmd('claude', ['-p', JSON.stringify(prompt), '--output-format', 'stream-json'])
+        agentCmd = this.getEngineCmd('claude', ['-p', JSON.stringify(prompt), '--output-format', 'stream-json', '--verbose'])
       }
       // Build command: setup prefix + cd + agent command
       // prefix already ends with " && " if non-empty, so just concatenate
-      const innerCmd = `${prefix}cd ${JSON.stringify(workspacePath)} && ${agentCmd} 2>&1`
+      const innerCmd = `${prefix}cd ${JSON.stringify(workspacePath)} && ${agentCmd} < /dev/null 2>&1`
       // Use bash -l (login shell) to pick up .bashrc PATH
       const cmd = `bash -l -c ${JSON.stringify(innerCmd)}`
 
