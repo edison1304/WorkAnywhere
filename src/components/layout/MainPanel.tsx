@@ -133,12 +133,12 @@ export function MainPanel({
         </button>
       </div>
 
-      {/* Content */}
+      {/* Content — terminal always mounted, hidden via CSS to keep session alive */}
       <div className={styles.content}>
         {activeTab === 'log' && <LogView task={activeTask} />}
-        {activeTab === 'terminal' && (
-          <SessionTerminal taskId={activeTask.id} isActive={activeTab === 'terminal'} />
-        )}
+        <div style={{ display: activeTab === 'terminal' ? 'contents' : 'none' }}>
+          <SessionTerminal taskId={activeTask.id} isActive={true} />
+        </div>
         {activeTab === 'artifacts' && <ArtifactsView task={activeTask} />}
       </div>
 

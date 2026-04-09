@@ -9,13 +9,30 @@ interface Props {
   isActive: boolean
 }
 
-export function SessionTerminal({ taskId, isActive }: Props) {
+export function SessionTerminal({ taskId }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const terminalRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
+  const cleanupRef = useRef<(() => void) | null>(null)
+  const currentTaskRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (!containerRef.current || !isActive || !window.api) return
+    if (!containerRef.current || !window.api) return
+
+    // Same task — don't recreate
+    if (currentTaskRef.current === taskId && terminalRef.current) return
+
+    // Different task — cleanup old terminal
+    if (cleanupRef.current) {
+      cleanupRef.current()
+      cleanupRef.current = null
+    }
+    if (terminalRef.current) {
+      terminalRef.current.dispose()
+      terminalRef.current = null
+    }
+
+    currentTaskRef.current = taskId
 
     const terminal = new Terminal({
       theme: {
@@ -43,13 +60,17 @@ export function SessionTerminal({ taskId, isActive }: Props) {
     const fitAddon = new FitAddon()
     terminal.loadAddon(fitAddon)
     terminal.open(containerRef.current)
-    fitAddon.fit()
+
+    // Delay fit to ensure container is visible
+    requestAnimationFrame(() => {
+      try { fitAddon.fit() } catch {}
+    })
 
     terminalRef.current = terminal
     fitAddonRef.current = fitAddon
 
     // Send terminal input to PTY
-    terminal.onData((data) => {
+    const dataDisposable = terminal.onData((data) => {
       window.api.ptyWrite(taskId, data)
     })
 
@@ -65,23 +86,30 @@ export function SessionTerminal({ taskId, isActive }: Props) {
       try {
         fitAddon.fit()
         window.api.ptyResize(taskId, terminal.cols, terminal.rows)
-      } catch { /* ignore */ }
+      } catch {}
     })
     resizeObserver.observe(containerRef.current)
 
-    terminal.writeln('\x1b[36m╭─ Workanywhere Terminal ─╮\x1b[0m')
-    terminal.writeln('\x1b[36m│\x1b[0m Waiting for agent...')
-    terminal.writeln('\x1b[36m╰─────────────────────────╯\x1b[0m')
-    terminal.writeln('')
-
-    return () => {
+    // Store cleanup for later (NOT on unmount — only on task change)
+    cleanupRef.current = () => {
       resizeObserver.disconnect()
       cleanupPty()
-      terminal.dispose()
-      terminalRef.current = null
-      fitAddonRef.current = null
+      dataDisposable.dispose()
     }
-  }, [taskId, isActive])
+
+    // Only cleanup terminal on full unmount (component removed from DOM)
+    return () => {
+      if (cleanupRef.current) {
+        cleanupRef.current()
+        cleanupRef.current = null
+      }
+      if (terminalRef.current) {
+        terminalRef.current.dispose()
+        terminalRef.current = null
+      }
+      currentTaskRef.current = null
+    }
+  }, [taskId])
 
   return (
     <div className={styles.terminalContainer}>
