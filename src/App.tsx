@@ -108,6 +108,49 @@ export default function App() {
     ))
   }, [])
 
+  // ─── Create project/phase/task ───
+  const handleCreateProject = useCallback((name: string, path: string) => {
+    const id = crypto.randomUUID()
+    const now = new Date().toISOString()
+    const project: Project = {
+      id, name, workspacePath: path,
+      connection: { type: 'ssh' },
+      settings: { autoArtifactScan: true },
+      createdAt: now, updatedAt: now
+    }
+    setProjects(prev => [...prev, project])
+    setActiveProjectId(id)
+    setActivePhaseId(null)
+    setActiveTaskId(null)
+  }, [])
+
+  const handleCreatePhase = useCallback((name: string, description: string) => {
+    if (!activeProjectId) return
+    const id = crypto.randomUUID()
+    const now = new Date().toISOString()
+    const phase: Phase = {
+      id, projectId: activeProjectId, name, description: description || undefined,
+      order: phases.filter(p => p.projectId === activeProjectId).length + 1,
+      status: 'active', createdAt: now, updatedAt: now
+    }
+    setPhases(prev => [...prev, phase])
+    setActivePhaseId(id)
+    setActiveTaskId(null)
+  }, [activeProjectId, phases])
+
+  const handleCreateTask = useCallback((name: string, prompt: string) => {
+    if (!activeProjectId || !activePhaseId) return
+    const id = crypto.randomUUID()
+    const now = new Date().toISOString()
+    const task: Task = {
+      id, phaseId: activePhaseId, projectId: activeProjectId,
+      name, status: 'idle', prompt, logs: [], artifacts: [],
+      createdAt: now, updatedAt: now
+    }
+    setTasks(prev => [...prev, task])
+    setActiveTaskId(id)
+  }, [activeProjectId, activePhaseId])
+
   // ─── Listen for agent events from main process ───
   useEffect(() => {
     if (!window.api) return
@@ -251,6 +294,9 @@ export default function App() {
         onSSHConnect={handleSSHConnect}
         onOpenSSH={() => setSshDialogOpen(true)}
         onDisconnectSSH={handleSSHDisconnect}
+        onCreateProject={handleCreateProject}
+        onCreatePhase={handleCreatePhase}
+        onCreateTask={handleCreateTask}
       />
       <SSHConnectDialog
         isOpen={sshDialogOpen}

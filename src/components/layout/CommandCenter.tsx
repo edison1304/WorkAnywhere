@@ -28,6 +28,9 @@ interface Props {
   onSSHConnect: (config: import('../../../shared/types').ConnectionConfig) => void
   onOpenSSH: () => void
   onDisconnectSSH: () => void
+  onCreateProject: (name: string, path: string) => void
+  onCreatePhase: (name: string, description: string) => void
+  onCreateTask: (name: string, prompt: string) => void
   sshConnected: boolean
   sshConnecting?: boolean
   sshError?: string
@@ -41,7 +44,8 @@ export function CommandCenter({
   sshConnected, sshConnecting, sshError, claudeVersion,
   onSidebarViewChange,
   onSelectProject, onSelectPhase, onSelectTask, onAcknowledgeTask, onPinTask,
-  onDetach, onReattach, onRunAgent, onStopAgent, onSSHConnect, onOpenSSH, onDisconnectSSH
+  onDetach, onReattach, onRunAgent, onStopAgent, onSSHConnect, onOpenSSH, onDisconnectSSH,
+  onCreateProject, onCreatePhase, onCreateTask
 }: Props) {
   const monitorDetached = detachedPanels.has('monitor')
   const railDetached = detachedPanels.has('statusrail')
@@ -143,6 +147,12 @@ export function CommandCenter({
           onStopAgent={onStopAgent}
           onSSHConnect={onSSHConnect}
           onOpenSSH={onOpenSSH}
+          onCreateProject={onCreateProject}
+          onCreatePhase={onCreatePhase}
+          onCreateTask={onCreateTask}
+          hasProjects={projects.length > 0}
+          hasPhases={phases.filter(p => p.projectId === activeProject?.id).length > 0}
+          activeProjectName={activeProject?.name}
         />
 
         {/* Status rail: show or placeholder */}

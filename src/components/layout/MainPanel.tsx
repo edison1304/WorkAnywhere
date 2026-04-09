@@ -13,12 +13,23 @@ interface Props {
   onStopAgent?: (taskId: string) => void
   onSSHConnect?: (config: ConnectionConfig) => void
   onOpenSSH?: () => void
+  onCreateProject?: (name: string, path: string) => void
+  onCreatePhase?: (name: string, description: string) => void
+  onCreateTask?: (name: string, prompt: string) => void
+  hasProjects?: boolean
+  hasPhases?: boolean
+  activeProjectName?: string
 }
 
-export function MainPanel({ activeTask, activePhase, sshConnected, sshConnecting, sshError, onRunAgent, onStopAgent, onSSHConnect, onOpenSSH }: Props) {
+export function MainPanel({
+  activeTask, activePhase, sshConnected, sshConnecting, sshError,
+  onRunAgent, onStopAgent, onSSHConnect, onOpenSSH,
+  onCreateProject, onCreatePhase, onCreateTask,
+  hasProjects, hasPhases, activeProjectName
+}: Props) {
   const [activeTab, setActiveTab] = useState<'log' | 'terminal' | 'artifacts'>('log')
 
-  // No task selected → show welcome + SSH connect if needed
+  // No task selected → show welcome / SSH connect / create flow
   if (!activeTask) {
     return (
       <div className={styles.panel}>
@@ -32,12 +43,12 @@ export function MainPanel({ activeTask, activePhase, sshConnected, sshConnecting
               connecting={sshConnecting}
               error={sshError}
             />
+          ) : !hasProjects ? (
+            <CreateProjectForm onSubmit={onCreateProject} />
+          ) : !hasPhases ? (
+            <CreatePhaseForm projectName={activeProjectName} onSubmit={onCreatePhase} />
           ) : (
-            <p className={styles.emptyText}>
-              <span style={{ color: 'var(--success)' }}>● SSH Connected</span><br />
-              Select a task to view its logs and artifacts,<br />
-              or create a new task to start an agent.
-            </p>
+            <CreateTaskForm onSubmit={onCreateTask} />
           )}
         </div>
       </div>
@@ -284,6 +295,102 @@ function SSHInlineConnect({ onConnect, connecting, error }: {
       {error && <div className={styles.sshError}>{error}</div>}
       <button type="submit" className={styles.sshConnectBtn} disabled={connecting || !host || !username}>
         {connecting ? 'Connecting...' : 'Connect SSH'}
+      </button>
+    </form>
+  )
+}
+
+// ─── Create Project Form ───
+function CreateProjectForm({ onSubmit }: { onSubmit?: (name: string, path: string) => void }) {
+  const [name, setName] = useState('')
+  const [path, setPath] = useState('')
+
+  return (
+    <form onSubmit={e => { e.preventDefault(); onSubmit?.(name, path) }} className={styles.sshForm}>
+      <p className={styles.sshFormTitle}>
+        <span style={{ color: 'var(--success)' }}>● Connected</span>
+        {' — '}Create a project
+      </p>
+      <input
+        className={styles.sshInput}
+        value={name}
+        onChange={e => setName(e.target.value)}
+        placeholder="Project name (e.g. ACE-2 개발)"
+        required
+      />
+      <input
+        className={styles.sshInput}
+        value={path}
+        onChange={e => setPath(e.target.value)}
+        placeholder="Workspace path on server (e.g. /home/yjlee/ace2)"
+        required
+      />
+      <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.4 }}>
+        서버에서 Claude Code가 작업할 디렉토리 경로를 입력하세요.
+      </p>
+      <button type="submit" className={styles.sshConnectBtn} disabled={!name || !path}>
+        Create Project
+      </button>
+    </form>
+  )
+}
+
+// ─── Create Phase Form ───
+function CreatePhaseForm({ projectName, onSubmit }: { projectName?: string; onSubmit?: (name: string, desc: string) => void }) {
+  const [name, setName] = useState('')
+  const [desc, setDesc] = useState('')
+
+  return (
+    <form onSubmit={e => { e.preventDefault(); onSubmit?.(name, desc) }} className={styles.sshForm}>
+      <p className={styles.sshFormTitle}>
+        {projectName && <span style={{ color: 'var(--accent)' }}>{projectName}</span>}
+        {' — '}Add a phase
+      </p>
+      <input
+        className={styles.sshInput}
+        value={name}
+        onChange={e => setName(e.target.value)}
+        placeholder="Phase name (e.g. AOD 민감도 실험)"
+        required
+      />
+      <input
+        className={styles.sshInput}
+        value={desc}
+        onChange={e => setDesc(e.target.value)}
+        placeholder="Description (optional)"
+      />
+      <button type="submit" className={styles.sshConnectBtn} disabled={!name}>
+        Create Phase
+      </button>
+    </form>
+  )
+}
+
+// ─── Create Task Form ───
+function CreateTaskForm({ onSubmit }: { onSubmit?: (name: string, prompt: string) => void }) {
+  const [name, setName] = useState('')
+  const [prompt, setPrompt] = useState('')
+
+  return (
+    <form onSubmit={e => { e.preventDefault(); onSubmit?.(name, prompt) }} className={styles.sshForm}>
+      <p className={styles.sshFormTitle}>Add a task</p>
+      <input
+        className={styles.sshInput}
+        value={name}
+        onChange={e => setName(e.target.value)}
+        placeholder="Task name (e.g. 데이터셋 전처리)"
+        required
+      />
+      <textarea
+        className={styles.sshTextarea}
+        value={prompt}
+        onChange={e => setPrompt(e.target.value)}
+        placeholder="Prompt for Claude agent (e.g. ERA5 데이터를 전처리하고...)"
+        rows={4}
+        required
+      />
+      <button type="submit" className={styles.sshConnectBtn} disabled={!name || !prompt}>
+        Create Task
       </button>
     </form>
   )
