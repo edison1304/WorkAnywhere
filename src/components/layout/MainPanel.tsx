@@ -355,8 +355,19 @@ function SSHInlineConnect({ onConnect, connecting, error }: {
             onChange={e => setClaudeSetup(e.target.value)}
             placeholder="Setup script (e.g. source ~/.bashrc)"
           />
+          <button
+            type="button"
+            style={{ fontSize: 11, padding: '4px 8px', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text-muted)', cursor: 'pointer', textAlign: 'left' }}
+            onClick={() => {
+              setClaudeCommand('/home/yjlee/.local/bin/claude')
+              setClaudeArgs('--remote-control --permission-mode bypassPermissions')
+              setClaudeSetup('export PATH="$HOME/.local/bin:$PATH"')
+            }}
+          >
+            CentOS 7 프리셋 적용 (glibc wrapper + remote-control)
+          </button>
           <p style={{ fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.4 }}>
-            OS 호환성 문제가 있으면 여기서 커스텀 claude 실행 경로와 인자를 설정하세요.
+            OS 호환성 문제가 있으면 커스텀 설정하거나 프리셋을 적용하세요.
             설정은 config에 저장됩니다.
           </p>
         </div>

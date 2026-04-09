@@ -131,11 +131,13 @@ export class SSHService extends EventEmitter {
   }
 
   // Execute a command and return output
-  async exec(command: string): Promise<string> {
+  // useLogin: wraps in bash -lc to pick up .bashrc/.profile PATH
+  async exec(command: string, useLogin = false): Promise<string> {
     if (!this.client || !this.connected) throw new Error('Not connected')
+    const finalCmd = useLogin ? `bash -lc ${JSON.stringify(command)}` : command
 
     return new Promise((resolve, reject) => {
-      this.client!.exec(command, (err, stream) => {
+      this.client!.exec(finalCmd, (err, stream) => {
         if (err) return reject(err)
         let output = ''
         stream.on('data', (data: Buffer) => { output += data.toString() })
@@ -209,7 +211,9 @@ export class SSHService extends EventEmitter {
       } else {
         agentCmd = this.getEngineCmd('claude', ['-p', JSON.stringify(prompt), '--output-format', 'stream-json'])
       }
-      const cmd = `${prefix}cd ${JSON.stringify(workspacePath)} && ${agentCmd} 2>&1`
+      const innerCmd = `${prefix}cd ${JSON.stringify(workspacePath)} && ${agentCmd} 2>&1`
+      // Use bash -lc to ensure .bashrc PATH is loaded
+      const cmd = `bash -lc ${JSON.stringify(innerCmd)}`
 
       this.client!.exec(cmd, (err, stream) => {
         if (err) return reject(err)
@@ -266,7 +270,7 @@ export class SSHService extends EventEmitter {
     try {
       const prefix = this.getShellPrefix(engine)
       const cmd = this.getEngineCmd(engine, ['--version'])
-      const output = await this.exec(`${prefix}${cmd} 2>/dev/null`)
+      const output = await this.exec(`${prefix}${cmd} 2>/dev/null`, true)
       return { available: true, version: output.trim() }
     } catch {
       return { available: false }
