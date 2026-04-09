@@ -22,6 +22,7 @@ export default function App() {
 
   // SSH state
   const [sshConnected, setSshConnected] = useState(false)
+  const [sshDialogOpen, setSshDialogOpen] = useState(false)
   const [sshConnecting, setSshConnecting] = useState(false)
   const [sshError, setSshError] = useState<string>()
   const [claudeVersion, setClaudeVersion] = useState<string>()
