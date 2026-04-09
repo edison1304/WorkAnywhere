@@ -140,6 +140,21 @@ export default function App() {
     ))
   }, [])
 
+  const handleSendMessage = useCallback(async (taskId: string, message: string) => {
+    if (!window.api) return
+    await window.api.agentSend(taskId, message)
+    // Log the sent message locally
+    setTasks(prev => prev.map(t =>
+      t.id === taskId ? { ...t, logs: [...t.logs, {
+        id: `${taskId}-msg-${Date.now()}`,
+        taskId,
+        timestamp: new Date().toISOString(),
+        type: 'text' as const,
+        content: `[YOU] ${message}`
+      }]} : t
+    ))
+  }, [])
+
   // ─── Create project/phase/task ───
   const handleCreateProject = useCallback((name: string, path: string, engine?: string) => {
     const id = crypto.randomUUID()
@@ -323,6 +338,7 @@ export default function App() {
         onReattach={handleReattach}
         onRunAgent={handleRunAgent}
         onStopAgent={handleStopAgent}
+        onSendMessage={handleSendMessage}
         onSSHConnect={handleSSHConnect}
         onOpenSSH={() => setSshDialogOpen(true)}
         onDisconnectSSH={handleSSHDisconnect}

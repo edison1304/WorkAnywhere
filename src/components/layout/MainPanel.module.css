@@ -341,6 +341,52 @@
   border-radius: 6px;
 }
 
+/* ─── Chat input ─── */
+.chatInput {
+  display: flex;
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+  align-items: flex-end;
+}
+
+.chatTextarea {
+  flex: 1;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  resize: none;
+  outline: none;
+  min-height: 36px;
+  max-height: 120px;
+  line-height: 1.4;
+  transition: border-color 0.15s;
+}
+.chatTextarea:focus { border-color: var(--accent); }
+.chatTextarea::placeholder { color: var(--text-muted); }
+.chatTextarea:disabled { opacity: 0.5; }
+
+.chatSendBtn {
+  padding: 8px 16px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+  height: 36px;
+}
+.chatSendBtn:hover { background: var(--accent-hover); }
+.chatSendBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+
 .engineRow {
   display: flex;
   gap: 0;

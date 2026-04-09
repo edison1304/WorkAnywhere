@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { Task, Phase, ConnectionConfig, AppConfig } from '../../../shared/types'
 import { SessionTerminal } from '../terminal/SessionTerminal'
 import { FolderBrowser } from '../project/FolderBrowser'
@@ -12,6 +12,7 @@ interface Props {
   sshError?: string
   onRunAgent?: (taskId: string) => void
   onStopAgent?: (taskId: string) => void
+  onSendMessage?: (taskId: string, message: string) => void
   onSSHConnect?: (config: ConnectionConfig, appConfig?: AppConfig) => void
   onOpenSSH?: () => void
   onCreateProject?: (name: string, path: string) => void
@@ -24,7 +25,7 @@ interface Props {
 
 export function MainPanel({
   activeTask, activePhase, sshConnected, sshConnecting, sshError,
-  onRunAgent, onStopAgent, onSSHConnect, onOpenSSH,
+  onRunAgent, onStopAgent, onSendMessage, onSSHConnect, onOpenSSH,
   onCreateProject, onCreatePhase, onCreateTask,
   hasProjects, hasPhases, activeProjectName
 }: Props) {
@@ -140,6 +141,14 @@ export function MainPanel({
         )}
         {activeTab === 'artifacts' && <ArtifactsView task={activeTask} />}
       </div>
+
+      {/* Chat input */}
+      {(isRunning || isWaiting) && (
+        <ChatInput
+          onSend={(msg) => onSendMessage?.(activeTask.id, msg)}
+          disabled={!isRunning && !isWaiting}
+        />
+      )}
     </div>
   )
 }
@@ -186,6 +195,49 @@ function LogView({ task }: { task: Task }) {
           <span className={styles.logContent}>Agent working...</span>
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── Chat Input ───
+function ChatInput({ onSend, disabled }: { onSend: (msg: string) => void; disabled: boolean }) {
+  const [message, setMessage] = useState('')
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  const handleSubmit = () => {
+    const msg = message.trim()
+    if (!msg) return
+    onSend(msg)
+    setMessage('')
+    inputRef.current?.focus()
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSubmit()
+    }
+  }
+
+  return (
+    <div className={styles.chatInput}>
+      <textarea
+        ref={inputRef}
+        className={styles.chatTextarea}
+        value={message}
+        onChange={e => setMessage(e.target.value)}
+        onKeyDown={handleKeyDown}
+        placeholder="Send a message to Claude... (Enter to send, Shift+Enter for newline)"
+        rows={2}
+        disabled={disabled}
+      />
+      <button
+        className={styles.chatSendBtn}
+        onClick={handleSubmit}
+        disabled={disabled || !message.trim()}
+      >
+        Send
+      </button>
     </div>
   )
 }
