@@ -51,6 +51,7 @@ export interface Task {
   prompt: string
   logs: LogEntry[]
   artifacts: Artifact[]
+  acknowledgedAt?: string    // 사용자가 결과를 확인한 시각
   createdAt: string
   updatedAt: string
   completedAt?: string

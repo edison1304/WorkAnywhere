@@ -1,5 +1,5 @@
 import type { Project, Phase, Task } from '../../../shared/types'
-import { ProjectSidebar } from './ProjectSidebar'
+import { TreeSidebar, type SidebarView } from './TreeSidebar'
 import { StatusRail } from './StatusRail'
 import { MainPanel } from './MainPanel'
 import styles from './CommandCenter.module.css'
@@ -8,18 +8,24 @@ interface Props {
   projects: Project[]
   activeProject: Project | null
   phases: Phase[]
+  allPhases: Phase[]
   activePhase: Phase | null
-  tasks: Task[]
   allTasks: Task[]
+  allProjectTasks: Task[]
   activeTask: Task | null
+  sidebarView: SidebarView
+  onSidebarViewChange: (view: SidebarView) => void
   onSelectProject: (id: string) => void
   onSelectPhase: (id: string) => void
   onSelectTask: (id: string | null) => void
+  onAcknowledgeTask: (id: string) => void
 }
 
 export function CommandCenter({
-  projects, activeProject, phases, activePhase, tasks, allTasks, activeTask,
-  onSelectProject, onSelectPhase, onSelectTask
+  projects, activeProject, phases, allPhases, activePhase,
+  allTasks, allProjectTasks, activeTask,
+  sidebarView, onSidebarViewChange,
+  onSelectProject, onSelectPhase, onSelectTask, onAcknowledgeTask
 }: Props) {
   return (
     <div className={styles.root}>
@@ -36,6 +42,12 @@ export function CommandCenter({
                   <span className={styles.breadcrumbItem}>{activePhase.name}</span>
                 </>
               )}
+              {activeTask && (
+                <>
+                  <span className={styles.breadcrumbSep}>/</span>
+                  <span className={styles.breadcrumbItem}>{activeTask.name}</span>
+                </>
+              )}
             </span>
           )}
         </div>
@@ -48,20 +60,23 @@ export function CommandCenter({
 
       {/* Main layout */}
       <div className={styles.body}>
-        <ProjectSidebar
+        <TreeSidebar
           projects={projects}
+          phases={allPhases}
+          allTasks={allTasks}
           activeProjectId={activeProject?.id || null}
-          phases={phases}
           activePhaseId={activePhase?.id || null}
-          tasks={tasks}
           activeTaskId={activeTask?.id || null}
+          sidebarView={sidebarView}
+          onSidebarViewChange={onSidebarViewChange}
           onSelectProject={onSelectProject}
           onSelectPhase={onSelectPhase}
           onSelectTask={onSelectTask}
+          onAcknowledgeTask={onAcknowledgeTask}
         />
         <MainPanel activeTask={activeTask} activePhase={activePhase} />
         <StatusRail
-          allTasks={allTasks}
+          allTasks={allProjectTasks}
           phases={phases}
           activeTaskId={activeTask?.id || null}
           onSelectTask={onSelectTask}

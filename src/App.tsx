@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { CommandCenter } from './components/layout/CommandCenter'
 import type { Project, Phase, Task } from '../shared/types'
+import type { SidebarView } from './components/layout/TreeSidebar'
 
 // ─── Demo Data ───
 const DEMO_PROJECTS: Project[] = [
@@ -67,23 +68,33 @@ export default function App() {
   const [activeProjectId, setActiveProjectId] = useState<string>('p1')
   const [activePhaseId, setActivePhaseId] = useState<string | null>('ph1')
   const [activeTaskId, setActiveTaskId] = useState<string | null>('t2')
+  const [sidebarView, setSidebarView] = useState<SidebarView>('monitor')
+  const [tasks, setTasks] = useState<Task[]>(DEMO_TASKS)
 
   const activeProject = DEMO_PROJECTS.find(p => p.id === activeProjectId) || null
   const projectPhases = DEMO_PHASES.filter(ph => ph.projectId === activeProjectId)
   const activePhase = activePhaseId ? DEMO_PHASES.find(ph => ph.id === activePhaseId) || null : null
-  const phaseTasks = activePhaseId ? DEMO_TASKS.filter(t => t.phaseId === activePhaseId) : []
-  const allProjectTasks = DEMO_TASKS.filter(t => t.projectId === activeProjectId)
-  const activeTask = activeTaskId ? DEMO_TASKS.find(t => t.id === activeTaskId) || null : null
+  const activeTask = activeTaskId ? tasks.find(t => t.id === activeTaskId) || null : null
+  const allProjectTasks = tasks.filter(t => t.projectId === activeProjectId)
+
+  const handleAcknowledgeTask = useCallback((taskId: string) => {
+    setTasks(prev => prev.map(t =>
+      t.id === taskId ? { ...t, acknowledgedAt: new Date().toISOString() } : t
+    ))
+  }, [])
 
   return (
     <CommandCenter
       projects={DEMO_PROJECTS}
       activeProject={activeProject}
       phases={projectPhases}
+      allPhases={DEMO_PHASES}
       activePhase={activePhase}
-      tasks={phaseTasks}
-      allTasks={allProjectTasks}
+      allTasks={tasks}
+      allProjectTasks={allProjectTasks}
       activeTask={activeTask}
+      sidebarView={sidebarView}
+      onSidebarViewChange={setSidebarView}
       onSelectProject={(id) => {
         setActiveProjectId(id)
         const firstPhase = DEMO_PHASES.find(ph => ph.projectId === id)
@@ -95,6 +106,7 @@ export default function App() {
         setActiveTaskId(null)
       }}
       onSelectTask={setActiveTaskId}
+      onAcknowledgeTask={handleAcknowledgeTask}
     />
   )
 }

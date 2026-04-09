@@ -1,0 +1,249 @@
+.sidebar {
+  width: var(--sidebar-width);
+  min-width: var(--sidebar-width);
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* View toggle */
+.viewToggle {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.viewBtn {
+  width: 100%;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.15s;
+  text-align: center;
+}
+
+.viewBtn:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.viewBtnActive {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* View sections */
+.viewSection {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.viewLabel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+
+.viewLabelHint {
+  font-size: 10px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.viewDivider {
+  height: 1px;
+  background: var(--border);
+  margin: 0 12px;
+  flex-shrink: 0;
+}
+
+.treeContainer {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 8px;
+}
+
+/* Tree nodes */
+.treeNode {
+  display: flex;
+  flex-direction: column;
+}
+
+.treeItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 5px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  font-size: 13px;
+  transition: background 0.1s, color 0.1s;
+}
+
+.treeItem:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.treeItem.active {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+/* Chevron */
+.chevron {
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  width: 12px;
+  text-align: center;
+}
+
+/* Project level */
+.projectLevel {
+  font-weight: 500;
+  padding: 6px 8px;
+}
+
+.nodeIcon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.nodeName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.activeBadge {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent);
+  background: rgba(99, 102, 241, 0.15);
+  padding: 1px 6px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+/* Phase level */
+.phaseLevel {
+  font-size: 12px;
+}
+
+.phaseStatus {
+  font-size: 9px;
+  flex-shrink: 0;
+  width: 14px;
+  text-align: center;
+}
+.phaseStatus[data-status="active"] { color: var(--success); }
+.phaseStatus[data-status="paused"] { color: var(--warning); }
+.phaseStatus[data-status="completed"] { color: var(--text-muted); }
+
+.taskCountBadge {
+  font-size: 10px;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  padding: 1px 5px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+/* Task level */
+.taskLevel {
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+.taskName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+/* Acknowledge button */
+.ackButton {
+  font-size: 11px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--success);
+  background: transparent;
+  color: var(--success);
+  border-radius: 4px;
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.taskLevel:hover .ackButton {
+  opacity: 1;
+}
+
+.ackButton:hover {
+  background: rgba(34, 197, 94, 0.15);
+}
+
+/* Unread indicator for failed tasks */
+.unreadDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--error);
+  flex-shrink: 0;
+  animation: pulse-dot 2s infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Add button */
+.addButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  margin: 8px 12px;
+  border: 1px dashed var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  flex-shrink: 0;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.addButton:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
