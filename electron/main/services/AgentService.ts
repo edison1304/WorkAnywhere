@@ -59,9 +59,31 @@ export class AgentService extends EventEmitter {
       const agent: AgentInstance = { taskId, projectId, phaseId, engine, ptySession }
       this.agents.set(taskId, agent)
 
-      // Forward PTY output to renderer (for Terminal tab)
+      // Forward PTY output to renderer (for Terminal tab) + Log
+      let logBuffer = ''
+      let logFlushTimer: ReturnType<typeof setTimeout> | null = null
+
       ptySession.onData((data) => {
         this.emit('pty:data', { taskId, data })
+
+        // Buffer PTY output and flush to Log periodically
+        // Strip ANSI escape codes for clean log
+        const clean = data.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').replace(/\r/g, '')
+        logBuffer += clean
+
+        if (!logFlushTimer) {
+          logFlushTimer = setTimeout(() => {
+            if (logBuffer.trim()) {
+              // Split into lines and emit non-empty ones
+              const lines = logBuffer.split('\n').filter(l => l.trim())
+              if (lines.length > 0) {
+                this.emitLog(taskId, 'text', lines.join('\n'))
+              }
+            }
+            logBuffer = ''
+            logFlushTimer = null
+          }, 500)  // flush every 500ms
+        }
       })
 
       ptySession.onClose(() => {
@@ -93,6 +115,7 @@ export class AgentService extends EventEmitter {
     const agent = this.agents.get(taskId)
     if (agent?.ptySession) {
       agent.ptySession.write(message + '\n')
+      this.emitLog(taskId, 'text', `[YOU] ${message}`)
     }
   }
 
