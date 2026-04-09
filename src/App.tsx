@@ -89,6 +89,7 @@ export default function App() {
       taskId,
       workspacePath: project.workspacePath,
       prompt: task.prompt,
+      engine: project.settings.agentEngine || 'claude',
     })
 
     if (!result.success) {
@@ -110,13 +111,13 @@ export default function App() {
   }, [])
 
   // ─── Create project/phase/task ───
-  const handleCreateProject = useCallback((name: string, path: string) => {
+  const handleCreateProject = useCallback((name: string, path: string, engine?: string) => {
     const id = crypto.randomUUID()
     const now = new Date().toISOString()
     const project: Project = {
       id, name, workspacePath: path,
       connection: { type: 'ssh' },
-      settings: { autoArtifactScan: true },
+      settings: { agentEngine: (engine as any) || 'claude', autoArtifactScan: true },
       createdAt: now, updatedAt: now
     }
     setProjects(prev => [...prev, project])

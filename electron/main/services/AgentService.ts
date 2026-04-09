@@ -7,6 +7,7 @@ interface AgentInstance {
   taskId: string
   projectId: string
   phaseId: string
+  engine: string                    // 'claude' or 'opencode'
   ptySession?: SSHSession           // interactive terminal
   streamProcess?: {                 // stream-json process
     onEvent: (cb: (e: ClaudeStreamEvent) => void) => void
@@ -35,23 +36,24 @@ export class AgentService extends EventEmitter {
     phaseId: string,
     taskId: string,
     workspacePath: string,
-    prompt: string
+    prompt: string,
+    engine: string = 'claude'
   ): Promise<void> {
     if (this.agents.has(taskId)) {
       throw new Error(`Agent already running for task ${taskId}`)
     }
 
-    const agent: AgentInstance = { taskId, projectId, phaseId }
+    const agent: AgentInstance = { taskId, projectId, phaseId, engine }
     this.agents.set(taskId, agent)
 
     // Emit status
     this.emitStatus(taskId, 'running')
-    this.emitLog(taskId, 'agent_start', 'Agent started')
+    this.emitLog(taskId, 'agent_start', `Agent started (${engine})`)
 
     try {
-      // Channel 1: stream-json for structured events
-      const streamProc = await this.ssh.spawnClaudeStreamJSON(
-        workspacePath, prompt, `stream-${taskId}`
+      // Channel 1: structured events (stream-json for claude, json for opencode)
+      const streamProc = await this.ssh.spawnAgentStream(
+        engine, workspacePath, prompt, `stream-${taskId}`
       )
       agent.streamProcess = streamProc
 
@@ -73,11 +75,16 @@ export class AgentService extends EventEmitter {
         }).catch(() => {})
       })
 
-      // Channel 2: interactive PTY (for user to interact with claude)
-      const prefix = (this.ssh as any).getShellPrefix?.() || ''
-      const claudeResume = (this.ssh as any).getClaudeCmd?.(['--resume', 'last']) || 'claude --resume last'
+      // Channel 2: interactive PTY
+      const prefix = this.ssh.getShellPrefix(engine)
+      let ptyCmd: string
+      if (engine === 'opencode') {
+        ptyCmd = this.ssh.getEngineCmd('opencode', [])
+      } else {
+        ptyCmd = this.ssh.getEngineCmd('claude', ['--resume', 'last'])
+      }
       const ptySession = await this.ssh.spawnPTY(
-        `${prefix}cd ${JSON.stringify(workspacePath)} && ${claudeResume}`,
+        `${prefix}cd ${JSON.stringify(workspacePath)} && ${ptyCmd}`,
         `pty-${taskId}`
       )
       agent.ptySession = ptySession

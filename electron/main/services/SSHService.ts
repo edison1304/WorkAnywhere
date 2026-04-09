@@ -3,7 +3,7 @@ import { EventEmitter } from 'events'
 import type { ConnectionConfig, AppConfig } from '../../../shared/types'
 import { readFileSync } from 'fs'
 
-export interface ClaudeConfig {
+export interface EngineExecConfig {
   command: string
   args: string[]
   env: Record<string, string>
@@ -24,39 +24,42 @@ export class SSHService extends EventEmitter {
   private client: Client | null = null
   private connected = false
   private sessions = new Map<string, SSHSession>()
-  public claudeConfig: ClaudeConfig = {
-    command: 'claude',
-    args: [],
-    env: {},
-    setupScript: '',
+  public engines: Record<string, EngineExecConfig> = {
+    claude: { command: 'claude', args: [], env: {}, setupScript: '' },
+    opencode: { command: 'opencode', args: [], env: {}, setupScript: '' },
   }
 
   setClaudeConfig(appConfig: AppConfig): void {
-    if (appConfig.claudeCommand) this.claudeConfig.command = appConfig.claudeCommand
-    if (appConfig.claudeArgs) this.claudeConfig.args = appConfig.claudeArgs
-    if (appConfig.claudeEnv) this.claudeConfig.env = appConfig.claudeEnv
-    if (appConfig.claudeSetupScript) this.claudeConfig.setupScript = appConfig.claudeSetupScript
+    if (appConfig.claudeCommand) this.engines.claude.command = appConfig.claudeCommand
+    if (appConfig.claudeArgs) this.engines.claude.args = appConfig.claudeArgs
+    if (appConfig.claudeEnv) this.engines.claude.env = appConfig.claudeEnv
+    if (appConfig.claudeSetupScript) this.engines.claude.setupScript = appConfig.claudeSetupScript
+    if (appConfig.opencodeCommand) this.engines.opencode.command = appConfig.opencodeCommand
+    if (appConfig.opencodeArgs) this.engines.opencode.args = appConfig.opencodeArgs
+    if (appConfig.opencodeSetupScript) this.engines.opencode.setupScript = appConfig.opencodeSetupScript
   }
 
-  // Build the shell prefix (env vars + setup script)
-  private getShellPrefix(): string {
+  // Build the shell prefix for an engine
+  getShellPrefix(engine: string = 'claude'): string {
+    const cfg = this.engines[engine] || this.engines.claude
     const parts: string[] = []
-    // Setup script (e.g. "source ~/.bashrc")
-    if (this.claudeConfig.setupScript) {
-      parts.push(this.claudeConfig.setupScript)
-    }
-    // Env vars
-    for (const [k, v] of Object.entries(this.claudeConfig.env)) {
+    if (cfg.setupScript) parts.push(cfg.setupScript)
+    for (const [k, v] of Object.entries(cfg.env)) {
       parts.push(`export ${k}=${JSON.stringify(v)}`)
     }
     return parts.length > 0 ? parts.join(' && ') + ' && ' : ''
   }
 
-  // Build claude command with custom path + args
+  // Build command with custom path + args
+  getEngineCmd(engine: string, extraArgs: string[]): string {
+    const cfg = this.engines[engine] || this.engines.claude
+    const allArgs = [...cfg.args, ...extraArgs]
+    return `${cfg.command} ${allArgs.join(' ')}`
+  }
+
+  // Backward compat
   private getClaudeCmd(extraArgs: string[]): string {
-    const cmd = this.claudeConfig.command
-    const allArgs = [...this.claudeConfig.args, ...extraArgs]
-    return `${cmd} ${allArgs.join(' ')}`
+    return this.getEngineCmd('claude', extraArgs)
   }
 
   async connect(config: ConnectionConfig): Promise<void> {
@@ -185,8 +188,9 @@ export class SSHService extends EventEmitter {
     })
   }
 
-  // Spawn Claude Code with stream-json output (for structured events)
-  async spawnClaudeStreamJSON(
+  // Spawn agent with structured output (claude stream-json or opencode json)
+  async spawnAgentStream(
+    engine: string,
     workspacePath: string,
     prompt: string,
     sessionId: string
@@ -198,9 +202,14 @@ export class SSHService extends EventEmitter {
     if (!this.client || !this.connected) throw new Error('Not connected')
 
     return new Promise((resolve, reject) => {
-      const prefix = this.getShellPrefix()
-      const claudeCmd = this.getClaudeCmd(['-p', JSON.stringify(prompt), '--output-format', 'stream-json'])
-      const cmd = `${prefix}cd ${JSON.stringify(workspacePath)} && ${claudeCmd} 2>&1`
+      const prefix = this.getShellPrefix(engine)
+      let agentCmd: string
+      if (engine === 'opencode') {
+        agentCmd = this.getEngineCmd('opencode', ['-p', JSON.stringify(prompt), '-f', 'json'])
+      } else {
+        agentCmd = this.getEngineCmd('claude', ['-p', JSON.stringify(prompt), '--output-format', 'stream-json'])
+      }
+      const cmd = `${prefix}cd ${JSON.stringify(workspacePath)} && ${agentCmd} 2>&1`
 
       this.client!.exec(cmd, (err, stream) => {
         if (err) return reject(err)
@@ -252,17 +261,20 @@ export class SSHService extends EventEmitter {
     await this.exec(`mkdir -p "$(dirname ${JSON.stringify(path)})" && cat > ${JSON.stringify(path)} << 'WORKANYWHERE_EOF'\n${content}\nWORKANYWHERE_EOF`)
   }
 
-  // Check if claude CLI is available
-  async checkClaude(): Promise<{ available: boolean; version?: string }> {
+  // Check if an engine CLI is available
+  async checkEngine(engine: string = 'claude'): Promise<{ available: boolean; version?: string }> {
     try {
-      const prefix = this.getShellPrefix()
-      const cmd = this.getClaudeCmd(['--version'])
+      const prefix = this.getShellPrefix(engine)
+      const cmd = this.getEngineCmd(engine, ['--version'])
       const output = await this.exec(`${prefix}${cmd} 2>/dev/null`)
       return { available: true, version: output.trim() }
     } catch {
       return { available: false }
     }
   }
+
+  // Backward compat
+  async checkClaude() { return this.checkEngine('claude') }
 
   getSession(id: string): SSHSession | undefined {
     return this.sessions.get(id)

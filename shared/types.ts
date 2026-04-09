@@ -21,10 +21,27 @@ export interface ConnectionConfig {
   }
 }
 
+export type AgentEngine = 'claude' | 'opencode'
+
 export interface ProjectSettings {
+  agentEngine: AgentEngine          // 'claude' or 'opencode'
   claudeMdPath?: string
   defaultBranch?: string
   autoArtifactScan: boolean
+}
+
+export interface EngineConfig {
+  claude: {
+    command: string
+    args: string[]
+    setupScript: string
+  }
+  opencode: {
+    command: string
+    args: string[]
+    setupScript: string
+    provider?: string               // e.g. 'anthropic', 'openai', 'google'
+  }
 }
 
 // ─── 중분류: Phase ───
@@ -142,7 +159,7 @@ export interface IpcApi {
   sshExec(command: string): Promise<{ success: boolean; output?: string; error?: string }>
 
   // Agent control
-  agentStart(opts: { projectId: string; phaseId: string; taskId: string; workspacePath: string; prompt: string }): Promise<{ success: boolean; error?: string }>
+  agentStart(opts: { projectId: string; phaseId: string; taskId: string; workspacePath: string; prompt: string; engine?: AgentEngine }): Promise<{ success: boolean; error?: string }>
   agentStop(taskId: string): Promise<{ success: boolean }>
   agentSend(taskId: string, message: string): Promise<{ success: boolean }>
 
@@ -188,10 +205,14 @@ export interface AppConfig {
   authMethod?: 'key' | 'password' | 'agent'
   keyPath?: string
   // Custom claude execution
-  claudeCommand?: string           // e.g. "/home/yjlee/.local/bin/claude"
-  claudeArgs?: string[]            // e.g. ["--remote-control", "--permission-mode", "bypassPermissions"]
-  claudeEnv?: Record<string, string>  // extra env vars
-  claudeSetupScript?: string       // shell commands to run before claude (e.g. "source ~/.bashrc")
+  claudeCommand?: string
+  claudeArgs?: string[]
+  claudeEnv?: Record<string, string>
+  claudeSetupScript?: string
+  // Custom opencode execution
+  opencodeCommand?: string          // e.g. "opencode" or full path
+  opencodeArgs?: string[]
+  opencodeSetupScript?: string
 }
 
 export interface DirEntry {

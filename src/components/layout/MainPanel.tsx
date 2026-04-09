@@ -370,9 +370,10 @@ function SSHInlineConnect({ onConnect, connecting, error }: {
 }
 
 // ─── Create Project Form ───
-function CreateProjectForm({ onSubmit }: { onSubmit?: (name: string, path: string) => void }) {
+function CreateProjectForm({ onSubmit }: { onSubmit?: (name: string, path: string, engine?: string) => void }) {
   const [name, setName] = useState('')
   const [path, setPath] = useState('')
+  const [engine, setEngine] = useState<'claude' | 'opencode'>('claude')
   const [showBrowser, setShowBrowser] = useState(false)
 
   if (showBrowser) {
@@ -393,7 +394,7 @@ function CreateProjectForm({ onSubmit }: { onSubmit?: (name: string, path: strin
   }
 
   return (
-    <form onSubmit={e => { e.preventDefault(); onSubmit?.(name, path) }} className={styles.sshForm}>
+    <form onSubmit={e => { e.preventDefault(); onSubmit?.(name, path, engine) }} className={styles.sshForm}>
       <p className={styles.sshFormTitle}>
         <span style={{ color: 'var(--success)' }}>● Connected</span>
         {' — '}Create a project
@@ -415,6 +416,23 @@ function CreateProjectForm({ onSubmit }: { onSubmit?: (name: string, path: strin
         />
         <button type="button" className={styles.browseBtn} onClick={() => setShowBrowser(true)}>
           Browse
+        </button>
+      </div>
+      {/* Agent engine selection */}
+      <div className={styles.engineRow}>
+        <button
+          type="button"
+          className={`${styles.engineBtn} ${engine === 'claude' ? styles.engineActive : ''}`}
+          onClick={() => setEngine('claude')}
+        >
+          Claude Code
+        </button>
+        <button
+          type="button"
+          className={`${styles.engineBtn} ${engine === 'opencode' ? styles.engineActive : ''}`}
+          onClick={() => setEngine('opencode')}
+        >
+          OpenCode
         </button>
       </div>
       <button type="submit" className={styles.sshConnectBtn} disabled={!name || !path}>

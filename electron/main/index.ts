@@ -277,13 +277,13 @@ ipcMain.handle('ssh:exec', async (_event, command: string) => {
 // ─── Agent control ───
 ipcMain.handle('agent:start', async (_event, opts: {
   projectId: string; phaseId: string; taskId: string
-  workspacePath: string; prompt: string
+  workspacePath: string; prompt: string; engine?: string
 }) => {
   if (!agentService) return { success: false, error: 'Not connected' }
   try {
     await agentService.startAgent(
       opts.projectId, opts.phaseId, opts.taskId,
-      opts.workspacePath, opts.prompt
+      opts.workspacePath, opts.prompt, opts.engine || 'claude'
     )
     return { success: true }
   } catch (err) {
