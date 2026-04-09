@@ -303,8 +303,13 @@ export default function App() {
         onPinTask={handlePinTask}
         onDetach={handleDetach}
         onReattach={handleReattach}
+        sshConnected={sshConnected}
+        sshConnecting={sshConnecting}
+        sshError={sshError}
+        claudeVersion={claudeVersion}
         onRunAgent={handleRunAgent}
         onStopAgent={handleStopAgent}
+        onSSHConnect={handleSSHConnect}
         onOpenSSH={() => setSshDialogOpen(true)}
         onDisconnectSSH={handleSSHDisconnect}
       />

@@ -25,19 +25,23 @@ interface Props {
   onReattach: (panelId: string) => void
   onRunAgent: (taskId: string) => void
   onStopAgent: (taskId: string) => void
+  onSSHConnect: (config: import('../../../shared/types').ConnectionConfig) => void
   onOpenSSH: () => void
   onDisconnectSSH: () => void
   sshConnected: boolean
+  sshConnecting?: boolean
+  sshError?: string
   claudeVersion?: string
 }
 
 export function CommandCenter({
   projects, activeProject, phases, allPhases, activePhase,
   allTasks, allProjectTasks, activeTask,
-  sidebarView, detachedPanels, sshConnected, claudeVersion,
+  sidebarView, detachedPanels,
+  sshConnected, sshConnecting, sshError, claudeVersion,
   onSidebarViewChange,
   onSelectProject, onSelectPhase, onSelectTask, onAcknowledgeTask, onPinTask,
-  onDetach, onReattach, onRunAgent, onStopAgent, onOpenSSH, onDisconnectSSH
+  onDetach, onReattach, onRunAgent, onStopAgent, onSSHConnect, onOpenSSH, onDisconnectSSH
 }: Props) {
   const monitorDetached = detachedPanels.has('monitor')
   const railDetached = detachedPanels.has('statusrail')
@@ -133,8 +137,11 @@ export function CommandCenter({
           activeTask={activeTask}
           activePhase={activePhase}
           sshConnected={sshConnected}
+          sshConnecting={sshConnecting}
+          sshError={sshError}
           onRunAgent={onRunAgent}
           onStopAgent={onStopAgent}
+          onSSHConnect={onSSHConnect}
           onOpenSSH={onOpenSSH}
         />
 

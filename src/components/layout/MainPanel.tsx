@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { Task, Phase } from '../../../shared/types'
+import type { Task, Phase, ConnectionConfig } from '../../../shared/types'
 import { SessionTerminal } from '../terminal/SessionTerminal'
 import styles from './MainPanel.module.css'
 
@@ -7,24 +7,38 @@ interface Props {
   activeTask: Task | null
   activePhase: Phase | null
   sshConnected?: boolean
+  sshConnecting?: boolean
+  sshError?: string
   onRunAgent?: (taskId: string) => void
   onStopAgent?: (taskId: string) => void
+  onSSHConnect?: (config: ConnectionConfig) => void
   onOpenSSH?: () => void
 }
 
-export function MainPanel({ activeTask, activePhase, sshConnected, onRunAgent, onStopAgent, onOpenSSH }: Props) {
+export function MainPanel({ activeTask, activePhase, sshConnected, sshConnecting, sshError, onRunAgent, onStopAgent, onSSHConnect, onOpenSSH }: Props) {
   const [activeTab, setActiveTab] = useState<'log' | 'terminal' | 'artifacts'>('log')
 
+  // No task selected → show welcome + SSH connect if needed
   if (!activeTask) {
     return (
       <div className={styles.panel}>
         <div className={styles.empty}>
           <div className={styles.emptyIcon}>W</div>
           <h2 className={styles.emptyTitle}>Workanywhere</h2>
-          <p className={styles.emptyText}>
-            Select a task to view its logs and artifacts,<br />
-            or create a new task to start an agent.
-          </p>
+
+          {!sshConnected ? (
+            <SSHInlineConnect
+              onConnect={onSSHConnect}
+              connecting={sshConnecting}
+              error={sshError}
+            />
+          ) : (
+            <p className={styles.emptyText}>
+              <span style={{ color: 'var(--success)' }}>● SSH Connected</span><br />
+              Select a task to view its logs and artifacts,<br />
+              or create a new task to start an agent.
+            </p>
+          )}
         </div>
       </div>
     )
@@ -182,5 +196,84 @@ function ArtifactsView({ task }: { task: Task }) {
         </div>
       ))}
     </div>
+  )
+}
+
+// ─── Inline SSH Connect Form (shown in main panel when not connected) ───
+function SSHInlineConnect({ onConnect, connecting, error }: {
+  onConnect?: (config: ConnectionConfig) => void
+  connecting?: boolean
+  error?: string
+}) {
+  const [host, setHost] = useState('');
+  const [port, setPort] = useState('22');
+  const [username, setUsername] = useState('');
+  const [authMethod, setAuthMethod] = useState<'key' | 'password' | 'agent'>('key');
+  const [keyPath, setKeyPath] = useState('~/.ssh/id_rsa');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    onConnect?.({
+      type: 'ssh',
+      ssh: {
+        host,
+        port: parseInt(port),
+        username,
+        authMethod,
+        keyPath: authMethod === 'key' ? keyPath : undefined,
+      }
+    })
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className={styles.sshForm}>
+      <p className={styles.sshFormTitle}>Connect to server via SSH</p>
+      <div className={styles.sshRow}>
+        <input
+          className={styles.sshInput}
+          value={host}
+          onChange={e => setHost(e.target.value)}
+          placeholder="Host (e.g. 10.0.0.1)"
+          required
+        />
+        <input
+          className={styles.sshInputSmall}
+          value={port}
+          onChange={e => setPort(e.target.value)}
+          placeholder="Port"
+          type="number"
+        />
+      </div>
+      <input
+        className={styles.sshInput}
+        value={username}
+        onChange={e => setUsername(e.target.value)}
+        placeholder="Username"
+        required
+      />
+      <div className={styles.sshRow}>
+        <select
+          className={styles.sshSelect}
+          value={authMethod}
+          onChange={e => setAuthMethod(e.target.value as any)}
+        >
+          <option value="key">SSH Key</option>
+          <option value="password">Password</option>
+          <option value="agent">SSH Agent</option>
+        </select>
+        {authMethod === 'key' && (
+          <input
+            className={styles.sshInput}
+            value={keyPath}
+            onChange={e => setKeyPath(e.target.value)}
+            placeholder="Key path"
+          />
+        )}
+      </div>
+      {error && <div className={styles.sshError}>{error}</div>}
+      <button type="submit" className={styles.sshConnectBtn} disabled={connecting || !host || !username}>
+        {connecting ? 'Connecting...' : 'Connect SSH'}
+      </button>
+    </form>
   )
 }
