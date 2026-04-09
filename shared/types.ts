@@ -17,6 +17,7 @@ export interface ConnectionConfig {
     username: string
     authMethod: 'key' | 'password' | 'agent'
     keyPath?: string
+    password?: string
   }
 }
 

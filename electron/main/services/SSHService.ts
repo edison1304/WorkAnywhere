@@ -33,11 +33,14 @@ export class SSHService extends EventEmitter {
       }
 
       if (config.ssh!.authMethod === 'key' && config.ssh!.keyPath) {
-        connectConfig.privateKey = readFileSync(config.ssh!.keyPath)
+        const keyPath = config.ssh!.keyPath.replace(/^~/, process.env.HOME || process.env.USERPROFILE || '')
+        connectConfig.privateKey = readFileSync(keyPath)
+      } else if (config.ssh!.authMethod === 'password') {
+        connectConfig.password = config.ssh!.password
+        connectConfig.tryKeyboard = true
       } else if (config.ssh!.authMethod === 'agent') {
         connectConfig.agent = process.env.SSH_AUTH_SOCK
       }
-      // password auth handled via keyboard-interactive or password field
 
       this.client.on('ready', () => {
         this.connected = true
@@ -46,8 +49,18 @@ export class SSHService extends EventEmitter {
       })
 
       this.client.on('error', (err) => {
+        this.connected = false
         this.emit('error', err)
         reject(err)
+      })
+
+      this.client.on('keyboard-interactive', (_name, _instructions, _lang, prompts, finish) => {
+        // Auto-respond with password for keyboard-interactive auth
+        if (config.ssh!.password) {
+          finish([config.ssh!.password])
+        } else {
+          finish([])
+        }
       })
 
       this.client.on('close', () => {

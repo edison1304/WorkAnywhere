@@ -208,8 +208,9 @@ function SSHInlineConnect({ onConnect, connecting, error }: {
   const [host, setHost] = useState('');
   const [port, setPort] = useState('22');
   const [username, setUsername] = useState('');
-  const [authMethod, setAuthMethod] = useState<'key' | 'password' | 'agent'>('key');
+  const [authMethod, setAuthMethod] = useState<'key' | 'password' | 'agent'>('password');
   const [keyPath, setKeyPath] = useState('~/.ssh/id_rsa');
+  const [password, setPassword] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -221,6 +222,7 @@ function SSHInlineConnect({ onConnect, connecting, error }: {
         username,
         authMethod,
         keyPath: authMethod === 'key' ? keyPath : undefined,
+        password: authMethod === 'password' ? password : undefined,
       }
     })
   }
@@ -267,6 +269,15 @@ function SSHInlineConnect({ onConnect, connecting, error }: {
             value={keyPath}
             onChange={e => setKeyPath(e.target.value)}
             placeholder="Key path"
+          />
+        )}
+        {authMethod === 'password' && (
+          <input
+            className={styles.sshInput}
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            placeholder="Password"
+            type="password"
           />
         )}
       </div>
