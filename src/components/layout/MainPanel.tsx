@@ -330,10 +330,10 @@ function SSHInlineConnect({ onConnect, connecting, error }: {
       {/* Advanced: Claude execution settings */}
       <button
         type="button"
-        className={styles.advancedToggle}
+        className={styles.advancedToggleBtn}
         onClick={() => setShowAdvanced(!showAdvanced)}
       >
-        {showAdvanced ? '▾' : '▸'} Claude Settings
+        {showAdvanced ? '▾' : '▸'} Claude Settings (서버 실행 설정)
       </button>
       {showAdvanced && (
         <div className={styles.advancedSection}>
