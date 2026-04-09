@@ -198,6 +198,16 @@ let agentService: AgentService | null = null
 ipcMain.handle('ssh:connect', async (_event, config: import('../../../shared/types').ConnectionConfig) => {
   try {
     sshService = new SSHService()
+
+    // Load claude config from saved settings
+    const configPath = getConfigPath()
+    if (existsSync(configPath)) {
+      try {
+        const appConfig = JSON.parse(readFileSync(configPath, 'utf-8'))
+        sshService.setClaudeConfig(appConfig)
+      } catch { /* ignore */ }
+    }
+
     await sshService.connect(config)
 
     workspaceManager = new WorkspaceManager(sshService)

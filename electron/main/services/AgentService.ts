@@ -74,8 +74,10 @@ export class AgentService extends EventEmitter {
       })
 
       // Channel 2: interactive PTY (for user to interact with claude)
+      const prefix = (this.ssh as any).getShellPrefix?.() || ''
+      const claudeResume = (this.ssh as any).getClaudeCmd?.(['--resume', 'last']) || 'claude --resume last'
       const ptySession = await this.ssh.spawnPTY(
-        `cd ${JSON.stringify(workspacePath)} && claude --resume last`,
+        `${prefix}cd ${JSON.stringify(workspacePath)} && ${claudeResume}`,
         `pty-${taskId}`
       )
       agent.ptySession = ptySession

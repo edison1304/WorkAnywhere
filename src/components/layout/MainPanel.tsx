@@ -223,6 +223,10 @@ function SSHInlineConnect({ onConnect, connecting, error }: {
   const [authMethod, setAuthMethod] = useState<'key' | 'password' | 'agent'>('password');
   const [keyPath, setKeyPath] = useState('~/.ssh/id_rsa');
   const [password, setPassword] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [claudeCommand, setClaudeCommand] = useState('');
+  const [claudeArgs, setClaudeArgs] = useState('');
+  const [claudeSetup, setClaudeSetup] = useState('');
   const [configLoaded, setConfigLoaded] = useState(false);
 
   // Load saved config on mount
@@ -237,12 +241,25 @@ function SSHInlineConnect({ onConnect, connecting, error }: {
         if (c.username) setUsername(c.username)
         if (c.authMethod) setAuthMethod(c.authMethod)
         if (c.keyPath) setKeyPath(c.keyPath)
+        if (c.claudeCommand) { setClaudeCommand(c.claudeCommand); setShowAdvanced(true) }
+        if (c.claudeArgs?.length) { setClaudeArgs(c.claudeArgs.join(' ')); setShowAdvanced(true) }
+        if (c.claudeSetupScript) { setClaudeSetup(c.claudeSetupScript); setShowAdvanced(true) }
       }
     })
   }, [configLoaded]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    // Save config first (without password), including claude settings
+    if (window.api) {
+      window.api.configSave({
+        host, port: parseInt(port), username, authMethod,
+        keyPath: authMethod === 'key' ? keyPath : undefined,
+        ...(claudeCommand ? { claudeCommand } : {}),
+        ...(claudeArgs ? { claudeArgs: claudeArgs.split(/\s+/).filter(Boolean) } : {}),
+        ...(claudeSetup ? { claudeSetupScript: claudeSetup } : {}),
+      })
+    }
     onConnect?.({
       type: 'ssh',
       ssh: {
@@ -310,6 +327,40 @@ function SSHInlineConnect({ onConnect, connecting, error }: {
           />
         )}
       </div>
+      {/* Advanced: Claude execution settings */}
+      <button
+        type="button"
+        className={styles.advancedToggle}
+        onClick={() => setShowAdvanced(!showAdvanced)}
+      >
+        {showAdvanced ? '▾' : '▸'} Claude Settings
+      </button>
+      {showAdvanced && (
+        <div className={styles.advancedSection}>
+          <input
+            className={styles.sshInput}
+            value={claudeCommand}
+            onChange={e => setClaudeCommand(e.target.value)}
+            placeholder="Claude command (e.g. /home/yjlee/.local/bin/claude)"
+          />
+          <input
+            className={styles.sshInput}
+            value={claudeArgs}
+            onChange={e => setClaudeArgs(e.target.value)}
+            placeholder="Extra args (e.g. --remote-control --permission-mode bypassPermissions)"
+          />
+          <input
+            className={styles.sshInput}
+            value={claudeSetup}
+            onChange={e => setClaudeSetup(e.target.value)}
+            placeholder="Setup script (e.g. source ~/.bashrc)"
+          />
+          <p style={{ fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.4 }}>
+            OS 호환성 문제가 있으면 여기서 커스텀 claude 실행 경로와 인자를 설정하세요.
+            설정은 config에 저장됩니다.
+          </p>
+        </div>
+      )}
       {error && <div className={styles.sshError}>{error}</div>}
       <button type="submit" className={styles.sshConnectBtn} disabled={connecting || !host || !username}>
         {connecting ? 'Connecting...' : 'Connect SSH'}

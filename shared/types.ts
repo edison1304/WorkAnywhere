@@ -187,6 +187,11 @@ export interface AppConfig {
   username?: string
   authMethod?: 'key' | 'password' | 'agent'
   keyPath?: string
+  // Custom claude execution
+  claudeCommand?: string           // e.g. "/home/yjlee/.local/bin/claude"
+  claudeArgs?: string[]            // e.g. ["--remote-control", "--permission-mode", "bypassPermissions"]
+  claudeEnv?: Record<string, string>  // extra env vars
+  claudeSetupScript?: string       // shell commands to run before claude (e.g. "source ~/.bashrc")
 }
 
 export interface DirEntry {

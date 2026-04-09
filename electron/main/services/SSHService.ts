@@ -1,7 +1,14 @@
 import { Client, type ConnectConfig, type ClientChannel } from 'ssh2'
 import { EventEmitter } from 'events'
-import type { ConnectionConfig } from '../../../shared/types'
+import type { ConnectionConfig, AppConfig } from '../../../shared/types'
 import { readFileSync } from 'fs'
+
+export interface ClaudeConfig {
+  command: string
+  args: string[]
+  env: Record<string, string>
+  setupScript: string
+}
 
 export interface SSHSession {
   id: string
@@ -17,6 +24,40 @@ export class SSHService extends EventEmitter {
   private client: Client | null = null
   private connected = false
   private sessions = new Map<string, SSHSession>()
+  public claudeConfig: ClaudeConfig = {
+    command: 'claude',
+    args: [],
+    env: {},
+    setupScript: '',
+  }
+
+  setClaudeConfig(appConfig: AppConfig): void {
+    if (appConfig.claudeCommand) this.claudeConfig.command = appConfig.claudeCommand
+    if (appConfig.claudeArgs) this.claudeConfig.args = appConfig.claudeArgs
+    if (appConfig.claudeEnv) this.claudeConfig.env = appConfig.claudeEnv
+    if (appConfig.claudeSetupScript) this.claudeConfig.setupScript = appConfig.claudeSetupScript
+  }
+
+  // Build the shell prefix (env vars + setup script)
+  private getShellPrefix(): string {
+    const parts: string[] = []
+    // Setup script (e.g. "source ~/.bashrc")
+    if (this.claudeConfig.setupScript) {
+      parts.push(this.claudeConfig.setupScript)
+    }
+    // Env vars
+    for (const [k, v] of Object.entries(this.claudeConfig.env)) {
+      parts.push(`export ${k}=${JSON.stringify(v)}`)
+    }
+    return parts.length > 0 ? parts.join(' && ') + ' && ' : ''
+  }
+
+  // Build claude command with custom path + args
+  private getClaudeCmd(extraArgs: string[]): string {
+    const cmd = this.claudeConfig.command
+    const allArgs = [...this.claudeConfig.args, ...extraArgs]
+    return `${cmd} ${allArgs.join(' ')}`
+  }
 
   async connect(config: ConnectionConfig): Promise<void> {
     if (config.type !== 'ssh' || !config.ssh) {
@@ -157,7 +198,9 @@ export class SSHService extends EventEmitter {
     if (!this.client || !this.connected) throw new Error('Not connected')
 
     return new Promise((resolve, reject) => {
-      const cmd = `cd ${JSON.stringify(workspacePath)} && claude -p ${JSON.stringify(prompt)} --output-format stream-json 2>&1`
+      const prefix = this.getShellPrefix()
+      const claudeCmd = this.getClaudeCmd(['-p', JSON.stringify(prompt), '--output-format', 'stream-json'])
+      const cmd = `${prefix}cd ${JSON.stringify(workspacePath)} && ${claudeCmd} 2>&1`
 
       this.client!.exec(cmd, (err, stream) => {
         if (err) return reject(err)
@@ -212,7 +255,9 @@ export class SSHService extends EventEmitter {
   // Check if claude CLI is available
   async checkClaude(): Promise<{ available: boolean; version?: string }> {
     try {
-      const output = await this.exec('claude --version 2>/dev/null')
+      const prefix = this.getShellPrefix()
+      const cmd = this.getClaudeCmd(['--version'])
+      const output = await this.exec(`${prefix}${cmd} 2>/dev/null`)
       return { available: true, version: output.trim() }
     } catch {
       return { available: false }
