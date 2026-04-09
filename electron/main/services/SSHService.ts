@@ -211,9 +211,14 @@ export class SSHService extends EventEmitter {
       } else {
         agentCmd = this.getEngineCmd('claude', ['-p', JSON.stringify(prompt), '--output-format', 'stream-json'])
       }
-      const innerCmd = `${prefix}cd ${JSON.stringify(workspacePath)} && ${agentCmd} 2>&1`
-      // Use bash -lc to ensure .bashrc PATH is loaded
-      const cmd = `bash -lc ${JSON.stringify(innerCmd)}`
+      // Build command: setup prefix + cd + agent command
+      const parts = [prefix, `cd ${JSON.stringify(workspacePath)}`, agentCmd + ' 2>&1'].filter(Boolean)
+      const innerCmd = parts.join(' && ')
+      // Use bash -l (login shell) to pick up .bashrc PATH
+      const cmd = `bash -l -c ${JSON.stringify(innerCmd)}`
+
+      // Emit debug info
+      this.emit('debug', { engine, prefix, agentCmd, innerCmd, cmd })
 
       this.client!.exec(cmd, (err, stream) => {
         if (err) return reject(err)

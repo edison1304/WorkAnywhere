@@ -48,7 +48,15 @@ export class AgentService extends EventEmitter {
 
     // Emit status
     this.emitStatus(taskId, 'running')
+    const engineCfg = this.ssh.engines[engine]
     this.emitLog(taskId, 'agent_start', `Agent started (${engine})`)
+    this.emitLog(taskId, 'text', `[CONFIG] command=${engineCfg?.command || 'default'}, args=${JSON.stringify(engineCfg?.args || [])}, setup=${engineCfg?.setupScript || 'none'}`)
+
+    // Capture debug info from SSH
+    const debugHandler = (info: any) => {
+      this.emitLog(taskId, 'text', `[DEBUG CMD] ${info.cmd}`)
+    }
+    this.ssh.once('debug', debugHandler)
 
     try {
       // Channel 1: structured events (stream-json for claude, json for opencode)
