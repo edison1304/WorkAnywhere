@@ -6,9 +6,13 @@ import styles from './MainPanel.module.css'
 interface Props {
   activeTask: Task | null
   activePhase: Phase | null
+  sshConnected?: boolean
+  onRunAgent?: (taskId: string) => void
+  onStopAgent?: (taskId: string) => void
+  onOpenSSH?: () => void
 }
 
-export function MainPanel({ activeTask, activePhase }: Props) {
+export function MainPanel({ activeTask, activePhase, sshConnected, onRunAgent, onStopAgent, onOpenSSH }: Props) {
   const [activeTab, setActiveTab] = useState<'log' | 'terminal' | 'artifacts'>('log')
 
   if (!activeTask) {
@@ -42,16 +46,33 @@ export function MainPanel({ activeTask, activePhase }: Props) {
         </div>
         <div className={styles.taskActions}>
           {isIdle && (
-            <button className={styles.actionBtn} data-variant="primary">Run Agent</button>
+            <button
+              className={styles.actionBtn}
+              data-variant="primary"
+              onClick={() => sshConnected ? onRunAgent?.(activeTask.id) : onOpenSSH?.()}
+            >
+              {sshConnected ? 'Run Agent' : 'Connect SSH'}
+            </button>
           )}
           {isWaiting && (
             <button className={styles.actionBtn} data-variant="primary">Send</button>
           )}
           {(isRunning || isWaiting) && (
-            <button className={styles.actionBtn} data-variant="danger">Stop</button>
+            <button
+              className={styles.actionBtn}
+              data-variant="danger"
+              onClick={() => onStopAgent?.(activeTask.id)}
+            >
+              Stop
+            </button>
           )}
           {isDone && (
-            <button className={styles.actionBtn}>Re-run</button>
+            <button
+              className={styles.actionBtn}
+              onClick={() => onRunAgent?.(activeTask.id)}
+            >
+              Re-run
+            </button>
           )}
         </div>
       </div>

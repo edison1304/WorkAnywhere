@@ -23,14 +23,21 @@ interface Props {
   onPinTask: (id: string) => void
   onDetach: (panelId: string) => void
   onReattach: (panelId: string) => void
+  onRunAgent: (taskId: string) => void
+  onStopAgent: (taskId: string) => void
+  onOpenSSH: () => void
+  onDisconnectSSH: () => void
+  sshConnected: boolean
+  claudeVersion?: string
 }
 
 export function CommandCenter({
   projects, activeProject, phases, allPhases, activePhase,
   allTasks, allProjectTasks, activeTask,
-  sidebarView, detachedPanels, onSidebarViewChange,
+  sidebarView, detachedPanels, sshConnected, claudeVersion,
+  onSidebarViewChange,
   onSelectProject, onSelectPhase, onSelectTask, onAcknowledgeTask, onPinTask,
-  onDetach, onReattach
+  onDetach, onReattach, onRunAgent, onStopAgent, onOpenSSH, onDisconnectSSH
 }: Props) {
   const monitorDetached = detachedPanels.has('monitor')
   const railDetached = detachedPanels.has('statusrail')
@@ -71,9 +78,23 @@ export function CommandCenter({
               📊 ↩
             </button>
           )}
-          <span className={styles.connectionBadge}>
-            {activeProject?.connection.type === 'ssh' ? 'SSH' : 'Local'}
-          </span>
+          {sshConnected ? (
+            <button
+              className={`${styles.connectionBadge} ${styles.connected}`}
+              onClick={onDisconnectSSH}
+              title={claudeVersion ? `Claude ${claudeVersion} — Click to disconnect` : 'Click to disconnect'}
+            >
+              ● SSH Connected
+            </button>
+          ) : (
+            <button
+              className={styles.connectionBadge}
+              onClick={onOpenSSH}
+              title="Connect via SSH"
+            >
+              ○ SSH Disconnected
+            </button>
+          )}
         </div>
       </div>
 
@@ -108,7 +129,14 @@ export function CommandCenter({
         )}
 
         {/* Main panel always visible */}
-        <MainPanel activeTask={activeTask} activePhase={activePhase} />
+        <MainPanel
+          activeTask={activeTask}
+          activePhase={activePhase}
+          sshConnected={sshConnected}
+          onRunAgent={onRunAgent}
+          onStopAgent={onStopAgent}
+          onOpenSSH={onOpenSSH}
+        />
 
         {/* Status rail: show or placeholder */}
         {!railDetached ? (

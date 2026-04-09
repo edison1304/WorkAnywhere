@@ -2,7 +2,8 @@ import { useState, useCallback, useEffect } from 'react'
 import { CommandCenter } from './components/layout/CommandCenter'
 import { DetachedMonitor } from './components/layout/DetachedMonitor'
 import { DetachedStatusRail } from './components/layout/DetachedStatusRail'
-import type { Project, Phase, Task } from '../shared/types'
+import { SSHConnectDialog } from './components/project/SSHConnectDialog'
+import type { Project, Phase, Task, ConnectionConfig, LogEntry } from '../shared/types'
 import type { SidebarView } from './components/layout/TreeSidebar'
 
 // ─── Demo Data ───
@@ -78,11 +79,116 @@ export default function App() {
   const [tasks, setTasks] = useState<Task[]>(DEMO_TASKS)
   const [detachedPanels, setDetachedPanels] = useState<Set<string>>(new Set())
 
+  // SSH state
+  const [sshConnected, setSshConnected] = useState(false)
+  const [sshDialogOpen, setSshDialogOpen] = useState(false)
+  const [sshConnecting, setSshConnecting] = useState(false)
+  const [sshError, setSshError] = useState<string>()
+  const [claudeVersion, setClaudeVersion] = useState<string>()
+
   const activeProject = DEMO_PROJECTS.find(p => p.id === activeProjectId) || null
   const projectPhases = DEMO_PHASES.filter(ph => ph.projectId === activeProjectId)
   const activePhase = activePhaseId ? DEMO_PHASES.find(ph => ph.id === activePhaseId) || null : null
   const activeTask = activeTaskId ? tasks.find(t => t.id === activeTaskId) || null : null
   const allProjectTasks = tasks.filter(t => t.projectId === activeProjectId)
+
+  // ─── SSH connection ───
+  const handleSSHConnect = useCallback(async (config: ConnectionConfig) => {
+    if (!window.api) return
+    setSshConnecting(true)
+    setSshError(undefined)
+    try {
+      const result = await window.api.sshConnect(config)
+      if (result.success) {
+        setSshConnected(true)
+        setSshDialogOpen(false)
+        if (result.claude?.version) setClaudeVersion(result.claude.version)
+        if (!result.claude?.available) {
+          setSshError('Connected, but claude CLI not found on server')
+        }
+      } else {
+        setSshError(result.error || 'Connection failed')
+      }
+    } catch (err) {
+      setSshError(String(err))
+    } finally {
+      setSshConnecting(false)
+    }
+  }, [])
+
+  const handleSSHDisconnect = useCallback(async () => {
+    if (!window.api) return
+    await window.api.sshDisconnect()
+    setSshConnected(false)
+    setClaudeVersion(undefined)
+  }, [])
+
+  // ─── Agent control ───
+  const handleRunAgent = useCallback(async (taskId: string) => {
+    if (!window.api || !sshConnected) {
+      setSshDialogOpen(true)
+      return
+    }
+    const task = tasks.find(t => t.id === taskId)
+    const project = DEMO_PROJECTS.find(p => p.id === task?.projectId)
+    if (!task || !project) return
+
+    // Update task status locally
+    setTasks(prev => prev.map(t =>
+      t.id === taskId ? { ...t, status: 'running' as const, logs: [
+        ...t.logs,
+        { id: `${taskId}-start`, taskId, timestamp: new Date().toISOString(), type: 'agent_start' as const, content: 'Agent started' }
+      ]} : t
+    ))
+
+    const result = await window.api.agentStart({
+      projectId: task.projectId,
+      phaseId: task.phaseId,
+      taskId,
+      workspacePath: project.workspacePath,
+      prompt: task.prompt,
+    })
+
+    if (!result.success) {
+      setTasks(prev => prev.map(t =>
+        t.id === taskId ? { ...t, status: 'failed' as const, logs: [
+          ...t.logs,
+          { id: `${taskId}-err`, taskId, timestamp: new Date().toISOString(), type: 'error' as const, content: result.error || 'Failed to start' }
+        ]} : t
+      ))
+    }
+  }, [sshConnected, tasks])
+
+  const handleStopAgent = useCallback(async (taskId: string) => {
+    if (!window.api) return
+    await window.api.agentStop(taskId)
+    setTasks(prev => prev.map(t =>
+      t.id === taskId ? { ...t, status: 'failed' as const } : t
+    ))
+  }, [])
+
+  // ─── Listen for agent events from main process ───
+  useEffect(() => {
+    if (!window.api) return
+
+    const unsubStatus = window.api.onTaskStatus(({ taskId, status }) => {
+      setTasks(prev => prev.map(t =>
+        t.id === taskId ? {
+          ...t,
+          status,
+          ...(status === 'completed' || status === 'failed' ? { completedAt: new Date().toISOString() } : {})
+        } : t
+      ))
+    })
+
+    const unsubLog = window.api.onTaskLog(({ taskId, log }) => {
+      setTasks(prev => prev.map(t =>
+        t.id === taskId ? { ...t, logs: [...t.logs, log] } : t
+      ))
+    })
+
+    return () => { unsubStatus(); unsubLog() }
+  }, [])
 
   // Sync detached panels list
   useEffect(() => {
@@ -167,33 +273,48 @@ export default function App() {
 
   // ─── Main window ───
   return (
-    <CommandCenter
-      projects={DEMO_PROJECTS}
-      activeProject={activeProject}
-      phases={projectPhases}
-      allPhases={DEMO_PHASES}
-      activePhase={activePhase}
-      allTasks={tasks}
-      allProjectTasks={allProjectTasks}
-      activeTask={activeTask}
-      sidebarView={sidebarView}
-      detachedPanels={detachedPanels}
-      onSidebarViewChange={setSidebarView}
-      onSelectProject={(id) => {
-        setActiveProjectId(id)
-        const firstPhase = DEMO_PHASES.find(ph => ph.projectId === id)
-        setActivePhaseId(firstPhase?.id || null)
-        setActiveTaskId(null)
-      }}
-      onSelectPhase={(id) => {
-        setActivePhaseId(id)
-        setActiveTaskId(null)
-      }}
-      onSelectTask={setActiveTaskId}
-      onAcknowledgeTask={handleAcknowledgeTask}
-      onPinTask={handlePinTask}
-      onDetach={handleDetach}
-      onReattach={handleReattach}
-    />
+    <>
+      <CommandCenter
+        projects={DEMO_PROJECTS}
+        activeProject={activeProject}
+        phases={projectPhases}
+        allPhases={DEMO_PHASES}
+        activePhase={activePhase}
+        allTasks={tasks}
+        allProjectTasks={allProjectTasks}
+        activeTask={activeTask}
+        sidebarView={sidebarView}
+        detachedPanels={detachedPanels}
+        sshConnected={sshConnected}
+        claudeVersion={claudeVersion}
+        onSidebarViewChange={setSidebarView}
+        onSelectProject={(id) => {
+          setActiveProjectId(id)
+          const firstPhase = DEMO_PHASES.find(ph => ph.projectId === id)
+          setActivePhaseId(firstPhase?.id || null)
+          setActiveTaskId(null)
+        }}
+        onSelectPhase={(id) => {
+          setActivePhaseId(id)
+          setActiveTaskId(null)
+        }}
+        onSelectTask={setActiveTaskId}
+        onAcknowledgeTask={handleAcknowledgeTask}
+        onPinTask={handlePinTask}
+        onDetach={handleDetach}
+        onReattach={handleReattach}
+        onRunAgent={handleRunAgent}
+        onStopAgent={handleStopAgent}
+        onOpenSSH={() => setSshDialogOpen(true)}
+        onDisconnectSSH={handleSSHDisconnect}
+      />
+      <SSHConnectDialog
+        isOpen={sshDialogOpen}
+        onConnect={handleSSHConnect}
+        onClose={() => setSshDialogOpen(false)}
+        connecting={sshConnecting}
+        error={sshError}
+      />
+    </>
   )
 }
