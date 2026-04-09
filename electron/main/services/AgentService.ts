@@ -1,20 +1,14 @@
 import { EventEmitter } from 'events'
-import type { SSHService, ClaudeStreamEvent, SSHSession } from './SSHService'
-import type { WorkspaceManager, ServerTask } from './WorkspaceManager'
+import type { SSHService, SSHSession } from './SSHService'
+import type { WorkspaceManager } from './WorkspaceManager'
 import type { LogEntry, TaskStatus } from '../../../shared/types'
 
 interface AgentInstance {
   taskId: string
   projectId: string
   phaseId: string
-  engine: string                    // 'claude' or 'opencode'
-  ptySession?: SSHSession           // interactive terminal
-  streamProcess?: {                 // stream-json process
-    onEvent: (cb: (e: ClaudeStreamEvent) => void) => void
-    onClose: (cb: (code: number) => void) => void
-    kill: () => void
-  }
-  claudeSessionId?: string
+  engine: string
+  ptySession: SSHSession
 }
 
 export class AgentService extends EventEmitter {
@@ -28,8 +22,8 @@ export class AgentService extends EventEmitter {
   }
 
   /**
-   * Start a Claude agent for a task
-   * Uses dual channel: stream-json for structured events + PTY for interactive terminal
+   * Start an interactive Claude agent via PTY.
+   * Launches claude in interactive mode, sends the initial prompt as first message.
    */
   async startAgent(
     projectId: string,
@@ -43,74 +37,47 @@ export class AgentService extends EventEmitter {
       throw new Error(`Agent already running for task ${taskId}`)
     }
 
-    const agent: AgentInstance = { taskId, projectId, phaseId, engine }
-    this.agents.set(taskId, agent)
-
-    // Emit status
     this.emitStatus(taskId, 'running')
+
     const engineCfg = this.ssh.engines[engine]
     this.emitLog(taskId, 'agent_start', `Agent started (${engine})`)
-    this.emitLog(taskId, 'text', `[CONFIG] command=${engineCfg?.command || 'default'}, args=${JSON.stringify(engineCfg?.args || [])}, setup=${engineCfg?.setupScript || 'none'}`)
-
-    // Capture debug info from SSH
-    const debugHandler = (info: any) => {
-      this.emitLog(taskId, 'text', `[DEBUG CMD] ${info.cmd}`)
-    }
-    this.ssh.once('debug', debugHandler)
 
     try {
-      // Channel 1: structured events (stream-json for claude, json for opencode)
-      const streamProc = await this.ssh.spawnAgentStream(
-        engine, workspacePath, prompt, `stream-${taskId}`
-      )
-      agent.streamProcess = streamProc
-
-      streamProc.onEvent((event) => {
-        this.handleStreamEvent(taskId, event)
-      })
-
-      streamProc.onClose((code) => {
-        const status: TaskStatus = code === 0 ? 'completed' : 'failed'
-        this.emitStatus(taskId, status)
-        this.emitLog(taskId, 'agent_end',
-          code === 0 ? 'Agent completed successfully' : `Agent exited with code ${code}`)
-        this.agents.delete(taskId)
-
-        // Update workspace file
-        this.workspace.updateTask(projectId, phaseId, taskId, {
-          status,
-          completedAt: new Date().toISOString(),
-        }).catch(() => {})
-      })
-
-      // Channel 2: interactive PTY
+      // Build interactive claude command (no -p, no --output-format)
       const prefix = this.ssh.getShellPrefix(engine)
-      let ptyCmd: string
-      if (engine === 'opencode') {
-        ptyCmd = this.ssh.getEngineCmd('opencode', [])
-      } else {
-        ptyCmd = this.ssh.getEngineCmd('claude', ['--resume', 'last'])
-      }
+      const agentCmd = this.ssh.getEngineCmd(engine, [])  // just claude with base args
+      const fullCmd = `${prefix}cd ${JSON.stringify(workspacePath)} && ${agentCmd}`
+
+      this.emitLog(taskId, 'text', `[CMD] ${fullCmd}`)
+
+      // Spawn interactive PTY
       const ptySession = await this.ssh.spawnPTY(
-        `${prefix}cd ${JSON.stringify(workspacePath)} && ${ptyCmd}`,
+        fullCmd,
         `pty-${taskId}`
       )
-      agent.ptySession = ptySession
 
-      // Forward PTY data to renderer
+      const agent: AgentInstance = { taskId, projectId, phaseId, engine, ptySession }
+      this.agents.set(taskId, agent)
+
+      // Forward PTY output to renderer (for Terminal tab)
       ptySession.onData((data) => {
         this.emit('pty:data', { taskId, data })
       })
 
       ptySession.onClose(() => {
         this.emit('pty:close', { taskId })
+        this.emitStatus(taskId, 'completed')
+        this.emitLog(taskId, 'agent_end', 'Agent session closed')
+        this.agents.delete(taskId)
       })
 
-      // Update workspace
-      await this.workspace.updateTask(projectId, phaseId, taskId, {
-        status: 'running',
-        lastRunAt: new Date().toISOString(),
-      })
+      // Wait a moment for claude to start, then send the initial prompt
+      setTimeout(() => {
+        if (this.agents.has(taskId)) {
+          ptySession.write(prompt + '\n')
+          this.emitLog(taskId, 'text', `[YOU] ${prompt}`)
+        }
+      }, 2000)  // give claude time to initialize
 
     } catch (err) {
       this.emitStatus(taskId, 'failed')
@@ -120,7 +87,7 @@ export class AgentService extends EventEmitter {
   }
 
   /**
-   * Send a message to a running agent's PTY
+   * Send a follow-up message to a running agent
    */
   sendMessage(taskId: string, message: string): void {
     const agent = this.agents.get(taskId)
@@ -156,63 +123,22 @@ export class AgentService extends EventEmitter {
     const agent = this.agents.get(taskId)
     if (!agent) return
 
-    agent.streamProcess?.kill()
-    agent.ptySession?.close()
-    this.agents.delete(taskId)
+    // Send Ctrl+C then exit
+    agent.ptySession.write('\x03')
+    setTimeout(() => {
+      agent.ptySession.write('exit\n')
+      setTimeout(() => {
+        agent.ptySession.close()
+      }, 500)
+    }, 500)
 
     this.emitStatus(taskId, 'failed')
     this.emitLog(taskId, 'agent_end', 'Agent stopped by user')
+    this.agents.delete(taskId)
   }
 
-  /**
-   * Get agent status
-   */
   isRunning(taskId: string): boolean {
     return this.agents.has(taskId)
-  }
-
-  // ─── Internal handlers ───
-
-  private handleStreamEvent(taskId: string, event: ClaudeStreamEvent): void {
-    switch (event.type) {
-      case 'text_delta':
-      case 'text':
-        if (event.content) {
-          this.emitLog(taskId, 'text', event.content)
-        }
-        break
-
-      case 'tool_use':
-      case 'tool_call':
-        this.emitLog(taskId, 'tool_call', event.content || `${event.tool}: ${JSON.stringify(event.input || {}).slice(0, 200)}`, {
-          tool: event.tool as string,
-        })
-        break
-
-      case 'error':
-      case 'system':
-        if (event.content) {
-          this.emitLog(taskId, 'error', event.content)
-        }
-        break
-
-      case 'result':
-        if (event.result) {
-          this.emitLog(taskId, 'text', event.result)
-        }
-        // Capture session ID for --resume
-        if (event.session_id) {
-          const agent = this.agents.get(taskId)
-          if (agent) agent.claudeSessionId = event.session_id as string
-        }
-        break
-
-      case 'raw':
-        if (event.content) {
-          this.emitLog(taskId, 'text', event.content)
-        }
-        break
-    }
   }
 
   private emitStatus(taskId: string, status: TaskStatus): void {

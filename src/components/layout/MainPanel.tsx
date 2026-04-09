@@ -29,7 +29,7 @@ export function MainPanel({
   onCreateProject, onCreatePhase, onCreateTask,
   hasProjects, hasPhases, activeProjectName
 }: Props) {
-  const [activeTab, setActiveTab] = useState<'log' | 'terminal' | 'artifacts'>('log')
+  const [activeTab, setActiveTab] = useState<'log' | 'terminal' | 'artifacts'>('terminal')
 
   // No task selected → show welcome / SSH connect / create flow
   if (!activeTask) {
@@ -142,11 +142,11 @@ export function MainPanel({
         {activeTab === 'artifacts' && <ArtifactsView task={activeTask} />}
       </div>
 
-      {/* Chat input */}
+      {/* Chat input — always visible when agent is active */}
       {(isRunning || isWaiting) && (
         <ChatInput
           onSend={(msg) => onSendMessage?.(activeTask.id, msg)}
-          disabled={!isRunning && !isWaiting}
+          disabled={false}
         />
       )}
     </div>
