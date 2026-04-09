@@ -74,7 +74,7 @@ export default function App() {
 
   const [activeProjectId, setActiveProjectId] = useState<string>('p1')
   const [activePhaseId, setActivePhaseId] = useState<string | null>('ph1')
-  const [activeTaskId, setActiveTaskId] = useState<string | null>('t2')
+  const [activeTaskId, setActiveTaskId] = useState<string | null>(null)
   const [sidebarView, setSidebarView] = useState<SidebarView>('monitor')
   const [tasks, setTasks] = useState<Task[]>(DEMO_TASKS)
   const [detachedPanels, setDetachedPanels] = useState<Set<string>>(new Set())
