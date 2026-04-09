@@ -133,13 +133,17 @@ export function MainPanel({
         </button>
       </div>
 
-      {/* Content — terminal always mounted, hidden via CSS to keep session alive */}
+      {/* Content — terminal always mounted, hidden via CSS to preserve session */}
       <div className={styles.content}>
-        {activeTab === 'log' && <LogView task={activeTask} />}
-        <div style={{ display: activeTab === 'terminal' ? 'contents' : 'none' }}>
-          <SessionTerminal taskId={activeTask.id} isActive={true} />
+        <div style={{ display: activeTab === 'log' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
+          <LogView task={activeTask} />
         </div>
-        {activeTab === 'artifacts' && <ArtifactsView task={activeTask} />}
+        <div style={{ display: activeTab === 'terminal' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
+          <SessionTerminal taskId={activeTask.id} />
+        </div>
+        <div style={{ display: activeTab === 'artifacts' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
+          <ArtifactsView task={activeTask} />
+        </div>
       </div>
 
       {/* Chat input — always visible when agent is active */}

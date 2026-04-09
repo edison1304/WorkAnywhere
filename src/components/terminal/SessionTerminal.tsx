@@ -1,38 +1,47 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useCallback } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import styles from './SessionTerminal.module.css'
 
+// Global terminal pool — survives component re-renders and tab switches
+const terminalPool = new Map<string, {
+  terminal: Terminal
+  fitAddon: FitAddon
+  cleanupPty: () => void
+  container: HTMLDivElement
+}>()
+
 interface Props {
   taskId: string
-  isActive: boolean
 }
 
 export function SessionTerminal({ taskId }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const terminalRef = useRef<Terminal | null>(null)
-  const fitAddonRef = useRef<FitAddon | null>(null)
-  const cleanupRef = useRef<(() => void) | null>(null)
-  const currentTaskRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!containerRef.current || !window.api) return
+    const host = containerRef.current
 
-    // Same task — don't recreate
-    if (currentTaskRef.current === taskId && terminalRef.current) return
-
-    // Different task — cleanup old terminal
-    if (cleanupRef.current) {
-      cleanupRef.current()
-      cleanupRef.current = null
+    // Already exists — just re-attach the DOM element
+    const existing = terminalPool.get(taskId)
+    if (existing) {
+      // Move the existing terminal DOM into this container
+      if (existing.container.parentElement !== host) {
+        host.appendChild(existing.container)
+      }
+      // Re-fit after re-attach
+      requestAnimationFrame(() => {
+        try { existing.fitAddon.fit() } catch {}
+      })
+      return
     }
-    if (terminalRef.current) {
-      terminalRef.current.dispose()
-      terminalRef.current = null
-    }
 
-    currentTaskRef.current = taskId
+    // Create new terminal
+    const termContainer = document.createElement('div')
+    termContainer.style.width = '100%'
+    termContainer.style.height = '100%'
+    host.appendChild(termContainer)
 
     const terminal = new Terminal({
       theme: {
@@ -59,18 +68,14 @@ export function SessionTerminal({ taskId }: Props) {
 
     const fitAddon = new FitAddon()
     terminal.loadAddon(fitAddon)
-    terminal.open(containerRef.current)
+    terminal.open(termContainer)
 
-    // Delay fit to ensure container is visible
     requestAnimationFrame(() => {
       try { fitAddon.fit() } catch {}
     })
 
-    terminalRef.current = terminal
-    fitAddonRef.current = fitAddon
-
     // Send terminal input to PTY
-    const dataDisposable = terminal.onData((data) => {
+    terminal.onData((data) => {
       window.api.ptyWrite(taskId, data)
     })
 
@@ -88,27 +93,20 @@ export function SessionTerminal({ taskId }: Props) {
         window.api.ptyResize(taskId, terminal.cols, terminal.rows)
       } catch {}
     })
-    resizeObserver.observe(containerRef.current)
+    resizeObserver.observe(host)
 
-    // Store cleanup for later (NOT on unmount — only on task change)
-    cleanupRef.current = () => {
-      resizeObserver.disconnect()
-      cleanupPty()
-      dataDisposable.dispose()
-    }
+    // Store in pool
+    terminalPool.set(taskId, {
+      terminal,
+      fitAddon,
+      cleanupPty: () => {
+        resizeObserver.disconnect()
+        cleanupPty()
+      },
+      container: termContainer,
+    })
 
-    // Only cleanup terminal on full unmount (component removed from DOM)
-    return () => {
-      if (cleanupRef.current) {
-        cleanupRef.current()
-        cleanupRef.current = null
-      }
-      if (terminalRef.current) {
-        terminalRef.current.dispose()
-        terminalRef.current = null
-      }
-      currentTaskRef.current = null
-    }
+    // Do NOT return cleanup — terminal lives forever in pool
   }, [taskId])
 
   return (
@@ -116,4 +114,20 @@ export function SessionTerminal({ taskId }: Props) {
       <div ref={containerRef} className={styles.terminal} />
     </div>
   )
+}
+
+// Call this to explicitly destroy a terminal (e.g., when user clicks "Close")
+export function destroyTerminal(taskId: string): void {
+  const entry = terminalPool.get(taskId)
+  if (entry) {
+    entry.cleanupPty()
+    entry.terminal.dispose()
+    entry.container.remove()
+    terminalPool.delete(taskId)
+  }
+}
+
+// Get active terminal count
+export function getActiveTerminalCount(): number {
+  return terminalPool.size
 }
