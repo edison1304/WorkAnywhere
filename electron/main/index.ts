@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, Notification, screen } from 'electron'
 import { join } from 'path'
+import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { is } from '@electron-toolkit/utils'
 import { SSHService } from './services/SSHService'
 import { WorkspaceManager } from './services/WorkspaceManager'
@@ -315,6 +316,79 @@ ipcMain.handle('workspace:save', async (_event, workspace) => {
   try {
     await workspaceManager.save(workspace)
     return { success: true }
+  } catch (err) {
+    return { success: false, error: String(err) }
+  }
+})
+
+// ─── Local config (connection settings, no password) ───
+function getConfigPath(): string {
+  return join(app.getPath('userData'), 'config.json')
+}
+
+ipcMain.handle('config:load', async () => {
+  const configPath = getConfigPath()
+  try {
+    if (existsSync(configPath)) {
+      return { success: true, config: JSON.parse(readFileSync(configPath, 'utf-8')) }
+    }
+    return { success: true, config: null }
+  } catch {
+    return { success: true, config: null }
+  }
+})
+
+ipcMain.handle('config:save', async (_event, config: Record<string, unknown>) => {
+  try {
+    writeFileSync(getConfigPath(), JSON.stringify(config, null, 2))
+    return { success: true }
+  } catch (err) {
+    return { success: false, error: String(err) }
+  }
+})
+
+// ─── Remote folder browser ───
+ipcMain.handle('ssh:list-dir', async (_event, dirPath: string) => {
+  if (!sshService?.isConnected()) return { success: false, error: 'Not connected' }
+  try {
+    // List directories and files with type indicators
+    const output = await sshService.exec(
+      `ls -1pa ${JSON.stringify(dirPath)} 2>/dev/null | head -100`
+    )
+    const entries = output.trim().split('\n').filter(Boolean).map(name => {
+      const isDir = name.endsWith('/')
+      return {
+        name: isDir ? name.slice(0, -1) : name,
+        isDir,
+        path: dirPath.replace(/\/$/, '') + '/' + (isDir ? name.slice(0, -1) : name)
+      }
+    })
+    // Sort: dirs first, then files
+    entries.sort((a, b) => {
+      if (a.isDir !== b.isDir) return a.isDir ? -1 : 1
+      return a.name.localeCompare(b.name)
+    })
+    return { success: true, entries, currentPath: dirPath }
+  } catch (err) {
+    return { success: false, error: String(err) }
+  }
+})
+
+ipcMain.handle('ssh:mkdir', async (_event, dirPath: string) => {
+  if (!sshService?.isConnected()) return { success: false, error: 'Not connected' }
+  try {
+    await sshService.exec(`mkdir -p ${JSON.stringify(dirPath)}`)
+    return { success: true }
+  } catch (err) {
+    return { success: false, error: String(err) }
+  }
+})
+
+ipcMain.handle('ssh:home', async () => {
+  if (!sshService?.isConnected()) return { success: false, error: 'Not connected' }
+  try {
+    const home = (await sshService.exec('echo $HOME')).trim()
+    return { success: true, home }
   } catch (err) {
     return { success: false, error: String(err) }
   }

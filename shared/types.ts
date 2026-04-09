@@ -155,6 +155,15 @@ export interface IpcApi {
   workspaceLoad(): Promise<{ success: boolean; workspace?: unknown; error?: string }>
   workspaceSave(workspace: unknown): Promise<{ success: boolean; error?: string }>
 
+  // Local config (saved connection settings)
+  configLoad(): Promise<{ success: boolean; config: AppConfig | null }>
+  configSave(config: AppConfig): Promise<{ success: boolean }>
+
+  // Remote folder browser
+  sshListDir(path: string): Promise<{ success: boolean; entries?: DirEntry[]; currentPath?: string; error?: string }>
+  sshMkdir(path: string): Promise<{ success: boolean; error?: string }>
+  sshHome(): Promise<{ success: boolean; home?: string; error?: string }>
+
   // Window info
   getWindowHash(): string
 }
@@ -170,6 +179,20 @@ export interface NotifyOptions {
   title: string
   body: string
   urgency?: 'low' | 'normal' | 'critical'
+}
+
+export interface AppConfig {
+  host?: string
+  port?: number
+  username?: string
+  authMethod?: 'key' | 'password' | 'agent'
+  keyPath?: string
+}
+
+export interface DirEntry {
+  name: string
+  isDir: boolean
+  path: string
 }
 
 export interface CreateProjectInput {

@@ -1,0 +1,186 @@
+.browser {
+  width: 480px;
+  max-width: 95%;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  max-height: 500px;
+}
+
+.header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Path bar */
+.pathBar {
+  display: flex;
+  gap: 4px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.pathInput {
+  flex: 1;
+  padding: 5px 10px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: 'JetBrains Mono', 'Consolas', monospace;
+  outline: none;
+}
+.pathInput:focus { border-color: var(--accent); }
+
+.pathBtn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.15s;
+}
+.pathBtn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* File list */
+.fileList {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 8px;
+  min-height: 200px;
+  max-height: 300px;
+}
+
+.fileItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 5px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  font-size: 13px;
+  transition: background 0.1s;
+}
+.fileItem:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+.fileIcon { font-size: 14px; flex-shrink: 0; }
+.fileName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.loading, .emptyDir {
+  padding: 20px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.error {
+  padding: 10px;
+  color: var(--error);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* New folder */
+.newFolderRow {
+  display: flex;
+  gap: 4px;
+  padding: 6px 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.newFolderInput {
+  flex: 1;
+  padding: 5px 8px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 12px;
+  outline: none;
+}
+
+.newFolderBtn {
+  padding: 4px 10px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.newFolderCancel {
+  padding: 4px 6px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+/* Actions */
+.actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border-subtle);
+  align-items: center;
+}
+
+.newBtn {
+  padding: 5px 10px;
+  border: 1px dashed var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  transition: all 0.15s;
+}
+.newBtn:hover { border-color: var(--accent); color: var(--accent); }
+
+.cancelBtn {
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.selectBtn {
+  padding: 6px 14px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.selectBtn:hover { background: var(--accent-hover); }

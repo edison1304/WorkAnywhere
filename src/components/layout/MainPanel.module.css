@@ -316,6 +316,19 @@
   font-size: 12px;
 }
 
+.browseBtn {
+  padding: 9px 14px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.browseBtn:hover { border-color: var(--accent); color: var(--accent); }
+
 .sshTextarea {
   width: 100%;
   padding: 9px 12px;

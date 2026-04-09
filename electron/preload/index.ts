@@ -81,6 +81,15 @@ const api: IpcApi = {
   workspaceLoad: () => ipcRenderer.invoke('workspace:load'),
   workspaceSave: (workspace) => ipcRenderer.invoke('workspace:save', workspace),
 
+  // Config
+  configLoad: () => ipcRenderer.invoke('config:load'),
+  configSave: (config) => ipcRenderer.invoke('config:save', config),
+
+  // Remote folder browser
+  sshListDir: (path) => ipcRenderer.invoke('ssh:list-dir', path),
+  sshMkdir: (path) => ipcRenderer.invoke('ssh:mkdir', path),
+  sshHome: () => ipcRenderer.invoke('ssh:home'),
+
   // Window info
   getWindowHash: () => window.location.hash.replace('#', ''),
 }

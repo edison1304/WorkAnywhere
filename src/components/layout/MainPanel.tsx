@@ -1,6 +1,7 @@
-import { useState } from 'react'
-import type { Task, Phase, ConnectionConfig } from '../../../shared/types'
+import { useState, useEffect } from 'react'
+import type { Task, Phase, ConnectionConfig, AppConfig } from '../../../shared/types'
 import { SessionTerminal } from '../terminal/SessionTerminal'
+import { FolderBrowser } from '../project/FolderBrowser'
 import styles from './MainPanel.module.css'
 
 interface Props {
@@ -222,6 +223,23 @@ function SSHInlineConnect({ onConnect, connecting, error }: {
   const [authMethod, setAuthMethod] = useState<'key' | 'password' | 'agent'>('password');
   const [keyPath, setKeyPath] = useState('~/.ssh/id_rsa');
   const [password, setPassword] = useState('');
+  const [configLoaded, setConfigLoaded] = useState(false);
+
+  // Load saved config on mount
+  useEffect(() => {
+    if (configLoaded || !window.api) return
+    setConfigLoaded(true)
+    window.api.configLoad().then(result => {
+      if (result.success && result.config) {
+        const c = result.config
+        if (c.host) setHost(c.host)
+        if (c.port) setPort(String(c.port))
+        if (c.username) setUsername(c.username)
+        if (c.authMethod) setAuthMethod(c.authMethod)
+        if (c.keyPath) setKeyPath(c.keyPath)
+      }
+    })
+  }, [configLoaded]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -304,6 +322,24 @@ function SSHInlineConnect({ onConnect, connecting, error }: {
 function CreateProjectForm({ onSubmit }: { onSubmit?: (name: string, path: string) => void }) {
   const [name, setName] = useState('')
   const [path, setPath] = useState('')
+  const [showBrowser, setShowBrowser] = useState(false)
+
+  if (showBrowser) {
+    return (
+      <FolderBrowser
+        onSelect={(selectedPath) => {
+          setPath(selectedPath)
+          // Auto-fill project name from folder name
+          if (!name) {
+            const folderName = selectedPath.split('/').pop() || ''
+            setName(folderName)
+          }
+          setShowBrowser(false)
+        }}
+        onCancel={() => setShowBrowser(false)}
+      />
+    )
+  }
 
   return (
     <form onSubmit={e => { e.preventDefault(); onSubmit?.(name, path) }} className={styles.sshForm}>
@@ -318,16 +354,18 @@ function CreateProjectForm({ onSubmit }: { onSubmit?: (name: string, path: strin
         placeholder="Project name (e.g. ACE-2 개발)"
         required
       />
-      <input
-        className={styles.sshInput}
-        value={path}
-        onChange={e => setPath(e.target.value)}
-        placeholder="Workspace path on server (e.g. /home/yjlee/ace2)"
-        required
-      />
-      <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.4 }}>
-        서버에서 Claude Code가 작업할 디렉토리 경로를 입력하세요.
-      </p>
+      <div className={styles.sshRow}>
+        <input
+          className={styles.sshInput}
+          value={path}
+          onChange={e => setPath(e.target.value)}
+          placeholder="Workspace path on server"
+          required
+        />
+        <button type="button" className={styles.browseBtn} onClick={() => setShowBrowser(true)}>
+          Browse
+        </button>
+      </div>
       <button type="submit" className={styles.sshConnectBtn} disabled={!name || !path}>
         Create Project
       </button>

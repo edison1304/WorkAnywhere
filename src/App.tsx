@@ -47,6 +47,16 @@ export default function App() {
         if (!result.claude?.available) {
           setSshError('Connected, but claude CLI not found on server')
         }
+        // Save connection config (without password) on success
+        if (config.ssh) {
+          window.api.configSave({
+            host: config.ssh.host,
+            port: config.ssh.port,
+            username: config.ssh.username,
+            authMethod: config.ssh.authMethod,
+            keyPath: config.ssh.keyPath,
+          })
+        }
       } else {
         setSshError(result.error || 'Connection failed')
       }
