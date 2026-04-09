@@ -212,8 +212,8 @@ export class SSHService extends EventEmitter {
         agentCmd = this.getEngineCmd('claude', ['-p', JSON.stringify(prompt), '--output-format', 'stream-json'])
       }
       // Build command: setup prefix + cd + agent command
-      const parts = [prefix, `cd ${JSON.stringify(workspacePath)}`, agentCmd + ' 2>&1'].filter(Boolean)
-      const innerCmd = parts.join(' && ')
+      // prefix already ends with " && " if non-empty, so just concatenate
+      const innerCmd = `${prefix}cd ${JSON.stringify(workspacePath)} && ${agentCmd} 2>&1`
       // Use bash -l (login shell) to pick up .bashrc PATH
       const cmd = `bash -l -c ${JSON.stringify(innerCmd)}`
 
