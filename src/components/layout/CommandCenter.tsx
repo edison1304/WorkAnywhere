@@ -25,7 +25,7 @@ interface Props {
   onReattach: (panelId: string) => void
   onRunAgent: (taskId: string) => void
   onStopAgent: (taskId: string) => void
-  onSSHConnect: (config: import('../../../shared/types').ConnectionConfig) => void
+  onSSHConnect: (config: import('../../../shared/types').ConnectionConfig, appConfig?: import('../../../shared/types').AppConfig) => void
   onOpenSSH: () => void
   onDisconnectSSH: () => void
   onCreateProject: (name: string, path: string) => void

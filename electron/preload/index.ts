@@ -58,7 +58,8 @@ const api: IpcApi = {
   focusMain: () => ipcRenderer.invoke('window:focus-main'),
 
   // SSH connection
-  sshConnect: (config) => ipcRenderer.invoke('ssh:connect', config),
+  sshConnect: (config, appConfig?) => ipcRenderer.invoke('ssh:connect', config, appConfig),
+  sshUpdateEngineConfig: (appConfig) => ipcRenderer.invoke('ssh:update-engine-config', appConfig),
   sshDisconnect: () => ipcRenderer.invoke('ssh:disconnect'),
   sshStatus: () => ipcRenderer.invoke('ssh:status'),
   sshExec: (command) => ipcRenderer.invoke('ssh:exec', command),

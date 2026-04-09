@@ -153,7 +153,8 @@ export interface IpcApi {
   focusMain(): Promise<{ success: boolean }>
 
   // SSH connection
-  sshConnect(config: ConnectionConfig): Promise<{ success: boolean; claude?: { available: boolean; version?: string }; error?: string }>
+  sshConnect(config: ConnectionConfig, appConfig?: AppConfig): Promise<{ success: boolean; claude?: { available: boolean; version?: string }; error?: string }>
+  sshUpdateEngineConfig(appConfig: AppConfig): Promise<{ success: boolean }>
   sshDisconnect(): Promise<{ success: boolean }>
   sshStatus(): Promise<{ connected: boolean }>
   sshExec(command: string): Promise<{ success: boolean; output?: string; error?: string }>

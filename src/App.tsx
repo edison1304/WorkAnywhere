@@ -64,12 +64,12 @@ export default function App() {
   const allProjectTasks = tasks.filter(t => t.projectId === activeProjectId)
 
   // ─── SSH connection ───
-  const handleSSHConnect = useCallback(async (config: ConnectionConfig) => {
+  const handleSSHConnect = useCallback(async (config: ConnectionConfig, appConfig?: any) => {
     if (!window.api) return
     setSshConnecting(true)
     setSshError(undefined)
     try {
-      const result = await window.api.sshConnect(config)
+      const result = await window.api.sshConnect(config, appConfig || undefined)
       if (result.success) {
         setSshConnected(true)
         setSshDialogOpen(false)

@@ -12,7 +12,7 @@ interface Props {
   sshError?: string
   onRunAgent?: (taskId: string) => void
   onStopAgent?: (taskId: string) => void
-  onSSHConnect?: (config: ConnectionConfig) => void
+  onSSHConnect?: (config: ConnectionConfig, appConfig?: AppConfig) => void
   onOpenSSH?: () => void
   onCreateProject?: (name: string, path: string) => void
   onCreatePhase?: (name: string, description: string) => void
@@ -213,7 +213,7 @@ function ArtifactsView({ task }: { task: Task }) {
 
 // ─── Inline SSH Connect Form (shown in main panel when not connected) ───
 function SSHInlineConnect({ onConnect, connecting, error }: {
-  onConnect?: (config: ConnectionConfig) => void
+  onConnect?: (config: ConnectionConfig, appConfig?: AppConfig) => void
   connecting?: boolean
   error?: string
 }) {
@@ -260,6 +260,13 @@ function SSHInlineConnect({ onConnect, connecting, error }: {
         ...(claudeSetup ? { claudeSetupScript: claudeSetup } : {}),
       })
     }
+    const appCfg: AppConfig = {
+      host, port: parseInt(port), username, authMethod,
+      keyPath: authMethod === 'key' ? keyPath : undefined,
+      ...(claudeCommand ? { claudeCommand } : {}),
+      ...(claudeArgs ? { claudeArgs: claudeArgs.split(/\s+/).filter(Boolean) } : {}),
+      ...(claudeSetup ? { claudeSetupScript: claudeSetup } : {}),
+    }
     onConnect?.({
       type: 'ssh',
       ssh: {
@@ -270,7 +277,7 @@ function SSHInlineConnect({ onConnect, connecting, error }: {
         keyPath: authMethod === 'key' ? keyPath : undefined,
         password: authMethod === 'password' ? password : undefined,
       }
-    })
+    }, appCfg)
   }
 
   return (

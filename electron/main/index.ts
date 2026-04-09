@@ -195,17 +195,21 @@ let workspaceManager: WorkspaceManager | null = null
 let agentService: AgentService | null = null
 
 // SSH connection
-ipcMain.handle('ssh:connect', async (_event, config: import('../../../shared/types').ConnectionConfig) => {
+ipcMain.handle('ssh:connect', async (_event, config: import('../../../shared/types').ConnectionConfig, appConfig?: import('../../../shared/types').AppConfig) => {
   try {
     sshService = new SSHService()
 
-    // Load claude config from saved settings
-    const configPath = getConfigPath()
-    if (existsSync(configPath)) {
-      try {
-        const appConfig = JSON.parse(readFileSync(configPath, 'utf-8'))
-        sshService.setClaudeConfig(appConfig)
-      } catch { /* ignore */ }
+    // Apply claude/opencode config from app settings
+    if (appConfig) {
+      sshService.setClaudeConfig(appConfig)
+    } else {
+      // Fallback: read from file
+      const configPath = getConfigPath()
+      if (existsSync(configPath)) {
+        try {
+          sshService.setClaudeConfig(JSON.parse(readFileSync(configPath, 'utf-8')))
+        } catch { /* ignore */ }
+      }
     }
 
     await sshService.connect(config)
@@ -262,6 +266,15 @@ ipcMain.handle('ssh:disconnect', async () => {
 
 ipcMain.handle('ssh:status', async () => {
   return { connected: sshService?.isConnected() || false }
+})
+
+// Update engine config at runtime (without reconnecting)
+ipcMain.handle('ssh:update-engine-config', async (_event, appConfig: import('../../../shared/types').AppConfig) => {
+  if (sshService) {
+    sshService.setClaudeConfig(appConfig)
+    return { success: true }
+  }
+  return { success: false, error: 'Not connected' }
 })
 
 ipcMain.handle('ssh:exec', async (_event, command: string) => {
