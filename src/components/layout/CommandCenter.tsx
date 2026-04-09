@@ -44,9 +44,9 @@ export function CommandCenter({
 
   return (
     <div className={styles.root}>
-      {/* Titlebar */}
+      {/* Header bar */}
       <div className={styles.titlebar}>
-        <div className="titlebar-drag" style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
           <span className={styles.titleText}>Workanywhere</span>
           {activeProject && (
             <span className={styles.breadcrumb}>
@@ -66,7 +66,7 @@ export function CommandCenter({
             </span>
           )}
         </div>
-        <div className="titlebar-nodrag" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {/* Detached indicators */}
           {monitorDetached && (
             <button className={styles.detachIndicator} onClick={() => onReattach('monitor')} title="Reattach Monitor">
@@ -92,7 +92,7 @@ export function CommandCenter({
               onClick={onOpenSSH}
               title="Connect via SSH"
             >
-              ○ SSH Disconnected
+              ○ Connect SSH
             </button>
           )}
         </div>

@@ -81,7 +81,7 @@ export default function App() {
 
   // SSH state
   const [sshConnected, setSshConnected] = useState(false)
-  const [sshDialogOpen, setSshDialogOpen] = useState(false)
+  const [sshDialogOpen, setSshDialogOpen] = useState(true)  // 첫 실행 시 바로 표시
   const [sshConnecting, setSshConnecting] = useState(false)
   const [sshError, setSshError] = useState<string>()
   const [claudeVersion, setClaudeVersion] = useState<string>()

@@ -26,7 +26,7 @@ function createWindow(): void {
     minWidth: 1000,
     minHeight: 700,
     title: 'Workanywhere',
-    titleBarStyle: 'hiddenInset',
+    ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const } : { frame: true }),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
