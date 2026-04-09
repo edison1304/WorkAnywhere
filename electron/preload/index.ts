@@ -57,6 +57,30 @@ const api: IpcApi = {
   // Focus main window (from detached windows)
   focusMain: () => ipcRenderer.invoke('window:focus-main'),
 
+  // SSH connection
+  sshConnect: (config) => ipcRenderer.invoke('ssh:connect', config),
+  sshDisconnect: () => ipcRenderer.invoke('ssh:disconnect'),
+  sshStatus: () => ipcRenderer.invoke('ssh:status'),
+  sshExec: (command) => ipcRenderer.invoke('ssh:exec', command),
+
+  // Agent control
+  agentStart: (opts) => ipcRenderer.invoke('agent:start', opts),
+  agentStop: (taskId) => ipcRenderer.invoke('agent:stop', taskId),
+  agentSend: (taskId, message) => ipcRenderer.invoke('agent:send', taskId, message),
+
+  // PTY I/O
+  ptyWrite: (taskId, data) => ipcRenderer.send('pty:write', taskId, data),
+  ptyResize: (taskId, cols, rows) => ipcRenderer.send('pty:resize', taskId, cols, rows),
+  onPtyData: (cb) => {
+    const handler = (_event: unknown, data: { taskId: string; data: string }) => cb(data)
+    ipcRenderer.on('pty:data', handler)
+    return () => ipcRenderer.removeListener('pty:data', handler)
+  },
+
+  // Workspace
+  workspaceLoad: () => ipcRenderer.invoke('workspace:load'),
+  workspaceSave: (workspace) => ipcRenderer.invoke('workspace:save', workspace),
+
   // Window info
   getWindowHash: () => window.location.hash.replace('#', ''),
 }

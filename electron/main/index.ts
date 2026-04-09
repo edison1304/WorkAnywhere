@@ -1,6 +1,9 @@
 import { app, BrowserWindow, ipcMain, Notification, screen } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
+import { SSHService } from './services/SSHService'
+import { WorkspaceManager } from './services/WorkspaceManager'
+import { AgentService } from './services/AgentService'
 
 let mainWindow: BrowserWindow | null = null
 const detachedWindows = new Map<string, BrowserWindow>()
@@ -185,39 +188,143 @@ ipcMain.handle('notify:send', async (_event, options: {
   return { success: true }
 })
 
-// ─── IPC Handlers (placeholder) ───
-ipcMain.handle('project:list', async () => {
-  return []
-})
+// ─── SSH + Agent Services ───
+let sshService: SSHService | null = null
+let workspaceManager: WorkspaceManager | null = null
+let agentService: AgentService | null = null
 
-ipcMain.handle('project:create', async (_event, input) => {
-  const project = {
-    id: crypto.randomUUID(),
-    ...input,
-    settings: { autoArtifactScan: true },
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+// SSH connection
+ipcMain.handle('ssh:connect', async (_event, config: import('../../../shared/types').ConnectionConfig) => {
+  try {
+    sshService = new SSHService()
+    await sshService.connect(config)
+
+    workspaceManager = new WorkspaceManager(sshService)
+    await workspaceManager.init()
+
+    agentService = new AgentService(sshService, workspaceManager)
+
+    // Forward agent events to all windows
+    agentService.on('task:status', (data) => {
+      broadcastToAll('task:status', data)
+      // Send desktop notification on completion/failure
+      if (data.status === 'completed' || data.status === 'failed') {
+        const emoji = data.status === 'completed' ? '✅' : '❌'
+        if (Notification.isSupported()) {
+          const n = new Notification({
+            title: `${emoji} Task ${data.status}`,
+            body: `Task ${data.taskId} has ${data.status}`,
+            urgency: data.status === 'failed' ? 'critical' : 'normal',
+          })
+          n.on('click', () => {
+            if (mainWindow) {
+              if (mainWindow.isMinimized()) mainWindow.restore()
+              mainWindow.focus()
+            }
+          })
+          n.show()
+        }
+      }
+    })
+
+    agentService.on('task:log', (data) => broadcastToAll('task:log', data))
+    agentService.on('pty:data', (data) => broadcastToAll('pty:data', data))
+    agentService.on('pty:close', (data) => broadcastToAll('pty:close', data))
+
+    // Check claude availability
+    const claude = await sshService.checkClaude()
+
+    return { success: true, claude }
+  } catch (err) {
+    return { success: false, error: String(err) }
   }
-  return project
 })
 
-ipcMain.handle('project:delete', async (_event, _id: string) => {})
+ipcMain.handle('ssh:disconnect', async () => {
+  agentService?.removeAllListeners()
+  sshService?.disconnect()
+  sshService = null
+  workspaceManager = null
+  agentService = null
+  return { success: true }
+})
 
-ipcMain.handle('job:create', async (_event, projectId: string, prompt: string, name?: string) => {
-  const job = {
-    id: crypto.randomUUID(),
-    projectId,
-    name: name || prompt.slice(0, 50),
-    status: 'queued' as const,
-    prompt,
-    steps: [],
-    artifacts: [],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+ipcMain.handle('ssh:status', async () => {
+  return { connected: sshService?.isConnected() || false }
+})
+
+ipcMain.handle('ssh:exec', async (_event, command: string) => {
+  if (!sshService) return { success: false, error: 'Not connected' }
+  try {
+    const output = await sshService.exec(command)
+    return { success: true, output }
+  } catch (err) {
+    return { success: false, error: String(err) }
   }
-  return job
 })
 
-ipcMain.handle('job:list', async (_event, _projectId: string) => { return [] })
-ipcMain.handle('job:send', async (_event, _jobId: string, _message: string) => {})
-ipcMain.handle('job:stop', async (_event, _jobId: string) => {})
+// ─── Agent control ───
+ipcMain.handle('agent:start', async (_event, opts: {
+  projectId: string; phaseId: string; taskId: string
+  workspacePath: string; prompt: string
+}) => {
+  if (!agentService) return { success: false, error: 'Not connected' }
+  try {
+    await agentService.startAgent(
+      opts.projectId, opts.phaseId, opts.taskId,
+      opts.workspacePath, opts.prompt
+    )
+    return { success: true }
+  } catch (err) {
+    return { success: false, error: String(err) }
+  }
+})
+
+ipcMain.handle('agent:stop', async (_event, taskId: string) => {
+  agentService?.stopAgent(taskId)
+  return { success: true }
+})
+
+ipcMain.handle('agent:send', async (_event, taskId: string, message: string) => {
+  agentService?.sendMessage(taskId, message)
+  return { success: true }
+})
+
+// PTY I/O for xterm.js
+ipcMain.on('pty:write', (_event, taskId: string, data: string) => {
+  agentService?.writePTY(taskId, data)
+})
+
+ipcMain.on('pty:resize', (_event, taskId: string, cols: number, rows: number) => {
+  agentService?.resizePTY(taskId, cols, rows)
+})
+
+// ─── Workspace management ───
+ipcMain.handle('workspace:load', async () => {
+  if (!workspaceManager) return { success: false, error: 'Not connected' }
+  try {
+    const workspace = await workspaceManager.load()
+    return { success: true, workspace }
+  } catch (err) {
+    return { success: false, error: String(err) }
+  }
+})
+
+ipcMain.handle('workspace:save', async (_event, workspace) => {
+  if (!workspaceManager) return { success: false, error: 'Not connected' }
+  try {
+    await workspaceManager.save(workspace)
+    return { success: true }
+  } catch (err) {
+    return { success: false, error: String(err) }
+  }
+})
+
+// ─── Legacy placeholders ───
+ipcMain.handle('project:list', async () => [])
+ipcMain.handle('project:create', async (_event, input) => ({
+  id: crypto.randomUUID(), ...input,
+  settings: { autoArtifactScan: true },
+  createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+}))
+ipcMain.handle('project:delete', async () => {})

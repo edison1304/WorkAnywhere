@@ -1,0 +1,16 @@
+.terminalContainer {
+  flex: 1;
+  overflow: hidden;
+  background: var(--bg-primary);
+  position: relative;
+}
+
+.terminal {
+  width: 100%;
+  height: 100%;
+  padding: 8px;
+}
+
+.terminal .xterm {
+  height: 100%;
+}

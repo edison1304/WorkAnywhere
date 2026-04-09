@@ -134,6 +134,26 @@ export interface IpcApi {
   // Focus main window (from detached)
   focusMain(): Promise<{ success: boolean }>
 
+  // SSH connection
+  sshConnect(config: ConnectionConfig): Promise<{ success: boolean; claude?: { available: boolean; version?: string }; error?: string }>
+  sshDisconnect(): Promise<{ success: boolean }>
+  sshStatus(): Promise<{ connected: boolean }>
+  sshExec(command: string): Promise<{ success: boolean; output?: string; error?: string }>
+
+  // Agent control
+  agentStart(opts: { projectId: string; phaseId: string; taskId: string; workspacePath: string; prompt: string }): Promise<{ success: boolean; error?: string }>
+  agentStop(taskId: string): Promise<{ success: boolean }>
+  agentSend(taskId: string, message: string): Promise<{ success: boolean }>
+
+  // PTY I/O (for xterm.js)
+  ptyWrite(taskId: string, data: string): void
+  ptyResize(taskId: string, cols: number, rows: number): void
+  onPtyData(cb: (data: { taskId: string; data: string }) => void): () => void
+
+  // Workspace management
+  workspaceLoad(): Promise<{ success: boolean; workspace?: unknown; error?: string }>
+  workspaceSave(workspace: unknown): Promise<{ success: boolean; error?: string }>
+
   // Window info
   getWindowHash(): string
 }

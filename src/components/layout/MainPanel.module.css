@@ -113,6 +113,21 @@
   border-radius: 4px;
 }
 
+.tabLive {
+  font-size: 9px;
+  font-weight: 700;
+  background: var(--success);
+  color: #000;
+  padding: 1px 5px;
+  border-radius: 4px;
+  animation: pulse-live 2s infinite;
+}
+
+@keyframes pulse-live {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
 /* Content */
 .content {
   flex: 1;

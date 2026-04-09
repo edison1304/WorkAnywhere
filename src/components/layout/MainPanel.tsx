@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { Task, Phase } from '../../../shared/types'
+import { SessionTerminal } from '../terminal/SessionTerminal'
 import styles from './MainPanel.module.css'
 
 interface Props {
@@ -8,7 +9,7 @@ interface Props {
 }
 
 export function MainPanel({ activeTask, activePhase }: Props) {
-  const [activeTab, setActiveTab] = useState<'log' | 'artifacts'>('log')
+  const [activeTab, setActiveTab] = useState<'log' | 'terminal' | 'artifacts'>('log')
 
   if (!activeTask) {
     return (
@@ -67,6 +68,13 @@ export function MainPanel({ activeTask, activePhase }: Props) {
           )}
         </button>
         <button
+          className={`${styles.tab} ${activeTab === 'terminal' ? styles.tabActive : ''}`}
+          onClick={() => setActiveTab('terminal')}
+        >
+          Terminal
+          {isRunning && <span className={styles.tabLive}>LIVE</span>}
+        </button>
+        <button
           className={`${styles.tab} ${activeTab === 'artifacts' ? styles.tabActive : ''}`}
           onClick={() => setActiveTab('artifacts')}
         >
@@ -79,11 +87,11 @@ export function MainPanel({ activeTask, activePhase }: Props) {
 
       {/* Content */}
       <div className={styles.content}>
-        {activeTab === 'log' ? (
-          <LogView task={activeTask} />
-        ) : (
-          <ArtifactsView task={activeTask} />
+        {activeTab === 'log' && <LogView task={activeTask} />}
+        {activeTab === 'terminal' && (
+          <SessionTerminal taskId={activeTask.id} isActive={activeTab === 'terminal'} />
         )}
+        {activeTab === 'artifacts' && <ArtifactsView task={activeTask} />}
       </div>
     </div>
   )
