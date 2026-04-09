@@ -6,27 +6,56 @@ const api: IpcApi = {
   projectCreate: (input) => ipcRenderer.invoke('project:create', input),
   projectDelete: (id) => ipcRenderer.invoke('project:delete', id),
 
-  jobCreate: (projectId, prompt, name) =>
-    ipcRenderer.invoke('job:create', projectId, prompt, name),
-  jobList: (projectId) => ipcRenderer.invoke('job:list', projectId),
-  jobSend: (jobId, message) => ipcRenderer.invoke('job:send', jobId, message),
-  jobStop: (jobId) => ipcRenderer.invoke('job:stop', jobId),
+  phaseList: (projectId) => ipcRenderer.invoke('phase:list', projectId),
+  phaseCreate: (projectId, name, description) => ipcRenderer.invoke('phase:create', projectId, name, description),
+  phaseUpdate: (id, patch) => ipcRenderer.invoke('phase:update', id, patch),
+  phaseDelete: (id) => ipcRenderer.invoke('phase:delete', id),
 
-  onJobStatus: (cb) => {
+  taskList: (phaseId) => ipcRenderer.invoke('task:list', phaseId),
+  taskCreate: (phaseId, name, prompt) => ipcRenderer.invoke('task:create', phaseId, name, prompt),
+  taskRun: (taskId) => ipcRenderer.invoke('task:run', taskId),
+  taskSend: (taskId, message) => ipcRenderer.invoke('task:send', taskId, message),
+  taskStop: (taskId) => ipcRenderer.invoke('task:stop', taskId),
+
+  onTaskStatus: (cb) => {
     const handler = (_event: unknown, data: Parameters<typeof cb>[0]) => cb(data)
-    ipcRenderer.on('job:status', handler)
-    return () => ipcRenderer.removeListener('job:status', handler)
+    ipcRenderer.on('task:status', handler)
+    return () => ipcRenderer.removeListener('task:status', handler)
   },
-  onJobOutput: (cb) => {
+  onTaskLog: (cb) => {
     const handler = (_event: unknown, data: Parameters<typeof cb>[0]) => cb(data)
-    ipcRenderer.on('job:output', handler)
-    return () => ipcRenderer.removeListener('job:output', handler)
+    ipcRenderer.on('task:log', handler)
+    return () => ipcRenderer.removeListener('task:log', handler)
   },
   onArtifactNew: (cb) => {
     const handler = (_event: unknown, data: Parameters<typeof cb>[0]) => cb(data)
     ipcRenderer.on('artifact:new', handler)
     return () => ipcRenderer.removeListener('artifact:new', handler)
-  }
+  },
+
+  // Window management
+  windowDetach: (panelId, options) => ipcRenderer.invoke('window:detach', panelId, options),
+  windowReattach: (panelId) => ipcRenderer.invoke('window:reattach', panelId),
+  windowListDetached: () => ipcRenderer.invoke('window:list-detached'),
+  onWindowReattached: (cb) => {
+    const handler = (_event: unknown, panelId: string) => cb(panelId)
+    ipcRenderer.on('window:reattached', handler)
+    return () => ipcRenderer.removeListener('window:reattached', handler)
+  },
+
+  // State sync between windows
+  syncState: (data) => ipcRenderer.send('state:sync', data),
+  onStateSync: (cb) => {
+    const handler = (_event: unknown, data: unknown) => cb(data)
+    ipcRenderer.on('state:sync', handler)
+    return () => ipcRenderer.removeListener('state:sync', handler)
+  },
+
+  // Notifications
+  sendNotification: (options) => ipcRenderer.invoke('notify:send', options),
+
+  // Window info
+  getWindowHash: () => window.location.hash.replace('#', ''),
 }
 
 contextBridge.exposeInMainWorld('api', api)

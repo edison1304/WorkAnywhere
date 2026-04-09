@@ -116,6 +116,35 @@ export interface IpcApi {
   onTaskStatus(cb: (data: { taskId: string; status: TaskStatus }) => void): () => void
   onTaskLog(cb: (data: { taskId: string; log: LogEntry }) => void): () => void
   onArtifactNew(cb: (data: { taskId: string; artifact: Artifact }) => void): () => void
+
+  // Window management (dual monitor)
+  windowDetach(panelId: string, options: DetachOptions): Promise<{ success: boolean; reused?: boolean }>
+  windowReattach(panelId: string): Promise<{ success: boolean }>
+  windowListDetached(): Promise<string[]>
+  onWindowReattached(cb: (panelId: string) => void): () => void
+
+  // State sync between windows
+  syncState(data: unknown): void
+  onStateSync(cb: (data: unknown) => void): () => void
+
+  // Desktop notifications
+  sendNotification(options: NotifyOptions): Promise<{ success: boolean }>
+
+  // Window info
+  getWindowHash(): string
+}
+
+export interface DetachOptions {
+  title?: string
+  width?: number
+  height?: number
+  preferSecondary?: boolean   // true → 두 번째 모니터에 배치
+}
+
+export interface NotifyOptions {
+  title: string
+  body: string
+  urgency?: 'low' | 'normal' | 'critical'
 }
 
 export interface CreateProjectInput {

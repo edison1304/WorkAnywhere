@@ -1,5 +1,7 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { CommandCenter } from './components/layout/CommandCenter'
+import { DetachedMonitor } from './components/layout/DetachedMonitor'
+import { DetachedStatusRail } from './components/layout/DetachedStatusRail'
 import type { Project, Phase, Task } from '../shared/types'
 import type { SidebarView } from './components/layout/TreeSidebar'
 
@@ -65,11 +67,16 @@ const DEMO_TASKS: Task[] = [
 ]
 
 export default function App() {
+  // Check if this is a detached window
+  const windowHash = typeof window !== 'undefined' && window.api
+    ? window.api.getWindowHash() : ''
+
   const [activeProjectId, setActiveProjectId] = useState<string>('p1')
   const [activePhaseId, setActivePhaseId] = useState<string | null>('ph1')
   const [activeTaskId, setActiveTaskId] = useState<string | null>('t2')
   const [sidebarView, setSidebarView] = useState<SidebarView>('monitor')
   const [tasks, setTasks] = useState<Task[]>(DEMO_TASKS)
+  const [detachedPanels, setDetachedPanels] = useState<Set<string>>(new Set())
 
   const activeProject = DEMO_PROJECTS.find(p => p.id === activeProjectId) || null
   const projectPhases = DEMO_PHASES.filter(ph => ph.projectId === activeProjectId)
@@ -77,12 +84,73 @@ export default function App() {
   const activeTask = activeTaskId ? tasks.find(t => t.id === activeTaskId) || null : null
   const allProjectTasks = tasks.filter(t => t.projectId === activeProjectId)
 
+  // Sync detached panels list
+  useEffect(() => {
+    if (!window.api) return
+    window.api.windowListDetached().then(panels => setDetachedPanels(new Set(panels)))
+    const unsub = window.api.onWindowReattached((panelId) => {
+      setDetachedPanels(prev => { const n = new Set(prev); n.delete(panelId); return n })
+    })
+    return unsub
+  }, [])
+
   const handleAcknowledgeTask = useCallback((taskId: string) => {
     setTasks(prev => prev.map(t =>
       t.id === taskId ? { ...t, acknowledgedAt: new Date().toISOString() } : t
     ))
   }, [])
 
+  const handleDetach = useCallback(async (panelId: string) => {
+    if (!window.api) return
+    const titles: Record<string, string> = {
+      monitor: 'Workanywhere — Monitor',
+      statusrail: 'Workanywhere — Status Rail',
+    }
+    await window.api.windowDetach(panelId, {
+      title: titles[panelId] || 'Workanywhere',
+      width: panelId === 'monitor' ? 350 : 360,
+      height: 800,
+      preferSecondary: true,
+    })
+    setDetachedPanels(prev => new Set(prev).add(panelId))
+  }, [])
+
+  const handleReattach = useCallback(async (panelId: string) => {
+    if (!window.api) return
+    await window.api.windowReattach(panelId)
+    setDetachedPanels(prev => { const n = new Set(prev); n.delete(panelId); return n })
+  }, [])
+
+  // ─── Detached window renders ───
+  if (windowHash === 'monitor') {
+    return (
+      <DetachedMonitor
+        projects={DEMO_PROJECTS}
+        phases={DEMO_PHASES}
+        allTasks={tasks}
+        activeProjectId={activeProjectId}
+        activePhaseId={activePhaseId}
+        activeTaskId={activeTaskId}
+        onSelectProject={setActiveProjectId}
+        onSelectPhase={setActivePhaseId}
+        onSelectTask={setActiveTaskId}
+        onAcknowledgeTask={handleAcknowledgeTask}
+      />
+    )
+  }
+
+  if (windowHash === 'statusrail') {
+    return (
+      <DetachedStatusRail
+        allTasks={allProjectTasks}
+        phases={projectPhases}
+        activeTaskId={activeTaskId}
+        onSelectTask={setActiveTaskId}
+      />
+    )
+  }
+
+  // ─── Main window ───
   return (
     <CommandCenter
       projects={DEMO_PROJECTS}
@@ -94,6 +162,7 @@ export default function App() {
       allProjectTasks={allProjectTasks}
       activeTask={activeTask}
       sidebarView={sidebarView}
+      detachedPanels={detachedPanels}
       onSidebarViewChange={setSidebarView}
       onSelectProject={(id) => {
         setActiveProjectId(id)
@@ -107,6 +176,8 @@ export default function App() {
       }}
       onSelectTask={setActiveTaskId}
       onAcknowledgeTask={handleAcknowledgeTask}
+      onDetach={handleDetach}
+      onReattach={handleReattach}
     />
   )
 }

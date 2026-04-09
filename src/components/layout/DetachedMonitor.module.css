@@ -1,0 +1,97 @@
+.root {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  padding: 10px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  gap: 8px;
+}
+
+.title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.badges {
+  display: flex;
+  gap: 4px;
+}
+
+.badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+.badge[data-status="running"] { background: rgba(99,102,241,0.15); color: var(--accent); }
+.badge[data-status="waiting"] { background: rgba(245,158,11,0.15); color: var(--warning); }
+.badge[data-status="failed"] { background: rgba(239,68,68,0.15); color: var(--error); }
+.badge[data-status="completed"] { background: rgba(34,197,94,0.15); color: var(--success); }
+
+.tree {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.indent {
+  padding-left: 16px;
+  margin-left: 10px;
+  border-left: 1px solid var(--border-subtle);
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 5px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  font-size: 12px;
+  transition: background 0.1s;
+}
+.item:hover { background: var(--bg-hover); color: var(--text-primary); }
+.item.active { background: var(--bg-tertiary); color: var(--text-primary); }
+
+.projectItem { font-size: 13px; font-weight: 500; }
+
+.taskItem {
+  margin-left: 20px;
+  border-left: 1px solid var(--border-subtle);
+  border-radius: 0 5px 5px 0;
+}
+
+.chevron { font-size: 10px; color: var(--text-muted); width: 12px; text-align: center; }
+.name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.count { font-size: 10px; color: var(--accent); background: rgba(99,102,241,0.15); padding: 1px 6px; border-radius: 8px; }
+
+.phaseIcon { font-size: 9px; width: 14px; text-align: center; }
+.phaseIcon[data-status="active"] { color: var(--success); }
+.phaseIcon[data-status="paused"] { color: var(--warning); }
+
+.ackBtn {
+  font-size: 10px; width: 18px; height: 18px;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--success); background: transparent; color: var(--success);
+  border-radius: 4px; cursor: pointer; opacity: 0; transition: opacity 0.15s;
+}
+.taskItem:hover .ackBtn { opacity: 1; }
+
+.alertDot {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--error);
+  animation: pulse 2s infinite;
+}
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }

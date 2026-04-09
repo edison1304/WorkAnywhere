@@ -18,6 +18,7 @@ interface Props {
   onSelectPhase: (id: string) => void
   onSelectTask: (id: string | null) => void
   onAcknowledgeTask: (id: string) => void
+  onDetach?: () => void
 }
 
 const ACTIVE_STATUSES = new Set(['running', 'waiting', 'queued'])
@@ -206,7 +207,7 @@ export function TreeSidebar(props: Props) {
 
   return (
     <div className={styles.sidebar}>
-      {/* View toggle */}
+      {/* View toggle + detach */}
       <div className={styles.viewToggle}>
         <div className={styles.viewBtnGroup}>
           <button
@@ -221,6 +222,15 @@ export function TreeSidebar(props: Props) {
           >
             📋 Manage
           </button>
+          {props.onDetach && (
+            <button
+              className={styles.detachBtn}
+              onClick={props.onDetach}
+              title="Pop out to second monitor"
+            >
+              ↗
+            </button>
+          )}
         </div>
       </div>
 
