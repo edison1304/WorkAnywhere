@@ -52,6 +52,7 @@ export interface Task {
   logs: LogEntry[]
   artifacts: Artifact[]
   acknowledgedAt?: string    // 사용자가 결과를 확인한 시각
+  pinned?: boolean           // 핀 고정 — monitor에서 영구 표시
   createdAt: string
   updatedAt: string
   completedAt?: string
@@ -129,6 +130,9 @@ export interface IpcApi {
 
   // Desktop notifications
   sendNotification(options: NotifyOptions): Promise<{ success: boolean }>
+
+  // Focus main window (from detached)
+  focusMain(): Promise<{ success: boolean }>
 
   // Window info
   getWindowHash(): string

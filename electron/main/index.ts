@@ -148,6 +148,16 @@ ipcMain.on('state:sync', (_event, data) => {
   broadcastToAll('state:sync', data)
 })
 
+// Focus main window (called from detached windows)
+ipcMain.handle('window:focus-main', async () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.show()
+    mainWindow.focus()
+  }
+  return { success: !!mainWindow }
+})
+
 // ─── Desktop Notifications ───
 ipcMain.handle('notify:send', async (_event, options: {
   title: string

@@ -333,3 +333,66 @@
 .addPhaseBtn {
   margin: 8px 8px;
 }
+
+/* ─── Pin button ─── */
+.pinBtn {
+  font-size: 10px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: 0;
+  filter: grayscale(1);
+  transition: opacity 0.15s, filter 0.15s;
+}
+
+.taskLevel:hover .pinBtn { opacity: 0.6; }
+.pinBtn:hover { opacity: 1 !important; filter: grayscale(0); }
+.pinBtn.pinned { opacity: 1; filter: grayscale(0); }
+
+/* ─── Layout toggle ─── */
+.layoutToggle {
+  font-size: 14px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 4px;
+  transition: color 0.15s;
+}
+.layoutToggle:hover { color: var(--text-primary); }
+
+/* ─── Split sections ─── */
+.splitSection {
+  margin-bottom: 12px;
+}
+
+.splitHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 4px;
+}
+
+.splitHeader[data-type="active"] { color: var(--accent); border-bottom-color: var(--accent); }
+.splitHeader[data-type="done"] { color: var(--success); border-bottom-color: var(--success); }
+.splitHeader[data-type="pinned"] { color: var(--warning); border-bottom-color: var(--warning); }
+
+.splitCount {
+  font-size: 10px;
+  background: var(--bg-tertiary);
+  padding: 1px 6px;
+  border-radius: 4px;
+}

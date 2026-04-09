@@ -82,6 +82,16 @@
 .phaseIcon[data-status="active"] { color: var(--success); }
 .phaseIcon[data-status="paused"] { color: var(--warning); }
 
+.pinBtn {
+  font-size: 10px; width: 18px; height: 18px;
+  display: flex; align-items: center; justify-content: center;
+  border: none; background: transparent; cursor: pointer;
+  opacity: 0; filter: grayscale(1); transition: opacity 0.15s, filter 0.15s;
+}
+.taskItem:hover .pinBtn { opacity: 0.6; }
+.pinBtn:hover { opacity: 1 !important; filter: grayscale(0); }
+.pinActive { opacity: 1; filter: grayscale(0); }
+
 .ackBtn {
   font-size: 10px; width: 18px; height: 18px;
   display: flex; align-items: center; justify-content: center;

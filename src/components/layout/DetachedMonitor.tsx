@@ -26,12 +26,13 @@ interface Props {
   onSelectPhase: (id: string) => void
   onSelectTask: (id: string | null) => void
   onAcknowledgeTask: (id: string) => void
+  onPinTask: (id: string) => void
 }
 
 export function DetachedMonitor({
   projects, phases, allTasks,
   activeProjectId, activePhaseId, activeTaskId,
-  onSelectProject, onSelectPhase, onSelectTask, onAcknowledgeTask
+  onSelectProject, onSelectPhase, onSelectTask, onAcknowledgeTask, onPinTask
 }: Props) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const toggle = (key: string) => setCollapsed(prev => ({ ...prev, [key]: !prev[key] }))
@@ -104,6 +105,11 @@ export function DetachedMonitor({
                       >
                         <StatusDot status={task.status} size={7} />
                         <span className={styles.name}>{task.name}</span>
+                        <button
+                          className={`${styles.pinBtn} ${task.pinned ? styles.pinActive : ''}`}
+                          onClick={e => { e.stopPropagation(); onPinTask(task.id) }}
+                          title={task.pinned ? 'Unpin' : 'Pin'}
+                        >📌</button>
                         {task.status === 'completed' && !task.acknowledgedAt && (
                           <button
                             className={styles.ackBtn}

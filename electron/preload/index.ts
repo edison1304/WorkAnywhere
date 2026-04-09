@@ -54,6 +54,9 @@ const api: IpcApi = {
   // Notifications
   sendNotification: (options) => ipcRenderer.invoke('notify:send', options),
 
+  // Focus main window (from detached windows)
+  focusMain: () => ipcRenderer.invoke('window:focus-main'),
+
   // Window info
   getWindowHash: () => window.location.hash.replace('#', ''),
 }

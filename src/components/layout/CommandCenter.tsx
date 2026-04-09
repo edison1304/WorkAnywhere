@@ -20,6 +20,7 @@ interface Props {
   onSelectPhase: (id: string) => void
   onSelectTask: (id: string | null) => void
   onAcknowledgeTask: (id: string) => void
+  onPinTask: (id: string) => void
   onDetach: (panelId: string) => void
   onReattach: (panelId: string) => void
 }
@@ -28,7 +29,7 @@ export function CommandCenter({
   projects, activeProject, phases, allPhases, activePhase,
   allTasks, allProjectTasks, activeTask,
   sidebarView, detachedPanels, onSidebarViewChange,
-  onSelectProject, onSelectPhase, onSelectTask, onAcknowledgeTask,
+  onSelectProject, onSelectPhase, onSelectTask, onAcknowledgeTask, onPinTask,
   onDetach, onReattach
 }: Props) {
   const monitorDetached = detachedPanels.has('monitor')
@@ -93,6 +94,7 @@ export function CommandCenter({
             onSelectPhase={onSelectPhase}
             onSelectTask={onSelectTask}
             onAcknowledgeTask={onAcknowledgeTask}
+            onPinTask={onPinTask}
             onDetach={() => onDetach('monitor')}
           />
         ) : (

@@ -100,6 +100,20 @@ export default function App() {
     ))
   }, [])
 
+  const handlePinTask = useCallback((taskId: string) => {
+    setTasks(prev => prev.map(t =>
+      t.id === taskId ? { ...t, pinned: !t.pinned } : t
+    ))
+  }, [])
+
+  // Task select from detached window → focus main
+  const handleSelectTaskFromDetached = useCallback((taskId: string | null) => {
+    setActiveTaskId(taskId)
+    if (taskId && window.api) {
+      window.api.focusMain()
+    }
+  }, [])
+
   const handleDetach = useCallback(async (panelId: string) => {
     if (!window.api) return
     const titles: Record<string, string> = {
@@ -133,8 +147,9 @@ export default function App() {
         activeTaskId={activeTaskId}
         onSelectProject={setActiveProjectId}
         onSelectPhase={setActivePhaseId}
-        onSelectTask={setActiveTaskId}
+        onSelectTask={handleSelectTaskFromDetached}
         onAcknowledgeTask={handleAcknowledgeTask}
+        onPinTask={handlePinTask}
       />
     )
   }
@@ -145,7 +160,7 @@ export default function App() {
         allTasks={allProjectTasks}
         phases={projectPhases}
         activeTaskId={activeTaskId}
-        onSelectTask={setActiveTaskId}
+        onSelectTask={handleSelectTaskFromDetached}
       />
     )
   }
@@ -176,6 +191,7 @@ export default function App() {
       }}
       onSelectTask={setActiveTaskId}
       onAcknowledgeTask={handleAcknowledgeTask}
+      onPinTask={handlePinTask}
       onDetach={handleDetach}
       onReattach={handleReattach}
     />
