@@ -23,138 +23,205 @@ interface Props {
 const ACTIVE_STATUSES = new Set(['running', 'waiting', 'queued'])
 
 function isVisibleInMonitor(task: Task): boolean {
-  // Running/waiting/queued always visible
   if (ACTIVE_STATUSES.has(task.status)) return true
-
-  // Failed always visible until acknowledged + 2h
-  // Completed visible until acknowledged + 2h
   if (task.status === 'completed' || task.status === 'failed') {
     if (!task.acknowledgedAt) return true
     const twoHours = 2 * 60 * 60 * 1000
     return Date.now() - new Date(task.acknowledgedAt).getTime() < twoHours
   }
-
-  // idle tasks not shown in monitor
   return false
 }
 
-export function TreeSidebar({
-  projects, phases, allTasks,
-  activeProjectId, activePhaseId, activeTaskId,
-  sidebarView, onSidebarViewChange,
-  onSelectProject, onSelectPhase, onSelectTask, onAcknowledgeTask
-}: Props) {
+// ─── Monitor View: cross-project tree ───
+function MonitorTree({
+  projects, phases, allTasks, activeProjectId, activePhaseId, activeTaskId,
+  collapsed, toggle, onSelectProject, onSelectPhase, onSelectTask, onAcknowledgeTask
+}: Props & { collapsed: Record<string, boolean>; toggle: (key: string) => void }) {
+  return (
+    <>
+      {projects.map(project => {
+        const projectPhases = phases.filter(ph => ph.projectId === project.id)
+        const projectKey = `mon-proj-${project.id}`
+        const isProjectCollapsed = collapsed[projectKey]
+        const projectTasks = allTasks.filter(t => t.projectId === project.id)
+        const visibleTasks = projectTasks.filter(isVisibleInMonitor)
+        if (visibleTasks.length === 0) return null
+
+        return (
+          <div key={project.id} className={styles.treeNode}>
+            <button
+              className={`${styles.treeItem} ${styles.projectLevel} ${project.id === activeProjectId ? styles.active : ''}`}
+              onClick={() => { onSelectProject(project.id); toggle(projectKey) }}
+            >
+              <span className={styles.chevron}>{isProjectCollapsed ? '▸' : '▾'}</span>
+              <span className={styles.nodeIcon}>
+                {project.connection.type === 'ssh' ? '🖥' : '💻'}
+              </span>
+              <span className={styles.nodeName}>{project.name}</span>
+              <span className={styles.activeBadge}>{visibleTasks.length}</span>
+            </button>
+
+            {!isProjectCollapsed && projectPhases.map(phase => {
+              const phaseKey = `mon-phase-${phase.id}`
+              const isPhaseCollapsed = collapsed[phaseKey]
+              const phaseTasks = allTasks.filter(t => t.phaseId === phase.id).filter(isVisibleInMonitor)
+              if (phaseTasks.length === 0) return null
+
+              return (
+                <div key={phase.id} className={styles.indent1}>
+                  <button
+                    className={`${styles.treeItem} ${styles.phaseLevel} ${phase.id === activePhaseId ? styles.active : ''}`}
+                    onClick={() => { onSelectPhase(phase.id); toggle(phaseKey) }}
+                  >
+                    <span className={styles.chevron}>{isPhaseCollapsed ? '▸' : '▾'}</span>
+                    <span className={styles.phaseStatus} data-status={phase.status}>
+                      {phase.status === 'active' ? '▶' : phase.status === 'paused' ? '⏸' : '✓'}
+                    </span>
+                    <span className={styles.nodeName}>{phase.name}</span>
+                    <span className={styles.taskCountBadge}>{phaseTasks.length}</span>
+                  </button>
+
+                  {!isPhaseCollapsed && phaseTasks.map(task => (
+                    <TaskItem
+                      key={task.id}
+                      task={task}
+                      isActive={task.id === activeTaskId}
+                      onSelect={() => onSelectTask(task.id)}
+                      onAcknowledge={() => onAcknowledgeTask(task.id)}
+                    />
+                  ))}
+                </div>
+              )
+            })}
+          </div>
+        )
+      })}
+    </>
+  )
+}
+
+// ─── Manage View: single project, flat phase sections ───
+function ManageView({
+  phases, allTasks, activeProjectId, activePhaseId, activeTaskId,
+  collapsed, toggle, onSelectPhase, onSelectTask, onAcknowledgeTask
+}: {
+  phases: Phase[]
+  allTasks: Task[]
+  activeProjectId: string | null
+  activePhaseId: string | null
+  activeTaskId: string | null
+  collapsed: Record<string, boolean>
+  toggle: (key: string) => void
+  onSelectPhase: (id: string) => void
+  onSelectTask: (id: string | null) => void
+  onAcknowledgeTask: (id: string) => void
+}) {
+  const projectPhases = phases.filter(ph => ph.projectId === activeProjectId)
+
+  if (!activeProjectId) {
+    return <div className={styles.emptyHint}>Select a project</div>
+  }
+
+  return (
+    <>
+      {projectPhases.map(phase => {
+        const phaseKey = `mng-phase-${phase.id}`
+        const isCollapsed = collapsed[phaseKey]
+        const phaseTasks = allTasks.filter(t => t.phaseId === phase.id)
+
+        return (
+          <div key={phase.id} className={styles.managePhase}>
+            <button
+              className={`${styles.managePhaseHeader} ${phase.id === activePhaseId ? styles.active : ''}`}
+              onClick={() => { onSelectPhase(phase.id); toggle(phaseKey) }}
+            >
+              <span className={styles.chevron}>{isCollapsed ? '▸' : '▾'}</span>
+              <span className={styles.phaseStatus} data-status={phase.status}>
+                {phase.status === 'active' ? '▶' : phase.status === 'paused' ? '⏸' : '✓'}
+              </span>
+              <span className={styles.nodeName}>{phase.name}</span>
+              <span className={styles.taskCountBadge}>{phaseTasks.length}</span>
+            </button>
+
+            {!isCollapsed && (
+              <div className={styles.manageTaskList}>
+                {phaseTasks.map(task => (
+                  <button
+                    key={task.id}
+                    className={`${styles.manageTaskItem} ${task.id === activeTaskId ? styles.active : ''}`}
+                    onClick={() => onSelectTask(task.id)}
+                  >
+                    <StatusDot status={task.status} size={7} />
+                    <span className={styles.taskName}>{task.name}</span>
+                    <span className={styles.manageTaskStatus}>{task.status}</span>
+                  </button>
+                ))}
+                <button className={styles.addTaskBtn}>+ New Task</button>
+              </div>
+            )}
+          </div>
+        )
+      })}
+      <button className={styles.addPhaseBtn}>+ New Phase</button>
+    </>
+  )
+}
+
+// ─── Shared Task Item (for monitor tree) ───
+function TaskItem({ task, isActive, onSelect, onAcknowledge }: {
+  task: Task; isActive: boolean; onSelect: () => void; onAcknowledge: () => void
+}) {
+  return (
+    <button
+      className={`${styles.treeItem} ${styles.taskLevel} ${isActive ? styles.active : ''}`}
+      onClick={onSelect}
+    >
+      <StatusDot status={task.status} size={7} />
+      <span className={styles.taskName}>{task.name}</span>
+      {task.status === 'completed' && !task.acknowledgedAt && (
+        <button
+          className={styles.ackButton}
+          onClick={(e) => { e.stopPropagation(); onAcknowledge() }}
+          title="Mark as reviewed"
+        >
+          ✓
+        </button>
+      )}
+      {task.status === 'failed' && !task.acknowledgedAt && (
+        <span className={styles.unreadDot} />
+      )}
+    </button>
+  )
+}
+
+// ─── Main Sidebar ───
+export function TreeSidebar(props: Props) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
 
   const toggle = (key: string) => {
     setCollapsed(prev => ({ ...prev, [key]: !prev[key] }))
   }
 
-  const renderTree = (filterFn?: (task: Task) => boolean) => {
-    return projects.map(project => {
-      const projectPhases = phases.filter(ph => ph.projectId === project.id)
-      const projectKey = `proj-${project.id}`
-      const isProjectCollapsed = collapsed[projectKey]
-
-      // Count visible tasks for this project
-      const projectTasks = allTasks.filter(t => t.projectId === project.id)
-      const visibleProjectTasks = filterFn ? projectTasks.filter(filterFn) : projectTasks
-      if (filterFn && visibleProjectTasks.length === 0) return null
-
-      return (
-        <div key={project.id} className={styles.treeNode}>
-          {/* Project level */}
-          <button
-            className={`${styles.treeItem} ${styles.projectLevel} ${project.id === activeProjectId ? styles.active : ''}`}
-            onClick={() => {
-              onSelectProject(project.id)
-              toggle(projectKey)
-            }}
-          >
-            <span className={styles.chevron}>{isProjectCollapsed ? '▸' : '▾'}</span>
-            <span className={styles.nodeIcon}>
-              {project.connection.type === 'ssh' ? '🖥' : '💻'}
-            </span>
-            <span className={styles.nodeName}>{project.name}</span>
-            {filterFn && visibleProjectTasks.length > 0 && (
-              <span className={styles.activeBadge}>{visibleProjectTasks.length}</span>
-            )}
-          </button>
-
-          {/* Phase level */}
-          {!isProjectCollapsed && projectPhases.map(phase => {
-            const phaseKey = `phase-${phase.id}`
-            const isPhaseCollapsed = collapsed[phaseKey]
-            const phaseTasks = allTasks.filter(t => t.phaseId === phase.id)
-            const visiblePhaseTasks = filterFn ? phaseTasks.filter(filterFn) : phaseTasks
-            if (filterFn && visiblePhaseTasks.length === 0) return null
-
-            return (
-              <div key={phase.id} className={styles.treeNode} style={{ paddingLeft: 16 }}>
-                <button
-                  className={`${styles.treeItem} ${styles.phaseLevel} ${phase.id === activePhaseId ? styles.active : ''}`}
-                  onClick={() => {
-                    onSelectPhase(phase.id)
-                    toggle(phaseKey)
-                  }}
-                >
-                  <span className={styles.chevron}>{isPhaseCollapsed ? '▸' : '▾'}</span>
-                  <span className={styles.phaseStatus} data-status={phase.status}>
-                    {phase.status === 'active' ? '▶' : phase.status === 'paused' ? '⏸' : '✓'}
-                  </span>
-                  <span className={styles.nodeName}>{phase.name}</span>
-                  {visiblePhaseTasks.length > 0 && (
-                    <span className={styles.taskCountBadge}>{visiblePhaseTasks.length}</span>
-                  )}
-                </button>
-
-                {/* Task level */}
-                {!isPhaseCollapsed && visiblePhaseTasks.map(task => (
-                  <button
-                    key={task.id}
-                    className={`${styles.treeItem} ${styles.taskLevel} ${task.id === activeTaskId ? styles.active : ''}`}
-                    style={{ paddingLeft: 16 }}
-                    onClick={() => onSelectTask(task.id)}
-                  >
-                    <StatusDot status={task.status} size={7} />
-                    <span className={styles.taskName}>{task.name}</span>
-                    {task.status === 'completed' && !task.acknowledgedAt && (
-                      <button
-                        className={styles.ackButton}
-                        onClick={(e) => { e.stopPropagation(); onAcknowledgeTask(task.id) }}
-                        title="Mark as reviewed"
-                      >
-                        ✓
-                      </button>
-                    )}
-                    {task.status === 'failed' && !task.acknowledgedAt && (
-                      <span className={styles.unreadDot} />
-                    )}
-                  </button>
-                ))}
-              </div>
-            )
-          })}
-        </div>
-      )
-    })
-  }
+  const { sidebarView, onSidebarViewChange } = props
 
   return (
     <div className={styles.sidebar}>
       {/* View toggle */}
       <div className={styles.viewToggle}>
-        <button
-          className={`${styles.viewBtn} ${(sidebarView === 'monitor' || sidebarView === 'both') ? styles.viewBtnActive : ''}`}
-          onClick={() => onSidebarViewChange(
-            sidebarView === 'monitor' ? 'manage' : sidebarView === 'manage' ? 'both' : 'monitor'
-          )}
-          title="Cycle view: Monitor → Manage → Both"
-        >
-          {sidebarView === 'monitor' ? '📡 Monitor' :
-           sidebarView === 'manage' ? '📋 Manage' :
-           '📡📋 Both'}
-        </button>
+        <div className={styles.viewBtnGroup}>
+          <button
+            className={`${styles.viewTab} ${sidebarView === 'monitor' || sidebarView === 'both' ? styles.viewTabActive : ''}`}
+            onClick={() => onSidebarViewChange(sidebarView === 'both' ? 'manage' : sidebarView === 'monitor' ? 'both' : 'monitor')}
+          >
+            📡 Monitor
+          </button>
+          <button
+            className={`${styles.viewTab} ${sidebarView === 'manage' || sidebarView === 'both' ? styles.viewTabActive : ''}`}
+            onClick={() => onSidebarViewChange(sidebarView === 'both' ? 'monitor' : sidebarView === 'manage' ? 'both' : 'manage')}
+          >
+            📋 Manage
+          </button>
+        </div>
       </div>
 
       {/* Monitor view */}
@@ -167,12 +234,11 @@ export function TreeSidebar({
             </div>
           )}
           <div className={styles.treeContainer}>
-            {renderTree(isVisibleInMonitor)}
+            <MonitorTree {...props} collapsed={collapsed} toggle={toggle} />
           </div>
         </div>
       )}
 
-      {/* Divider for both mode */}
       {sidebarView === 'both' && <div className={styles.viewDivider} />}
 
       {/* Manage view */}
@@ -184,12 +250,21 @@ export function TreeSidebar({
             </div>
           )}
           <div className={styles.treeContainer}>
-            {renderTree()}
+            <ManageView
+              phases={props.phases}
+              allTasks={props.allTasks}
+              activeProjectId={props.activeProjectId}
+              activePhaseId={props.activePhaseId}
+              activeTaskId={props.activeTaskId}
+              collapsed={collapsed}
+              toggle={toggle}
+              onSelectPhase={props.onSelectPhase}
+              onSelectTask={props.onSelectTask}
+              onAcknowledgeTask={props.onAcknowledgeTask}
+            />
           </div>
         </div>
       )}
-
-      <button className={styles.addButton}>+ New Project</button>
     </div>
   )
 }

@@ -8,37 +8,45 @@
   overflow: hidden;
 }
 
-/* View toggle */
+/* ─── View toggle ─── */
 .viewToggle {
   padding: 8px 12px;
   border-bottom: 1px solid var(--border-subtle);
 }
 
-.viewBtn {
-  width: 100%;
-  padding: 6px 12px;
+.viewBtnGroup {
+  display: flex;
   border: 1px solid var(--border);
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
   border-radius: 6px;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 500;
-  transition: all 0.15s;
-  text-align: center;
+  overflow: hidden;
 }
 
-.viewBtn:hover {
-  border-color: var(--accent);
+.viewTab {
+  flex: 1;
+  padding: 5px 8px;
+  border: none;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+
+.viewTab + .viewTab {
+  border-left: 1px solid var(--border);
+}
+
+.viewTab:hover {
   color: var(--text-primary);
 }
 
-.viewBtnActive {
-  border-color: var(--accent);
-  color: var(--accent);
+.viewTabActive {
+  background: var(--accent);
+  color: white;
 }
 
-/* View sections */
+/* ─── View sections ─── */
 .viewSection {
   flex: 1;
   display: flex;
@@ -57,6 +65,7 @@
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--text-muted);
+  flex-shrink: 0;
 }
 
 .viewLabelHint {
@@ -79,10 +88,24 @@
   padding: 4px 8px;
 }
 
-/* Tree nodes */
+.emptyHint {
+  padding: 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* ─── Tree structure ─── */
 .treeNode {
   display: flex;
   flex-direction: column;
+}
+
+/* Indentation levels */
+.indent1 {
+  padding-left: 20px;
+  border-left: 1px solid var(--border-subtle);
+  margin-left: 12px;
 }
 
 .treeItem {
@@ -101,17 +124,9 @@
   transition: background 0.1s, color 0.1s;
 }
 
-.treeItem:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
+.treeItem:hover { background: var(--bg-hover); color: var(--text-primary); }
+.treeItem.active { background: var(--bg-tertiary); color: var(--text-primary); }
 
-.treeItem.active {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-}
-
-/* Chevron */
 .chevron {
   font-size: 10px;
   color: var(--text-muted);
@@ -126,10 +141,7 @@
   padding: 6px 8px;
 }
 
-.nodeIcon {
-  font-size: 14px;
-  flex-shrink: 0;
-}
+.nodeIcon { font-size: 14px; flex-shrink: 0; }
 
 .nodeName {
   overflow: hidden;
@@ -149,9 +161,7 @@
 }
 
 /* Phase level */
-.phaseLevel {
-  font-size: 12px;
-}
+.phaseLevel { font-size: 12px; }
 
 .phaseStatus {
   font-size: 9px;
@@ -172,10 +182,13 @@
   flex-shrink: 0;
 }
 
-/* Task level */
+/* Task level in monitor tree — extra indent */
 .taskLevel {
   font-size: 12px;
   padding: 4px 8px;
+  margin-left: 24px;
+  border-left: 1px solid var(--border-subtle);
+  border-radius: 0 5px 5px 0;
 }
 
 .taskName {
@@ -203,15 +216,9 @@
   transition: opacity 0.15s, background 0.15s;
 }
 
-.taskLevel:hover .ackButton {
-  opacity: 1;
-}
+.taskLevel:hover .ackButton { opacity: 1; }
+.ackButton:hover { background: rgba(34, 197, 94, 0.15); }
 
-.ackButton:hover {
-  background: rgba(34, 197, 94, 0.15);
-}
-
-/* Unread indicator for failed tasks */
 .unreadDot {
   width: 6px;
   height: 6px;
@@ -226,24 +233,88 @@
   50% { opacity: 0.4; }
 }
 
-/* Add button */
-.addButton {
+/* ─── Manage view ─── */
+.managePhase {
+  margin-bottom: 4px;
+}
+
+.managePhaseHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.1s;
+}
+
+.managePhaseHeader:hover { background: var(--bg-hover); }
+.managePhaseHeader.active { background: var(--bg-tertiary); }
+
+.manageTaskList {
+  padding-left: 20px;
+  margin-left: 12px;
+  border-left: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.manageTaskItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 0 5px 5px 0;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  font-size: 12px;
+  transition: background 0.1s, color 0.1s;
+}
+
+.manageTaskItem:hover { background: var(--bg-hover); color: var(--text-primary); }
+.manageTaskItem.active { background: var(--bg-tertiary); color: var(--text-primary); }
+
+.manageTaskStatus {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-left: auto;
+  text-transform: capitalize;
+}
+
+.addTaskBtn,
+.addPhaseBtn {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 8px;
-  margin: 8px 12px;
+  padding: 6px 8px;
   border: 1px dashed var(--border);
   background: transparent;
   color: var(--text-muted);
-  border-radius: 6px;
+  border-radius: 5px;
   cursor: pointer;
-  font-size: 12px;
-  flex-shrink: 0;
+  font-size: 11px;
+  margin-top: 4px;
   transition: border-color 0.15s, color 0.15s;
 }
 
-.addButton:hover {
+.addTaskBtn:hover,
+.addPhaseBtn:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+.addPhaseBtn {
+  margin: 8px 8px;
 }
