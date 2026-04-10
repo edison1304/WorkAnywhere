@@ -371,6 +371,23 @@
 .chatTextarea::placeholder { color: var(--text-muted); }
 .chatTextarea:disabled { opacity: 0.5; }
 
+.chatFileBtn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.chatFileBtn:hover { border-color: var(--accent); }
+.chatFileBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+
 .chatSendBtn {
   padding: 8px 16px;
   background: var(--accent);

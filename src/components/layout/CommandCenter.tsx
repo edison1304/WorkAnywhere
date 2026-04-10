@@ -155,6 +155,7 @@ export function CommandCenter({
           hasProjects={projects.length > 0}
           hasPhases={phases.filter(p => p.projectId === activeProject?.id).length > 0}
           activeProjectName={activeProject?.name}
+          workspacePath={activeProject?.workspacePath}
         />
 
         {/* Status rail: show or placeholder */}

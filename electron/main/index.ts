@@ -443,6 +443,23 @@ ipcMain.handle('ssh:home', async () => {
   }
 })
 
+// ─── File upload to server ───
+ipcMain.handle('ssh:upload-file', async (_event, opts: {
+  fileName: string
+  data: number[]  // Buffer serialized as array
+  workspacePath: string
+}) => {
+  if (!sshService?.isConnected()) return { success: false, error: 'Not connected' }
+  try {
+    const remotePath = `${opts.workspacePath.replace(/\/$/, '')}/${opts.fileName}`
+    const buf = Buffer.from(opts.data)
+    await sshService.uploadFile(buf, remotePath)
+    return { success: true, remotePath }
+  } catch (err) {
+    return { success: false, error: String(err) }
+  }
+})
+
 // ─── Legacy placeholders ───
 ipcMain.handle('project:list', async () => [])
 ipcMain.handle('project:create', async (_event, input) => ({

@@ -21,10 +21,11 @@ interface Props {
   hasProjects?: boolean
   hasPhases?: boolean
   activeProjectName?: string
+  workspacePath?: string
 }
 
 export function MainPanel({
-  activeTask, activePhase, sshConnected, sshConnecting, sshError,
+  activeTask, activePhase, sshConnected, sshConnecting, sshError, workspacePath,
   onRunAgent, onStopAgent, onSendMessage, onSSHConnect, onOpenSSH,
   onCreateProject, onCreatePhase, onCreateTask,
   hasProjects, hasPhases, activeProjectName
@@ -151,6 +152,7 @@ export function MainPanel({
         <ChatInput
           onSend={(msg) => onSendMessage?.(activeTask.id, msg)}
           disabled={false}
+          workspacePath={workspacePath}
         />
       )}
     </div>
@@ -212,9 +214,13 @@ function LogView({ task }: { task: Task }) {
 }
 
 // ─── Chat Input ───
-function ChatInput({ onSend, disabled }: { onSend: (msg: string) => void; disabled: boolean }) {
+function ChatInput({ onSend, disabled, workspacePath }: {
+  onSend: (msg: string) => void; disabled: boolean; workspacePath?: string
+}) {
   const [message, setMessage] = useState('')
+  const [uploading, setUploading] = useState(false)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleSubmit = () => {
     const msg = message.trim()
@@ -231,22 +237,100 @@ function ChatInput({ onSend, disabled }: { onSend: (msg: string) => void; disabl
     }
   }
 
+  const uploadFile = async (file: File) => {
+    if (!window.api || !workspacePath) return
+    setUploading(true)
+    try {
+      const arrayBuf = await file.arrayBuffer()
+      const data = Array.from(new Uint8Array(arrayBuf))
+      const result = await window.api.sshUploadFile({
+        fileName: file.name,
+        data,
+        workspacePath,
+      })
+      if (result.success && result.remotePath) {
+        // Insert file path into chat
+        setMessage(prev => {
+          const prefix = prev ? prev + ' ' : ''
+          return prefix + result.remotePath
+        })
+        inputRef.current?.focus()
+      }
+    } catch (err) {
+      console.error('Upload failed:', err)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handlePaste = async (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items
+    if (!items) return
+    for (const item of items) {
+      if (item.kind === 'file') {
+        e.preventDefault()
+        const file = item.getAsFile()
+        if (file) await uploadFile(file)
+        return
+      }
+    }
+    // text paste falls through normally
+  }
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault()
+    const files = e.dataTransfer?.files
+    if (!files?.length) return
+    for (const file of files) {
+      await uploadFile(file)
+    }
+  }
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files?.length) return
+    for (const file of files) {
+      await uploadFile(file)
+    }
+    e.target.value = ''
+  }
+
   return (
-    <div className={styles.chatInput}>
+    <div
+      className={styles.chatInput}
+      onDrop={handleDrop}
+      onDragOver={e => e.preventDefault()}
+    >
+      <input
+        ref={fileInputRef}
+        type="file"
+        style={{ display: 'none' }}
+        onChange={handleFileSelect}
+        multiple
+      />
+      <button
+        className={styles.chatFileBtn}
+        onClick={() => fileInputRef.current?.click()}
+        disabled={disabled || uploading}
+        title="Upload file to server"
+      >
+        {uploading ? '⏳' : '📎'}
+      </button>
       <textarea
         ref={inputRef}
         className={styles.chatTextarea}
         value={message}
         onChange={e => setMessage(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="Send a message to Claude... (Enter to send, Shift+Enter for newline)"
+        onPaste={handlePaste}
+        placeholder={uploading ? 'Uploading...' : 'Message (Enter to send) — Paste/drop files to upload'}
         rows={2}
-        disabled={disabled}
+        disabled={disabled || uploading}
       />
       <button
         className={styles.chatSendBtn}
         onClick={handleSubmit}
-        disabled={disabled || !message.trim()}
+        disabled={disabled || uploading || !message.trim()}
       >
         Send
       </button>

@@ -182,6 +182,7 @@ export interface IpcApi {
   dataSave(data: SavedData): Promise<{ success: boolean }>
 
   // Remote folder browser
+  sshUploadFile(opts: { fileName: string; data: number[]; workspacePath: string }): Promise<{ success: boolean; remotePath?: string; error?: string }>
   sshListDir(path: string): Promise<{ success: boolean; entries?: DirEntry[]; currentPath?: string; error?: string }>
   sshMkdir(path: string): Promise<{ success: boolean; error?: string }>
   sshHome(): Promise<{ success: boolean; home?: string; error?: string }>

@@ -270,6 +270,20 @@ export class SSHService extends EventEmitter {
     await this.exec(`mkdir -p "$(dirname ${JSON.stringify(path)})" && cat > ${JSON.stringify(path)} << 'WORKANYWHERE_EOF'\n${content}\nWORKANYWHERE_EOF`)
   }
 
+  // Upload binary file to remote via base64
+  async uploadFile(localData: Buffer, remotePath: string): Promise<void> {
+    const b64 = localData.toString('base64')
+    await this.exec(`mkdir -p "$(dirname ${JSON.stringify(remotePath)})"`)
+    // Split into chunks to avoid command line length limits
+    const chunkSize = 60000
+    await this.exec(`rm -f ${JSON.stringify(remotePath)}.b64tmp`)
+    for (let i = 0; i < b64.length; i += chunkSize) {
+      const chunk = b64.slice(i, i + chunkSize)
+      await this.exec(`printf '%s' ${JSON.stringify(chunk)} >> ${JSON.stringify(remotePath)}.b64tmp`)
+    }
+    await this.exec(`base64 -d ${JSON.stringify(remotePath)}.b64tmp > ${JSON.stringify(remotePath)} && rm -f ${JSON.stringify(remotePath)}.b64tmp`)
+  }
+
   // Check if an engine CLI is available
   async checkEngine(engine: string = 'claude'): Promise<{ available: boolean; version?: string }> {
     try {

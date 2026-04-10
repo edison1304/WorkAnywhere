@@ -90,6 +90,9 @@ const api: IpcApi = {
   dataLoad: () => ipcRenderer.invoke('data:load'),
   dataSave: (data) => ipcRenderer.invoke('data:save', data),
 
+  // File upload
+  sshUploadFile: (opts) => ipcRenderer.invoke('ssh:upload-file', opts),
+
   // Remote folder browser
   sshListDir: (path) => ipcRenderer.invoke('ssh:list-dir', path),
   sshMkdir: (path) => ipcRenderer.invoke('ssh:mkdir', path),
