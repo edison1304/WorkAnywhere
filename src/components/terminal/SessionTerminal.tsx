@@ -23,13 +23,16 @@ export function SessionTerminal({ taskId }: Props) {
     if (!containerRef.current || !window.api) return
     const host = containerRef.current
 
-    // Already exists — just re-attach the DOM element
+    // Detach all terminal containers from this host first
+    // (they survive in the pool, just removed from DOM)
+    while (host.firstChild) {
+      host.removeChild(host.firstChild)
+    }
+
+    // Already exists in pool — re-attach its DOM element
     const existing = terminalPool.get(taskId)
     if (existing) {
-      // Move the existing terminal DOM into this container
-      if (existing.container.parentElement !== host) {
-        host.appendChild(existing.container)
-      }
+      host.appendChild(existing.container)
       // Re-fit after re-attach
       requestAnimationFrame(() => {
         try { existing.fitAddon.fit() } catch {}
