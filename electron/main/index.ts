@@ -260,6 +260,11 @@ ipcMain.handle('ssh:connect', async (_event, config: import('../../../shared/typ
       }
       broadcastToAll('task:log', data)
     })
+    agentService.on('task:sessionId', (data) => {
+      if (dataStore) {
+        dataStore.taskUpdate(data.taskId, { sessionId: data.sessionId })
+      }
+    })
     agentService.on('pty:data', (data) => broadcastToAll('pty:data', data))
     agentService.on('pty:close', (data) => broadcastToAll('pty:close', data))
 

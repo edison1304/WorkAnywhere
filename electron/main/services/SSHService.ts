@@ -307,10 +307,11 @@ export class SSHService extends EventEmitter {
 // Claude stream-json event types
 export interface ClaudeStreamEvent {
   type: string
-  content?: string
+  content?: string | unknown[]    // string or array of content blocks
   tool?: string
   input?: Record<string, unknown>
   output?: string
+  error?: string
   session_id?: string
   result?: string
   [key: string]: unknown
