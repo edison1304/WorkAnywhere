@@ -116,20 +116,23 @@ export interface IpcApi {
   // Project (대분류)
   projectList(): Promise<Project[]>
   projectCreate(input: CreateProjectInput): Promise<Project>
+  projectUpdate(id: string, patch: Partial<Project>): Promise<Project | null>
   projectDelete(id: string): Promise<void>
 
   // Phase (중분류)
   phaseList(projectId: string): Promise<Phase[]>
   phaseCreate(projectId: string, name: string, description?: string): Promise<Phase>
-  phaseUpdate(id: string, patch: Partial<Phase>): Promise<Phase>
+  phaseUpdate(id: string, patch: Partial<Phase>): Promise<Phase | null>
   phaseDelete(id: string): Promise<void>
 
   // Task (소분류)
   taskList(phaseId: string): Promise<Task[]>
   taskCreate(phaseId: string, name: string, prompt: string): Promise<Task>
-  taskRun(taskId: string): Promise<void>        // 에이전트 호출
-  taskSend(taskId: string, message: string): Promise<void>
-  taskStop(taskId: string): Promise<void>        // 에이전트 종료
+  taskUpdate(id: string, patch: Partial<Task>): Promise<Task | null>
+  taskDelete(id: string): Promise<void>
+  taskRun(taskId: string): Promise<{ success: boolean; error?: string }>
+  taskSend(taskId: string, message: string): Promise<{ success: boolean }>
+  taskStop(taskId: string): Promise<{ success: boolean }>
 
   // Events (Main → Renderer)
   onTaskStatus(cb: (data: { taskId: string; status: TaskStatus }) => void): () => void

@@ -4,6 +4,7 @@ import type { IpcApi } from '../../shared/types'
 const api: IpcApi = {
   projectList: () => ipcRenderer.invoke('project:list'),
   projectCreate: (input) => ipcRenderer.invoke('project:create', input),
+  projectUpdate: (id, patch) => ipcRenderer.invoke('project:update', id, patch),
   projectDelete: (id) => ipcRenderer.invoke('project:delete', id),
 
   phaseList: (projectId) => ipcRenderer.invoke('phase:list', projectId),
@@ -13,6 +14,8 @@ const api: IpcApi = {
 
   taskList: (phaseId) => ipcRenderer.invoke('task:list', phaseId),
   taskCreate: (phaseId, name, prompt) => ipcRenderer.invoke('task:create', phaseId, name, prompt),
+  taskUpdate: (id, patch) => ipcRenderer.invoke('task:update', id, patch),
+  taskDelete: (id) => ipcRenderer.invoke('task:delete', id),
   taskRun: (taskId) => ipcRenderer.invoke('task:run', taskId),
   taskSend: (taskId, message) => ipcRenderer.invoke('task:send', taskId, message),
   taskStop: (taskId) => ipcRenderer.invoke('task:stop', taskId),

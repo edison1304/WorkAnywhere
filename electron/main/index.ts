@@ -5,6 +5,7 @@ import { is } from '@electron-toolkit/utils'
 import { SSHService } from './services/SSHService'
 import { WorkspaceManager } from './services/WorkspaceManager'
 import { AgentService } from './services/AgentService'
+import { DataStore } from './services/DataStore'
 
 let mainWindow: BrowserWindow | null = null
 const detachedWindows = new Map<string, BrowserWindow>()
@@ -49,6 +50,10 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  // Initialize DataStore before creating window
+  dataStore = new DataStore(getDataPath())
+  dataStore.load()
+
   createWindow()
 
   app.on('activate', () => {
@@ -219,8 +224,15 @@ ipcMain.handle('ssh:connect', async (_event, config: import('../../../shared/typ
 
     agentService = new AgentService(sshService, workspaceManager)
 
-    // Forward agent events to all windows
+    // Forward agent events to all windows + persist to DataStore
     agentService.on('task:status', (data) => {
+      if (dataStore) {
+        const patch: Partial<import('../../../shared/types').Task> = { status: data.status }
+        if (data.status === 'completed' || data.status === 'failed') {
+          patch.completedAt = new Date().toISOString()
+        }
+        dataStore.taskUpdate(data.taskId, patch)
+      }
       broadcastToAll('task:status', data)
       // Send desktop notification on completion/failure
       if (data.status === 'completed' || data.status === 'failed') {
@@ -242,7 +254,12 @@ ipcMain.handle('ssh:connect', async (_event, config: import('../../../shared/typ
       }
     })
 
-    agentService.on('task:log', (data) => broadcastToAll('task:log', data))
+    agentService.on('task:log', (data) => {
+      if (dataStore) {
+        dataStore.taskAddLog(data.taskId, data.log)
+      }
+      broadcastToAll('task:log', data)
+    })
     agentService.on('pty:data', (data) => broadcastToAll('pty:data', data))
     agentService.on('pty:close', (data) => broadcastToAll('pty:close', data))
 
@@ -353,22 +370,126 @@ function getDataPath(): string {
   return join(app.getPath('userData'), 'data.json')
 }
 
-// Project/Phase/Task persistence
-ipcMain.handle('data:load', async () => {
-  const dataPath = getDataPath()
+// DataStore — single source of truth for Project/Phase/Task
+let dataStore: DataStore
+
+// ─── Project CRUD ───
+ipcMain.handle('project:list', async () => {
+  return dataStore.projectList()
+})
+
+ipcMain.handle('project:create', async (_event, input: import('../../../shared/types').CreateProjectInput) => {
+  return dataStore.projectCreate(input)
+})
+
+ipcMain.handle('project:update', async (_event, id: string, patch: Partial<import('../../../shared/types').Project>) => {
+  return dataStore.projectUpdate(id, patch)
+})
+
+ipcMain.handle('project:delete', async (_event, id: string) => {
+  dataStore.projectDelete(id)
+})
+
+// ─── Phase CRUD ───
+ipcMain.handle('phase:list', async (_event, projectId: string) => {
+  return dataStore.phaseList(projectId)
+})
+
+ipcMain.handle('phase:create', async (_event, projectId: string, name: string, description?: string) => {
+  return dataStore.phaseCreate(projectId, name, description)
+})
+
+ipcMain.handle('phase:update', async (_event, id: string, patch: Partial<import('../../../shared/types').Phase>) => {
+  return dataStore.phaseUpdate(id, patch)
+})
+
+ipcMain.handle('phase:delete', async (_event, id: string) => {
+  dataStore.phaseDelete(id)
+})
+
+// ─── Task CRUD ───
+ipcMain.handle('task:list', async (_event, phaseId: string) => {
+  return dataStore.taskList(phaseId)
+})
+
+ipcMain.handle('task:create', async (_event, phaseId: string, name: string, prompt: string) => {
+  return dataStore.taskCreate(phaseId, name, prompt)
+})
+
+ipcMain.handle('task:update', async (_event, id: string, patch: Partial<import('../../../shared/types').Task>) => {
+  return dataStore.taskUpdate(id, patch)
+})
+
+ipcMain.handle('task:delete', async (_event, id: string) => {
+  dataStore.taskDelete(id)
+})
+
+ipcMain.handle('task:run', async (_event, taskId: string) => {
+  const task = dataStore.taskGet(taskId)
+  if (!task) return { success: false, error: 'Task not found' }
+  const project = dataStore.projectList().find(p => p.id === task.projectId)
+  if (!project) return { success: false, error: 'Project not found' }
+  if (!agentService) return { success: false, error: 'Not connected' }
+
+  dataStore.taskUpdate(taskId, { status: 'running' })
+  dataStore.taskAddLog(taskId, {
+    id: `${taskId}-start-${Date.now()}`,
+    taskId,
+    timestamp: new Date().toISOString(),
+    type: 'agent_start',
+    content: 'Agent started',
+  })
+
   try {
-    if (existsSync(dataPath)) {
-      return { success: true, data: JSON.parse(readFileSync(dataPath, 'utf-8')) }
-    }
-    return { success: true, data: null }
+    await agentService.startAgent(
+      task.projectId, task.phaseId, taskId,
+      project.workspacePath, task.prompt,
+      project.settings.agentEngine || 'claude'
+    )
+    return { success: true }
+  } catch (err) {
+    dataStore.taskUpdate(taskId, { status: 'failed' })
+    dataStore.taskAddLog(taskId, {
+      id: `${taskId}-err-${Date.now()}`,
+      taskId,
+      timestamp: new Date().toISOString(),
+      type: 'error',
+      content: String(err),
+    })
+    return { success: false, error: String(err) }
+  }
+})
+
+ipcMain.handle('task:send', async (_event, taskId: string, message: string) => {
+  agentService?.sendMessage(taskId, message)
+  dataStore.taskAddLog(taskId, {
+    id: `${taskId}-msg-${Date.now()}`,
+    taskId,
+    timestamp: new Date().toISOString(),
+    type: 'text',
+    content: `[YOU] ${message}`,
+  })
+  return { success: true }
+})
+
+ipcMain.handle('task:stop', async (_event, taskId: string) => {
+  agentService?.stopAgent(taskId)
+  dataStore.taskUpdate(taskId, { status: 'failed' })
+  return { success: true }
+})
+
+// ─── Bulk data (legacy compatibility) ───
+ipcMain.handle('data:load', async () => {
+  try {
+    return { success: true, data: dataStore.getAll() }
   } catch {
     return { success: true, data: null }
   }
 })
 
-ipcMain.handle('data:save', async (_event, data: Record<string, unknown>) => {
+ipcMain.handle('data:save', async (_event, data: import('../../../shared/types').SavedData) => {
   try {
-    writeFileSync(getDataPath(), JSON.stringify(data, null, 2))
+    dataStore.replaceAll(data)
     return { success: true }
   } catch (err) {
     return { success: false, error: String(err) }
@@ -460,11 +581,3 @@ ipcMain.handle('ssh:upload-file', async (_event, opts: {
   }
 })
 
-// ─── Legacy placeholders ───
-ipcMain.handle('project:list', async () => [])
-ipcMain.handle('project:create', async (_event, input) => ({
-  id: crypto.randomUUID(), ...input,
-  settings: { autoArtifactScan: true },
-  createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
-}))
-ipcMain.handle('project:delete', async () => {})

@@ -21,7 +21,7 @@ export default function App() {
   const [detachedPanels, setDetachedPanels] = useState<Set<string>>(new Set())
   const [dataLoaded, setDataLoaded] = useState(false)
 
-  // Load saved data on startup
+  // Load saved data on startup via DataStore
   useEffect(() => {
     if (dataLoaded || !window.api) return
     setDataLoaded(true)
@@ -29,12 +29,7 @@ export default function App() {
       if (result.success && result.data) {
         if (result.data.projects?.length) setProjects(result.data.projects)
         if (result.data.phases?.length) setPhases(result.data.phases)
-        if (result.data.tasks?.length) {
-          // Reset running tasks to idle (they weren't actually running)
-          setTasks(result.data.tasks.map(t =>
-            t.status === 'running' || t.status === 'queued' ? { ...t, status: 'idle' as const } : t
-          ))
-        }
+        if (result.data.tasks?.length) setTasks(result.data.tasks)
         // Auto-select first project
         if (result.data.projects?.length) {
           setActiveProjectId(result.data.projects[0].id)
@@ -42,13 +37,6 @@ export default function App() {
       }
     })
   }, [dataLoaded])
-
-  // Auto-save data when it changes
-  useEffect(() => {
-    if (!dataLoaded || !window.api) return
-    if (projects.length === 0 && phases.length === 0 && tasks.length === 0) return
-    window.api.dataSave({ projects, phases, tasks })
-  }, [projects, phases, tasks, dataLoaded])
 
   // SSH state
   const [sshConnected, setSshConnected] = useState(false)
@@ -95,46 +83,28 @@ export default function App() {
     setClaudeVersion(undefined)
   }, [])
 
-  // ─── Agent control ───
+  // ─── Agent control (via IPC) ───
   const handleRunAgent = useCallback(async (taskId: string) => {
     if (!window.api || !sshConnected) {
       setSshDialogOpen(true)
       return
     }
-    const task = tasks.find(t => t.id === taskId)
-    const project = projects.find(p => p.id === task?.projectId)
-    if (!task || !project) return
-
-    // Update task status locally
+    // Optimistic UI update
     setTasks(prev => prev.map(t =>
-      t.id === taskId ? { ...t, status: 'running' as const, logs: [
-        ...t.logs,
-        { id: `${taskId}-start`, taskId, timestamp: new Date().toISOString(), type: 'agent_start' as const, content: 'Agent started' }
-      ]} : t
+      t.id === taskId ? { ...t, status: 'running' as const } : t
     ))
 
-    const result = await window.api.agentStart({
-      projectId: task.projectId,
-      phaseId: task.phaseId,
-      taskId,
-      workspacePath: project.workspacePath,
-      prompt: task.prompt,
-      engine: project.settings.agentEngine || 'claude',
-    })
-
+    const result = await window.api.taskRun(taskId)
     if (!result.success) {
       setTasks(prev => prev.map(t =>
-        t.id === taskId ? { ...t, status: 'failed' as const, logs: [
-          ...t.logs,
-          { id: `${taskId}-err`, taskId, timestamp: new Date().toISOString(), type: 'error' as const, content: result.error || 'Failed to start' }
-        ]} : t
+        t.id === taskId ? { ...t, status: 'failed' as const } : t
       ))
     }
-  }, [sshConnected, tasks])
+  }, [sshConnected])
 
   const handleStopAgent = useCallback(async (taskId: string) => {
     if (!window.api) return
-    await window.api.agentStop(taskId)
+    await window.api.taskStop(taskId)
     setTasks(prev => prev.map(t =>
       t.id === taskId ? { ...t, status: 'failed' as const } : t
     ))
@@ -142,8 +112,8 @@ export default function App() {
 
   const handleSendMessage = useCallback(async (taskId: string, message: string) => {
     if (!window.api) return
-    await window.api.agentSend(taskId, message)
-    // Log the sent message locally
+    await window.api.taskSend(taskId, message)
+    // Optimistic UI: add message to logs locally
     setTasks(prev => prev.map(t =>
       t.id === taskId ? { ...t, logs: [...t.logs, {
         id: `${taskId}-msg-${Date.now()}`,
@@ -155,48 +125,41 @@ export default function App() {
     ))
   }, [])
 
-  // ─── Create project/phase/task ───
-  const handleCreateProject = useCallback((name: string, path: string, engine?: string) => {
-    const id = crypto.randomUUID()
-    const now = new Date().toISOString()
-    const project: Project = {
-      id, name, workspacePath: path,
+  // ─── Create project/phase/task (via IPC → DataStore) ───
+  const handleCreateProject = useCallback(async (name: string, path: string, engine?: string) => {
+    if (!window.api) return
+    const project = await window.api.projectCreate({
+      name,
+      workspacePath: path,
       connection: { type: 'ssh' },
-      settings: { agentEngine: (engine as any) || 'claude', autoArtifactScan: true },
-      createdAt: now, updatedAt: now
+    })
+    // Apply engine setting if specified
+    if (engine && engine !== 'claude') {
+      await window.api.projectUpdate(project.id, {
+        settings: { ...project.settings, agentEngine: engine as any },
+      })
+      project.settings.agentEngine = engine as any
     }
     setProjects(prev => [...prev, project])
-    setActiveProjectId(id)
+    setActiveProjectId(project.id)
     setActivePhaseId(null)
     setActiveTaskId(null)
   }, [])
 
-  const handleCreatePhase = useCallback((name: string, description: string) => {
-    if (!activeProjectId) return
-    const id = crypto.randomUUID()
-    const now = new Date().toISOString()
-    const phase: Phase = {
-      id, projectId: activeProjectId, name, description: description || undefined,
-      order: phases.filter(p => p.projectId === activeProjectId).length + 1,
-      status: 'active', createdAt: now, updatedAt: now
-    }
+  const handleCreatePhase = useCallback(async (name: string, description: string) => {
+    if (!activeProjectId || !window.api) return
+    const phase = await window.api.phaseCreate(activeProjectId, name, description || undefined)
     setPhases(prev => [...prev, phase])
-    setActivePhaseId(id)
+    setActivePhaseId(phase.id)
     setActiveTaskId(null)
-  }, [activeProjectId, phases])
+  }, [activeProjectId])
 
-  const handleCreateTask = useCallback((name: string, prompt: string) => {
-    if (!activeProjectId || !activePhaseId) return
-    const id = crypto.randomUUID()
-    const now = new Date().toISOString()
-    const task: Task = {
-      id, phaseId: activePhaseId, projectId: activeProjectId,
-      name, status: 'idle', prompt, logs: [], artifacts: [],
-      createdAt: now, updatedAt: now
-    }
+  const handleCreateTask = useCallback(async (name: string, prompt: string) => {
+    if (!activePhaseId || !window.api) return
+    const task = await window.api.taskCreate(activePhaseId, name, prompt)
     setTasks(prev => [...prev, task])
-    setActiveTaskId(id)
-  }, [activeProjectId, activePhaseId])
+    setActiveTaskId(task.id)
+  }, [activePhaseId])
 
   // ─── Listen for agent events from main process ───
   useEffect(() => {
@@ -231,17 +194,22 @@ export default function App() {
     return unsub
   }, [])
 
-  const handleAcknowledgeTask = useCallback((taskId: string) => {
+  const handleAcknowledgeTask = useCallback(async (taskId: string) => {
+    const acknowledgedAt = new Date().toISOString()
     setTasks(prev => prev.map(t =>
-      t.id === taskId ? { ...t, acknowledgedAt: new Date().toISOString() } : t
+      t.id === taskId ? { ...t, acknowledgedAt } : t
     ))
+    window.api?.taskUpdate(taskId, { acknowledgedAt })
   }, [])
 
-  const handlePinTask = useCallback((taskId: string) => {
+  const handlePinTask = useCallback(async (taskId: string) => {
+    const task = tasks.find(t => t.id === taskId)
+    const pinned = !task?.pinned
     setTasks(prev => prev.map(t =>
-      t.id === taskId ? { ...t, pinned: !t.pinned } : t
+      t.id === taskId ? { ...t, pinned } : t
     ))
-  }, [])
+    window.api?.taskUpdate(taskId, { pinned })
+  }, [tasks])
 
   // Task select from detached window → focus main
   const handleSelectTaskFromDetached = useCallback((taskId: string | null) => {
