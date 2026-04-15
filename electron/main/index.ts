@@ -863,14 +863,8 @@ ipcMain.handle('task:run', async (_event, taskId: string) => {
 })
 
 ipcMain.handle('task:send', async (_event, taskId: string, message: string) => {
+  // AgentService.sendMessage handles logging + broadcast
   agentService?.sendMessage(taskId, message)
-  dataStore.taskAddLog(taskId, {
-    id: `${taskId}-msg-${Date.now()}`,
-    taskId,
-    timestamp: new Date().toISOString(),
-    type: 'text',
-    content: `[YOU] ${message}`,
-  })
   return { success: true }
 })
 

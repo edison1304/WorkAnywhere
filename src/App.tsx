@@ -195,17 +195,6 @@ export default function App() {
     const task = tasks.find(t => t.id === taskId)
     if (!task) return
 
-    // Add to UI immediately
-    setTasks(prev => prev.map(t =>
-      t.id === taskId ? { ...t, logs: [...t.logs, {
-        id: `${taskId}-msg-${Date.now()}`,
-        taskId,
-        timestamp: new Date().toISOString(),
-        type: 'text' as const,
-        content: `[YOU] ${message}`
-      }]} : t
-    ))
-
     if (task.status === 'idle') {
       // First message on idle task → update prompt and run agent
       await window.api.taskUpdate(taskId, { prompt: message })
