@@ -138,37 +138,47 @@ export class AgentService extends EventEmitter {
       let ptyLogBuffer = ''
       let ptyLogTimer: ReturnType<typeof setTimeout> | null = null
 
+      const flushPtyLog = () => {
+        if (ptyLogTimer) { clearTimeout(ptyLogTimer); ptyLogTimer = null }
+        const lines = ptyLogBuffer
+          .split('\n')
+          .map(l => l.trim())
+          .filter(l => l.length > 2)
+          .filter(l => !/^[─│┌┐└┘├┤┬┴┼━┃╔╗╚╝╠╣╦╩╬▶■●◌○·…\-=_+|]+$/.test(l)) // box-drawing / separators
+          .filter(l => !/^\d+[ms]?\s*$/.test(l))  // bare numbers/timing
+          .slice(-30)
+
+        if (lines.length > 0) {
+          this.emitLog(taskId, 'text', `[Claude] ${lines.join('\n').slice(0, 3000)}`)
+        }
+        ptyLogBuffer = ''
+      }
+
       ptySession.onData((data) => {
         this.emit('pty:data', { taskId, data })
 
         // Strip ANSI/terminal noise for logging
         const clean = data
-          .replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '')   // CSI sequences
-          .replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, '') // OSC sequences
-          .replace(/\x1b[()][0-9A-B]/g, '')           // charset select
-          .replace(/\x1b[>=<]/g, '')                   // mode set
-          .replace(/\x1b\[[\d;]*m/g, '')               // SGR (color)
+          .replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '')
+          .replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, '')
+          .replace(/\x1b[()][0-9A-B]/g, '')
+          .replace(/\x1b[>=<]/g, '')
           .replace(/\r\n/g, '\n')
           .replace(/\r/g, '\n')
           .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '')
 
         if (clean.trim()) {
           ptyLogBuffer += clean
-          // Debounce: flush after 1s of no data (longer = cleaner chunks)
-          if (ptyLogTimer) clearTimeout(ptyLogTimer)
-          ptyLogTimer = setTimeout(() => {
-            const lines = ptyLogBuffer
-              .split('\n')
-              .map(l => l.trim())
-              .filter(l => l.length > 1)  // skip single-char noise
-              .filter(l => !l.match(/^[─│┌┐└┘├┤┬┴┼━┃╔╗╚╝╠╣╦╩╬▶■●◌○·…]+$/)) // skip box-drawing
-              .slice(-30)
 
-            if (lines.length > 0) {
-              this.emitLog(taskId, 'text', `[Claude] ${lines.join('\n').slice(0, 3000)}`)
-            }
-            ptyLogBuffer = ''
-          }, 1000)
+          // Flush if buffer is large (don't wait for timer)
+          if (ptyLogBuffer.length > 500) {
+            flushPtyLog()
+            return
+          }
+
+          // Debounce: flush after 2s of no data
+          if (ptyLogTimer) clearTimeout(ptyLogTimer)
+          ptyLogTimer = setTimeout(flushPtyLog, 2000)
         }
       })
 
@@ -313,8 +323,10 @@ export class AgentService extends EventEmitter {
     if (!agent) return
 
     if (agent.ptySession) {
-      // Use \r (carriage return) — terminal Enter key
-      agent.ptySession.write(message + '\r')
+      // Send message + Enter to PTY
+      agent.ptySession.write(message)
+      // Small delay then send Enter (some CLIs need this)
+      setTimeout(() => agent.ptySession?.write('\r'), 50)
       this.emitLog(taskId, 'text', `[YOU] ${message}`)
     } else {
       // Phase 1 still running — queue message for Phase 2
