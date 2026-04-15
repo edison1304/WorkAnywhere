@@ -25,9 +25,9 @@ export class DataStore {
           const raw: SavedData = JSON.parse(readFileSync(this.dataPath, 'utf-8'))
           this.projects = raw.projects || []
           this.phases = raw.phases || []
-          // Reset running tasks to idle on startup (they weren't actually running)
+          // Reset active tasks to idle on startup (agent processes don't survive restart)
           this.tasks = (raw.tasks || []).map(t =>
-            t.status === 'running' || t.status === 'queued'
+            t.status === 'running' || t.status === 'queued' || t.status === 'waiting'
               ? { ...t, status: 'idle' as const }
               : t
           )
