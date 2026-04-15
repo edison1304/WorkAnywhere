@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, Component, type ReactNode } from 'react'
 import type { Project, Phase, Task } from '../../../shared/types'
 import { StatusDot } from '../job/StatusDot'
 import styles from './TreeSidebar.module.css'
@@ -389,6 +389,21 @@ function ManageView({
   )
 }
 
+// ─── Error Boundary for catching render crashes ───
+class ViewErrorBoundary extends Component<{ children: ReactNode; name: string }, { error: string | null }> {
+  state = { error: null as string | null }
+  static getDerivedStateFromError(error: Error) { return { error: error.message } }
+  componentDidCatch(error: Error) { console.error(`[${this.props.name} crash]`, error) }
+  render() {
+    if (this.state.error) return <div style={{ padding: 12, color: '#ef4444', fontSize: 12 }}>{this.props.name} error: {this.state.error}</div>
+    return this.props.children
+  }
+}
+
+function ManageViewSafe(props: Parameters<typeof ManageView>[0]) {
+  return <ViewErrorBoundary name="ManageView"><ManageView {...props} /></ViewErrorBoundary>
+}
+
 // ─── Main Sidebar ───
 export function TreeSidebar(props: Props) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
@@ -514,7 +529,7 @@ export function TreeSidebar(props: Props) {
             <div className={styles.viewLabel}><span>📋 All Tasks</span></div>
           )}
           <div className={styles.treeContainer}>
-            <ManageView
+            <ManageViewSafe
               phases={props.phases} allTasks={props.allTasks}
               activeProjectId={props.activeProjectId} activePhaseId={props.activePhaseId}
               activeTaskId={props.activeTaskId}
