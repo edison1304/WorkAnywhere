@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import type { Project, Phase, Task } from '../../../shared/types'
 import { StatusDot } from '../job/StatusDot'
 import styles from './TreeSidebar.module.css'
 
 export type SidebarView = 'monitor' | 'manage' | 'both'
-export type MonitorLayout = 'unified' | 'split'  // unified: 전부 섞어서, split: 진행중/완료 분리
+export type MonitorLayout = 'unified' | 'split'
 
 interface Props {
   projects: Project[]
@@ -20,7 +20,34 @@ interface Props {
   onSelectTask: (id: string | null) => void
   onAcknowledgeTask: (id: string) => void
   onPinTask: (id: string) => void
+  onDeleteTask?: (id: string) => void
+  onForkTask?: (id: string) => void
+  onMoveTask?: (taskId: string, targetPhaseId: string) => void
   onDetach?: () => void
+}
+
+// ─── Context Menu ───
+interface ContextMenuState {
+  x: number; y: number; taskId: string
+}
+
+function TaskContextMenu({ menu, onDelete, onFork, onClose }: {
+  menu: ContextMenuState
+  onDelete: () => void; onFork: () => void; onClose: () => void
+}) {
+  useEffect(() => {
+    const handler = () => onClose()
+    window.addEventListener('click', handler)
+    window.addEventListener('contextmenu', handler)
+    return () => { window.removeEventListener('click', handler); window.removeEventListener('contextmenu', handler) }
+  }, [onClose])
+
+  return (
+    <div className={styles.contextMenu} style={{ top: menu.y, left: menu.x }}>
+      <button className={styles.contextMenuItem} onClick={onFork}>Fork (duplicate)</button>
+      <button className={`${styles.contextMenuItem} ${styles.contextMenuDanger}`} onClick={onDelete}>Delete</button>
+    </div>
+  )
 }
 
 const ACTIVE_STATUSES = new Set(['running', 'waiting', 'queued'])
@@ -45,15 +72,20 @@ function isDoneTask(task: Task): boolean {
   return task.status === 'completed' || task.status === 'failed'
 }
 
-// ─── Task Item with pin/ack ───
-function TaskItemMonitor({ task, isActive, onSelect, onAcknowledge, onPin }: {
+// ─── Task Item with pin/ack/context menu/drag ───
+function TaskItemMonitor({ task, isActive, onSelect, onAcknowledge, onPin, onContextMenu, onDragStart }: {
   task: Task; isActive: boolean
   onSelect: () => void; onAcknowledge: () => void; onPin: () => void
+  onContextMenu?: (e: React.MouseEvent) => void
+  onDragStart?: (e: React.DragEvent) => void
 }) {
   return (
     <div
       className={`${styles.treeItem} ${styles.taskLevel} ${isActive ? styles.active : ''}`}
       onClick={onSelect}
+      onContextMenu={onContextMenu}
+      draggable
+      onDragStart={e => { e.dataTransfer.setData('taskId', task.id); onDragStart?.(e) }}
       role="button"
       tabIndex={0}
     >
@@ -85,7 +117,8 @@ function TaskItemMonitor({ task, isActive, onSelect, onAcknowledge, onPin }: {
 // ─── Monitor: unified view ───
 function MonitorUnified({
   projects, phases, allTasks, activeProjectId, activePhaseId, activeTaskId,
-  collapsed, toggle, onSelectProject, onSelectPhase, onSelectTask, onAcknowledgeTask, onPinTask
+  collapsed, toggle, onSelectProject, onSelectPhase, onSelectTask, onAcknowledgeTask, onPinTask,
+  onTaskContext
 }: {
   projects: Project[]; phases: Phase[]; allTasks: Task[]
   activeProjectId: string | null; activePhaseId: string | null; activeTaskId: string | null
@@ -93,6 +126,7 @@ function MonitorUnified({
   onSelectProject: (id: string) => void; onSelectPhase: (id: string) => void
   onSelectTask: (id: string | null) => void; onAcknowledgeTask: (id: string) => void
   onPinTask: (id: string) => void
+  onTaskContext?: (e: React.MouseEvent, taskId: string) => void
 }) {
   return (
     <>
@@ -141,6 +175,7 @@ function MonitorUnified({
                       onSelect={() => onSelectTask(task.id)}
                       onAcknowledge={() => onAcknowledgeTask(task.id)}
                       onPin={() => onPinTask(task.id)}
+                      onContextMenu={e => onTaskContext?.(e, task.id)}
                     />
                   ))}
                 </div>
@@ -155,11 +190,12 @@ function MonitorUnified({
 
 // ─── Monitor: split view (active / done) ───
 function MonitorSplit({
-  allTasks, activeTaskId, onSelectTask, onAcknowledgeTask, onPinTask
+  allTasks, activeTaskId, onSelectTask, onAcknowledgeTask, onPinTask, onTaskContext
 }: {
   allTasks: Task[]; activeTaskId: string | null
   onSelectTask: (id: string | null) => void
   onAcknowledgeTask: (id: string) => void; onPinTask: (id: string) => void
+  onTaskContext?: (e: React.MouseEvent, taskId: string) => void
 }) {
   const visible = allTasks.filter(isVisibleInMonitor)
   const active = visible.filter(isActiveTask)
@@ -181,12 +217,11 @@ function MonitorSplit({
               onSelect={() => onSelectTask(task.id)}
               onAcknowledge={() => onAcknowledgeTask(task.id)}
               onPin={() => onPinTask(task.id)}
+              onContextMenu={e => onTaskContext?.(e, task.id)}
             />
           ))}
         </div>
       )}
-
-      {/* Done section */}
       {done.length > 0 && (
         <div className={styles.splitSection}>
           <div className={styles.splitHeader} data-type="done">
@@ -199,12 +234,11 @@ function MonitorSplit({
               onSelect={() => onSelectTask(task.id)}
               onAcknowledge={() => onAcknowledgeTask(task.id)}
               onPin={() => onPinTask(task.id)}
+              onContextMenu={e => onTaskContext?.(e, task.id)}
             />
           ))}
         </div>
       )}
-
-      {/* Pinned (idle but pinned) */}
       {pinned.length > 0 && (
         <div className={styles.splitSection}>
           <div className={styles.splitHeader} data-type="pinned">
@@ -217,6 +251,7 @@ function MonitorSplit({
               onSelect={() => onSelectTask(task.id)}
               onAcknowledge={() => onAcknowledgeTask(task.id)}
               onPin={() => onPinTask(task.id)}
+              onContextMenu={e => onTaskContext?.(e, task.id)}
             />
           ))}
         </div>
@@ -232,12 +267,15 @@ function MonitorSplit({
 // ─── Manage view ───
 function ManageView({
   phases, allTasks, activeProjectId, activePhaseId, activeTaskId,
-  collapsed, toggle, onSelectPhase, onSelectTask
+  collapsed, toggle, onSelectPhase, onSelectTask, onTaskContext, onPhaseDrop, dragOverPhase
 }: {
   phases: Phase[]; allTasks: Task[]
   activeProjectId: string | null; activePhaseId: string | null; activeTaskId: string | null
   collapsed: Record<string, boolean>; toggle: (k: string) => void
   onSelectPhase: (id: string) => void; onSelectTask: (id: string | null) => void
+  onTaskContext?: (e: React.MouseEvent, taskId: string) => void
+  onPhaseDrop?: (e: React.DragEvent, phaseId: string) => void
+  dragOverPhase?: string | null
 }) {
   const projectPhases = phases.filter(ph => ph.projectId === activeProjectId)
   if (!activeProjectId) return <div className={styles.emptyHint}>Select a project</div>
@@ -250,7 +288,13 @@ function ManageView({
         const phaseTasks = allTasks.filter(t => t.phaseId === phase.id)
 
         return (
-          <div key={phase.id} className={styles.managePhase}>
+          <div
+            key={phase.id}
+            className={`${styles.managePhase} ${dragOverPhase === phase.id ? styles.phaseDropTarget : ''}`}
+            onDragOver={e => e.preventDefault()}
+            onDragEnter={() => {}}
+            onDrop={e => onPhaseDrop?.(e, phase.id)}
+          >
             <button
               className={`${styles.managePhaseHeader} ${phase.id === activePhaseId ? styles.active : ''}`}
               onClick={() => { onSelectPhase(phase.id); toggle(phaseKey) }}
@@ -265,15 +309,19 @@ function ManageView({
             {!isCollapsed && (
               <div className={styles.manageTaskList}>
                 {phaseTasks.map(task => (
-                  <button
+                  <div
                     key={task.id}
                     className={`${styles.manageTaskItem} ${task.id === activeTaskId ? styles.active : ''}`}
                     onClick={() => onSelectTask(task.id)}
+                    onContextMenu={e => onTaskContext?.(e, task.id)}
+                    draggable
+                    onDragStart={e => e.dataTransfer.setData('taskId', task.id)}
+                    role="button"
                   >
                     <StatusDot status={task.status} size={7} />
                     <span className={styles.taskName}>{task.name}</span>
                     <span className={styles.manageTaskStatus}>{task.status}</span>
-                  </button>
+                  </div>
                 ))}
                 <button className={styles.addTaskBtn} onClick={() => { onSelectPhase(phase.id); onSelectTask(null) }}>+ New Task</button>
               </div>
@@ -290,15 +338,61 @@ function ManageView({
 export function TreeSidebar(props: Props) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [monitorLayout, setMonitorLayout] = useState<MonitorLayout>('unified')
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+  const [dragOverPhase, setDragOverPhase] = useState<string | null>(null)
 
   const toggle = (key: string) => {
     setCollapsed(prev => ({ ...prev, [key]: !prev[key] }))
   }
 
+  const handleTaskContext = useCallback((e: React.MouseEvent, taskId: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setContextMenu({ x: e.clientX, y: e.clientY, taskId })
+  }, [])
+
+  const handlePhaseDrop = useCallback((e: React.DragEvent, phaseId: string) => {
+    e.preventDefault()
+    setDragOverPhase(null)
+    const taskId = e.dataTransfer.getData('taskId')
+    if (taskId) props.onMoveTask?.(taskId, phaseId)
+  }, [props.onMoveTask])
+
+  // Delete key handler
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Delete' && props.activeTaskId) {
+        const task = props.allTasks.find(t => t.id === props.activeTaskId)
+        if (task && task.status !== 'running') {
+          if (confirm(`Delete task "${task.name}"?`)) {
+            props.onDeleteTask?.(props.activeTaskId)
+          }
+        }
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [props.activeTaskId, props.allTasks, props.onDeleteTask])
+
   const { sidebarView, onSidebarViewChange } = props
 
   return (
     <div className={styles.sidebar}>
+      {/* Context menu */}
+      {contextMenu && (
+        <TaskContextMenu
+          menu={contextMenu}
+          onDelete={() => {
+            props.onDeleteTask?.(contextMenu.taskId)
+            setContextMenu(null)
+          }}
+          onFork={() => {
+            props.onForkTask?.(contextMenu.taskId)
+            setContextMenu(null)
+          }}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
       {/* View toggle + detach */}
       <div className={styles.viewToggle}>
         <div className={styles.viewBtnGroup}>
@@ -343,13 +437,13 @@ export function TreeSidebar(props: Props) {
                 collapsed={collapsed} toggle={toggle}
                 onSelectProject={props.onSelectProject} onSelectPhase={props.onSelectPhase}
                 onSelectTask={props.onSelectTask} onAcknowledgeTask={props.onAcknowledgeTask}
-                onPinTask={props.onPinTask}
+                onPinTask={props.onPinTask} onTaskContext={handleTaskContext}
               />
             ) : (
               <MonitorSplit
                 allTasks={props.allTasks} activeTaskId={props.activeTaskId}
                 onSelectTask={props.onSelectTask} onAcknowledgeTask={props.onAcknowledgeTask}
-                onPinTask={props.onPinTask}
+                onPinTask={props.onPinTask} onTaskContext={handleTaskContext}
               />
             )}
           </div>
@@ -371,6 +465,7 @@ export function TreeSidebar(props: Props) {
               activeTaskId={props.activeTaskId}
               collapsed={collapsed} toggle={toggle}
               onSelectPhase={props.onSelectPhase} onSelectTask={props.onSelectTask}
+              onTaskContext={handleTaskContext} onPhaseDrop={handlePhaseDrop} dragOverPhase={dragOverPhase}
             />
           </div>
         </div>

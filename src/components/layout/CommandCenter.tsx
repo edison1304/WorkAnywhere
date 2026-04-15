@@ -22,6 +22,9 @@ interface Props {
   onSelectTask: (id: string | null) => void
   onAcknowledgeTask: (id: string) => void
   onPinTask: (id: string) => void
+  onDeleteTask?: (id: string) => void
+  onForkTask?: (id: string) => void
+  onMoveTask?: (taskId: string, targetPhaseId: string) => void
   onDetach: (panelId: string) => void
   onReattach: (panelId: string) => void
   onRunAgent: (taskId: string) => void
@@ -55,7 +58,7 @@ export function CommandCenter({
   sidebarView, detachedPanels,
   sshConnected, sshConnecting, sshError, claudeVersion, connectionStatus,
   onSidebarViewChange,
-  onSelectProject, onSelectPhase, onSelectTask, onAcknowledgeTask, onPinTask,
+  onSelectProject, onSelectPhase, onSelectTask, onAcknowledgeTask, onPinTask, onDeleteTask, onForkTask, onMoveTask,
   onDetach, onReattach, onRunAgent, onStopAgent, onResumeAgent, onMarkCompleted, onSummarize, onRestartFresh, onSendMessage, onSSHConnect, onLocalConnect, onRemoteConnect, onOpenSSH, onDisconnectSSH,
   onCreateProject, onCreatePhase, onCreateTask, onImportProject,
   onPhaseSummarize, onProjectSummarize
@@ -258,6 +261,9 @@ export function CommandCenter({
             onSelectTask={onSelectTask}
             onAcknowledgeTask={onAcknowledgeTask}
             onPinTask={onPinTask}
+            onDeleteTask={onDeleteTask}
+            onForkTask={onForkTask}
+            onMoveTask={onMoveTask}
             onDetach={() => onDetach('monitor')}
           />
         ) : (

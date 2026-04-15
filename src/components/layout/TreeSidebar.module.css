@@ -1,3 +1,36 @@
+/* Context menu */
+.contextMenu {
+  position: fixed;
+  z-index: 2000;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 0;
+  min-width: 140px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+}
+.contextMenuItem {
+  display: block;
+  width: 100%;
+  padding: 6px 14px;
+  border: none;
+  background: none;
+  color: var(--text-primary);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.contextMenuItem:hover { background: var(--bg-hover); }
+.contextMenuDanger { color: var(--error); }
+.contextMenuDanger:hover { background: rgba(239, 68, 68, 0.1); }
+
+/* Drop target highlight */
+.phaseDropTarget {
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+  background: rgba(99, 102, 241, 0.05);
+}
+
 .sidebar {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);

@@ -538,6 +538,32 @@ export default function App() {
     window.api?.taskUpdate(taskId, { acknowledgedAt })
   }, [])
 
+  const handleDeleteTask = useCallback(async (taskId: string) => {
+    if (!window.api) return
+    const task = tasks.find(t => t.id === taskId)
+    if (task?.status === 'running') return // can't delete running task
+    await window.api.taskDelete(taskId)
+    setTasks(prev => prev.filter(t => t.id !== taskId))
+    if (activeTaskId === taskId) setActiveTaskId(null)
+  }, [tasks, activeTaskId])
+
+  const handleForkTask = useCallback(async (taskId: string) => {
+    if (!window.api) return
+    const task = tasks.find(t => t.id === taskId)
+    if (!task) return
+    const newTask = await window.api.taskCreate(task.phaseId, `${task.name} (fork)`, task.purpose || '', task.prompt)
+    setTasks(prev => [...prev, newTask])
+    setActiveTaskId(newTask.id)
+  }, [tasks])
+
+  const handleMoveTask = useCallback(async (taskId: string, targetPhaseId: string) => {
+    if (!window.api) return
+    const task = tasks.find(t => t.id === taskId)
+    if (!task || task.phaseId === targetPhaseId) return
+    await window.api.taskUpdate(taskId, { phaseId: targetPhaseId } as any)
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, phaseId: targetPhaseId } : t))
+  }, [tasks])
+
   const handlePinTask = useCallback(async (taskId: string) => {
     const task = tasks.find(t => t.id === taskId)
     const pinned = !task?.pinned
@@ -639,6 +665,9 @@ export default function App() {
         onSelectTask={setActiveTaskId}
         onAcknowledgeTask={handleAcknowledgeTask}
         onPinTask={handlePinTask}
+        onDeleteTask={handleDeleteTask}
+        onForkTask={handleForkTask}
+        onMoveTask={handleMoveTask}
         onDetach={handleDetach}
         onReattach={handleReattach}
         onRunAgent={handleRunAgent}
