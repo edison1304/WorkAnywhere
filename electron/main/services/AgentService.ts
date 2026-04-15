@@ -141,28 +141,34 @@ export class AgentService extends EventEmitter {
       ptySession.onData((data) => {
         this.emit('pty:data', { taskId, data })
 
-        // Strip ANSI codes and accumulate for logging
+        // Strip ANSI/terminal noise for logging
         const clean = data
-          .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')  // ANSI escape
-          .replace(/\x1b\][^\x07]*\x07/g, '')      // OSC sequences
-          .replace(/\r/g, '')                        // carriage return
-          .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '') // control chars
+          .replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '')   // CSI sequences
+          .replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, '') // OSC sequences
+          .replace(/\x1b[()][0-9A-B]/g, '')           // charset select
+          .replace(/\x1b[>=<]/g, '')                   // mode set
+          .replace(/\x1b\[[\d;]*m/g, '')               // SGR (color)
+          .replace(/\r\n/g, '\n')
+          .replace(/\r/g, '\n')
+          .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '')
 
         if (clean.trim()) {
           ptyLogBuffer += clean
-          // Debounce: flush after 500ms of no data
+          // Debounce: flush after 1s of no data (longer = cleaner chunks)
           if (ptyLogTimer) clearTimeout(ptyLogTimer)
           ptyLogTimer = setTimeout(() => {
-            const text = ptyLogBuffer.trim()
-            if (text && text.length > 2) {
-              // Split into lines, skip empty, limit length
-              const lines = text.split('\n').filter(l => l.trim()).slice(-20)
-              if (lines.length > 0) {
-                this.emitLog(taskId, 'text', lines.join('\n').slice(0, 2000))
-              }
+            const lines = ptyLogBuffer
+              .split('\n')
+              .map(l => l.trim())
+              .filter(l => l.length > 1)  // skip single-char noise
+              .filter(l => !l.match(/^[─│┌┐└┘├┤┬┴┼━┃╔╗╚╝╠╣╦╩╬▶■●◌○·…]+$/)) // skip box-drawing
+              .slice(-30)
+
+            if (lines.length > 0) {
+              this.emitLog(taskId, 'text', `[Claude] ${lines.join('\n').slice(0, 3000)}`)
             }
             ptyLogBuffer = ''
-          }, 500)
+          }, 1000)
         }
       })
 
@@ -182,7 +188,7 @@ export class AgentService extends EventEmitter {
         // Wait for PTY to initialize
         setTimeout(() => {
           for (const msg of agent.messageQueue) {
-            ptySession.write(msg + '\n')
+            ptySession.write(msg + '\r')
             this.emitLog(taskId, 'text', `[YOU] ${msg}`)
           }
           agent.messageQueue = []
@@ -307,7 +313,8 @@ export class AgentService extends EventEmitter {
     if (!agent) return
 
     if (agent.ptySession) {
-      agent.ptySession.write(message + '\n')
+      // Use \r (carriage return) — terminal Enter key
+      agent.ptySession.write(message + '\r')
       this.emitLog(taskId, 'text', `[YOU] ${message}`)
     } else {
       // Phase 1 still running — queue message for Phase 2
@@ -316,13 +323,37 @@ export class AgentService extends EventEmitter {
     }
   }
 
+  // Buffer for capturing terminal direct input (keystroke → line)
+  private ptyInputBuffers = new Map<string, string>()
+
   /**
    * Write raw data to PTY (for xterm.js key input)
+   * Also captures user input for logging.
    */
   writePTY(taskId: string, data: string): void {
     const agent = this.agents.get(taskId)
     if (agent?.ptySession) {
       agent.ptySession.write(data)
+
+      // Capture keystrokes for logging
+      let buf = this.ptyInputBuffers.get(taskId) || ''
+      for (const ch of data) {
+        if (ch === '\r' || ch === '\n') {
+          // Enter pressed — log the accumulated line
+          if (buf.trim()) {
+            this.emitLog(taskId, 'text', `[YOU] ${buf.trim()}`)
+          }
+          buf = ''
+        } else if (ch === '\x7f' || ch === '\b') {
+          // Backspace
+          buf = buf.slice(0, -1)
+        } else if (ch >= ' ') {
+          // Printable character
+          buf += ch
+        }
+        // Ignore other control chars (arrows, etc.)
+      }
+      this.ptyInputBuffers.set(taskId, buf)
     }
   }
 
