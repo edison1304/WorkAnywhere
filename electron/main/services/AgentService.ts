@@ -134,9 +134,36 @@ export class AgentService extends EventEmitter {
       const ptySession = await conn.spawnPTY(fullCmd, `pty-${taskId}`)
       agent.ptySession = ptySession
 
-      // Forward PTY output to Terminal tab
+      // Forward PTY output to Terminal tab + capture for Log
+      let ptyLogBuffer = ''
+      let ptyLogTimer: ReturnType<typeof setTimeout> | null = null
+
       ptySession.onData((data) => {
         this.emit('pty:data', { taskId, data })
+
+        // Strip ANSI codes and accumulate for logging
+        const clean = data
+          .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')  // ANSI escape
+          .replace(/\x1b\][^\x07]*\x07/g, '')      // OSC sequences
+          .replace(/\r/g, '')                        // carriage return
+          .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '') // control chars
+
+        if (clean.trim()) {
+          ptyLogBuffer += clean
+          // Debounce: flush after 500ms of no data
+          if (ptyLogTimer) clearTimeout(ptyLogTimer)
+          ptyLogTimer = setTimeout(() => {
+            const text = ptyLogBuffer.trim()
+            if (text && text.length > 2) {
+              // Split into lines, skip empty, limit length
+              const lines = text.split('\n').filter(l => l.trim()).slice(-20)
+              if (lines.length > 0) {
+                this.emitLog(taskId, 'text', lines.join('\n').slice(0, 2000))
+              }
+            }
+            ptyLogBuffer = ''
+          }, 500)
+        }
       })
 
       ptySession.onClose(() => {
