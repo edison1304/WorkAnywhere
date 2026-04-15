@@ -88,6 +88,14 @@ export function MainPanel({
 }: Props) {
   const [activeTab, setActiveTab] = useState<'log' | 'terminal' | 'artifacts'>('terminal')
 
+  // All hooks MUST be before any conditional return (React hooks rule)
+  const drift = useMemo(
+    () => activeTask ? calcDrift(activeTask) : { level: 'ok' as const, score: 0, reason: '', elapsedMin: 0, logCount: 0, toolCalls: 0, estimatedTokensK: 0 },
+    [activeTask?.logs?.length, activeTask?.createdAt]
+  )
+  const [dragOver, setDragOver] = useState(false)
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null)
+
   // No task selected → show welcome / SSH connect / create flow
   if (!activeTask) {
     return (
@@ -134,13 +142,6 @@ export function MainPanel({
   const isIdle = activeTask.status === 'idle'
   const isReview = activeTask.status === 'review'
   const isDone = activeTask.status === 'completed' || activeTask.status === 'failed'
-
-  // ─── Session drift detection ───
-  const drift = useMemo(() => calcDrift(activeTask), [activeTask.logs.length, activeTask.createdAt])
-
-  // ─── Panel-wide drop zone + paste handler ───
-  const [dragOver, setDragOver] = useState(false)
-  const [uploadStatus, setUploadStatus] = useState<string | null>(null)
 
   const handlePanelUpload = async (file: File) => {
     if (!window.api || !workspacePath) return
