@@ -745,6 +745,50 @@ ipcMain.on('pty:resize', (_event, taskId: string, cols: number, rows: number) =>
   agentService?.resizePTY(taskId, cols, rows)
 })
 
+// ─── Shell terminal (server bash) ───
+const shellSessions = new Map<string, { write: (d: string) => void; resize: (c: number, r: number) => void; close: () => void }>()
+
+ipcMain.handle('shell:open', async (_event, projectId: string) => {
+  try {
+    const conn = await getConnForProject(projectId)
+    const shellId = `shell-${projectId}-${Date.now()}`
+    const project = dataStore.projectList().find(p => p.id === projectId)
+    const cwd = project?.workspacePath || '~'
+
+    const session = await conn.spawnPTY(`cd ${JSON.stringify(cwd)} && bash`, shellId)
+
+    session.onData((data) => broadcastToAll('shell:data', { shellId, data }))
+    session.onClose(() => {
+      shellSessions.delete(shellId)
+      broadcastToAll('shell:close', { shellId })
+    })
+
+    shellSessions.set(shellId, {
+      write: (d) => session.write(d),
+      resize: (c, r) => session.resize(c, r),
+      close: () => session.close(),
+    })
+
+    return { success: true, shellId }
+  } catch (err) {
+    return { success: false, error: String(err) }
+  }
+})
+
+ipcMain.on('shell:write', (_event, shellId: string, data: string) => {
+  shellSessions.get(shellId)?.write(data)
+})
+
+ipcMain.on('shell:resize', (_event, shellId: string, cols: number, rows: number) => {
+  shellSessions.get(shellId)?.resize(cols, rows)
+})
+
+ipcMain.handle('shell:close', async (_event, shellId: string) => {
+  shellSessions.get(shellId)?.close()
+  shellSessions.delete(shellId)
+  return { success: true }
+})
+
 // ─── Workspace management (legacy — data now in DataStore) ───
 ipcMain.handle('workspace:load', async () => {
   return { success: true, workspace: null }

@@ -218,6 +218,14 @@ export interface IpcApi {
   onPtyData(cb: (data: { taskId: string; data: string }) => void): () => void
   onPtyClose(cb: (data: { taskId: string }) => void): () => void
 
+  // Shell terminal (server bash, not claude)
+  shellOpen(projectId: string): Promise<{ success: boolean; shellId?: string; error?: string }>
+  shellWrite(shellId: string, data: string): void
+  shellResize(shellId: string, cols: number, rows: number): void
+  shellClose(shellId: string): Promise<{ success: boolean }>
+  onShellData(cb: (data: { shellId: string; data: string }) => void): () => void
+  onShellClose(cb: (data: { shellId: string }) => void): () => void
+
   // Workspace management
   workspaceLoad(): Promise<{ success: boolean; workspace?: unknown; error?: string }>
   workspaceSave(workspace: unknown): Promise<{ success: boolean; error?: string }>

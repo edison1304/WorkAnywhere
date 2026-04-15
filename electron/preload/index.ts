@@ -98,6 +98,22 @@ const api: IpcApi = {
     return () => ipcRenderer.removeListener('pty:close', handler)
   },
 
+  // Shell terminal
+  shellOpen: (projectId) => ipcRenderer.invoke('shell:open', projectId),
+  shellWrite: (shellId, data) => ipcRenderer.send('shell:write', shellId, data),
+  shellResize: (shellId, cols, rows) => ipcRenderer.send('shell:resize', shellId, cols, rows),
+  shellClose: (shellId) => ipcRenderer.invoke('shell:close', shellId),
+  onShellData: (cb) => {
+    const handler = (_event: unknown, data: { shellId: string; data: string }) => cb(data)
+    ipcRenderer.on('shell:data', handler)
+    return () => ipcRenderer.removeListener('shell:data', handler)
+  },
+  onShellClose: (cb) => {
+    const handler = (_event: unknown, data: { shellId: string }) => cb(data)
+    ipcRenderer.on('shell:close', handler)
+    return () => ipcRenderer.removeListener('shell:close', handler)
+  },
+
   // Workspace
   workspaceLoad: () => ipcRenderer.invoke('workspace:load'),
   workspaceSave: (workspace) => ipcRenderer.invoke('workspace:save', workspace),

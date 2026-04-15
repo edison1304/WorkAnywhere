@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import type { Task, Phase, ConnectionConfig, AppConfig, Artifact } from '../../../shared/types'
 import { SessionTerminal } from '../terminal/SessionTerminal'
+import { ShellTerminal } from '../terminal/ShellTerminal'
 import { FolderBrowser } from '../project/FolderBrowser'
 import { ArtifactViewer } from '../viewer/ArtifactViewer'
 import styles from './MainPanel.module.css'
@@ -389,7 +390,7 @@ export function MainPanel({
           <ChatView task={activeTask} />
         </div>
         <div style={{ display: activeTab === 'terminal' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
-          <SessionTerminal taskId={activeTask.id} />
+          <ShellTerminal projectId={activeTask.projectId} />
         </div>
         <div style={{ display: activeTab === 'artifacts' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
           <ArtifactsView task={activeTask} workspacePath={workspacePath} />
