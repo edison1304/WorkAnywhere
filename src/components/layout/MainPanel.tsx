@@ -263,10 +263,10 @@ export function MainPanel({
           {isWaiting && (
             <button className={styles.actionBtn} data-variant="primary">Send</button>
           )}
-          {(isRunning || isWaiting) && drift.level !== 'ok' && (
+          {(isRunning || isWaiting) && (
             <button
               className={styles.actionBtn}
-              data-variant="primary"
+              data-variant={drift.level !== 'ok' ? 'primary' : undefined}
               onClick={() => onRestartFresh?.(activeTask.id)}
               title="Summarize current progress, stop, and start a fresh session"
             >
