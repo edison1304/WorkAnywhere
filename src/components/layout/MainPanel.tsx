@@ -396,10 +396,10 @@ export function MainPanel({
         </div>
       </div>
 
-      {/* Chat input — always visible, send only when agent active */}
+      {/* Chat input — always enabled */}
       <ChatInput
         onSend={(msg) => onSendMessage?.(activeTask.id, msg)}
-        disabled={!isRunning && !isWaiting}
+        disabled={false}
         workspacePath={workspacePath}
       />
     </div>
