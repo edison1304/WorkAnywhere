@@ -323,29 +323,45 @@ export default function App() {
   const handleRestartFresh = useCallback(async (taskId: string) => {
     if (!window.api) return
     const task = tasks.find(t => t.id === taskId)
-    if (!task) return
+    if (!task) { console.error('[RestartFresh] Task not found:', taskId); return }
 
-    // 1. Summarize current progress
-    const sumResult = await window.api.taskSummarize(taskId)
-    const summaryText = sumResult.success && sumResult.summary
-      ? `Previous session summary:\n- Progress: ${sumResult.summary.progress}\n- Completed: ${sumResult.summary.completedSteps.join('; ')}\n- Issues: ${sumResult.summary.issues.join('; ')}\n\n`
-      : ''
+    console.log('[RestartFresh] Step 1: Summarizing...')
+    let summaryText = ''
+    try {
+      const sumResult = await window.api.taskSummarize(taskId)
+      console.log('[RestartFresh] Summarize result:', sumResult.success, sumResult.error)
+      if (sumResult.success && sumResult.summary) {
+        summaryText = `Previous session summary:\n- Progress: ${sumResult.summary.progress}\n- Completed: ${sumResult.summary.completedSteps.join('; ')}\n- Issues: ${sumResult.summary.issues.join('; ')}\n\n`
+      }
+    } catch (err) {
+      console.error('[RestartFresh] Summarize failed:', err)
+      // Continue without summary
+    }
 
-    // 2. Stop the current agent
-    await window.api.taskStop(taskId)
+    console.log('[RestartFresh] Step 2: Stopping agent...')
+    try {
+      await window.api.taskStop(taskId)
+    } catch (err) {
+      console.error('[RestartFresh] Stop failed:', err)
+    }
     setTasks(prev => prev.map(t =>
-      t.id === taskId ? { ...t, status: 'completed' as const, summary: sumResult.summary || t.summary } : t
+      t.id === taskId ? { ...t, status: 'completed' as const } : t
     ))
 
-    // 3. Create a fresh continuation task with summary as context
+    console.log('[RestartFresh] Step 3: Creating new task...')
     const newName = `${task.name} (continued)`
     const newPrompt = `${summaryText}Continue the following task from where the previous session left off:\n\n${task.prompt}`
-    const newTask = await window.api.taskCreate(task.phaseId, newName, task.purpose, newPrompt)
-    setTasks(prev => [...prev, newTask])
-    setActiveTaskId(newTask.id)
+    try {
+      const newTask = await window.api.taskCreate(task.phaseId, newName, task.purpose || '', newPrompt)
+      console.log('[RestartFresh] New task created:', newTask.id)
+      setTasks(prev => [...prev, newTask])
+      setActiveTaskId(newTask.id)
 
-    // 4. Auto-run the new task
-    setTimeout(() => handleRunAgent(newTask.id), 500)
+      console.log('[RestartFresh] Step 4: Running new task...')
+      setTimeout(() => handleRunAgent(newTask.id), 500)
+    } catch (err) {
+      console.error('[RestartFresh] Create/Run failed:', err)
+    }
   }, [tasks, handleRunAgent])
 
   const handleImportProject = useCallback(async (projectId: string) => {

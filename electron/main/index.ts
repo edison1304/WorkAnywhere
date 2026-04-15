@@ -468,13 +468,19 @@ ipcMain.handle('ssh:exec', async (_event, command: string, projectId?: string) =
 async function runClaudeOnProject(projectId: string, prompt: string): Promise<string> {
   const project = dataStore.projectList().find(p => p.id === projectId)
   if (!project) throw new Error('Project not found')
+  console.log(`[runClaude] projectId=${projectId}, workspacePath=${project.workspacePath}`)
   const conn = await connMgr.getConnection(project)
+  console.log(`[runClaude] connection obtained, isConnected=${conn.isConnected()}`)
   const engine = project.settings?.agentEngine || 'claude'
   const prefix = conn.getShellPrefix(engine)
   const claudeCmd = conn.getEngineCmd(engine, ['-p', JSON.stringify(prompt), '--output-format', 'text'])
   const cwd = project.workspacePath
   const fullCmd = `${prefix}cd ${JSON.stringify(cwd)} && ${claudeCmd}`
-  return conn.exec(`bash -lc ${JSON.stringify(fullCmd)}`)
+  const execCmd = `bash -lc ${JSON.stringify(fullCmd)}`
+  console.log(`[runClaude] exec cmd preview: ${execCmd.slice(0, 300)}...`)
+  const result = await conn.exec(execCmd)
+  console.log(`[runClaude] result length=${result.length}, preview: "${result.slice(0, 200)}"`)
+  return result
 }
 
 /** Write content to a file on a project's server */
@@ -489,11 +495,12 @@ async function writeFileOnProject(projectId: string, filePath: string, content: 
 
 // ─── Task Summary (via Claude CLI) ───
 ipcMain.handle('task:summarize', async (_event, taskId: string) => {
+  console.log(`[Summarize] taskId=${taskId}`)
   const task = dataStore.taskGet(taskId)
-  if (!task) return { success: false, error: 'Task not found' }
+  if (!task) { console.log('[Summarize] Task not found'); return { success: false, error: 'Task not found' } }
+  console.log(`[Summarize] task found, logs=${task.logs.length}, projectId=${task.projectId}`)
 
   try {
-    // Prepare condensed log text (last 200 entries, truncated)
     const logText = task.logs
       .slice(-200)
       .map(l => `[${l.type}] ${l.content}`)
@@ -523,9 +530,10 @@ Respond with ONLY a JSON object (no markdown, no backticks):
   "progress": "one-line overall progress summary"
 }`
 
+    console.log(`[Summarize] calling runClaudeOnProject, prompt length=${prompt.length}`)
     const rawOutput = await runClaudeOnProject(task.projectId, prompt)
+    console.log(`[Summarize] rawOutput length=${rawOutput.length}, preview: "${rawOutput.slice(0, 200)}"`)
 
-    // Parse JSON from output (strip any surrounding text)
     const jsonMatch = rawOutput.match(/\{[\s\S]*\}/)
     if (!jsonMatch) return { success: false, error: 'Failed to parse summary' }
 
