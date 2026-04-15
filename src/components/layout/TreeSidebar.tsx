@@ -320,7 +320,8 @@ function InlineAddProject({ onAdd }: { onAdd?: (name: string, path: string) => v
 // ─── Manage view ───
 function ManageView({
   phases, allTasks, activeProjectId, activePhaseId, activeTaskId,
-  collapsed, toggle, onSelectPhase, onSelectTask, onTaskContext, onPhaseDrop, dragOverPhase
+  collapsed, toggle, onSelectPhase, onSelectTask, onTaskContext, onPhaseDrop, dragOverPhase,
+  onCreatePhase, onCreateTask
 }: {
   phases: Phase[]; allTasks: Task[]
   activeProjectId: string | null; activePhaseId: string | null; activeTaskId: string | null
