@@ -693,11 +693,16 @@ ipcMain.handle('agent:resume', async (_event, taskId: string) => {
   if (!task.sessionId) return { success: false, error: 'No session ID to resume' }
   const project = dataStore.projectList().find(p => p.id === task.projectId)
   if (!project) return { success: false, error: 'Project not found' }
-  if (!agentService) return { success: false, error: 'Not connected' }
+
+  initAgentService()
+  try { await connMgr.getConnection(project) } catch (e) {
+    return { success: false, error: `Connection failed: ${e}` }
+  }
 
   dataStore.taskUpdate(taskId, { status: 'running' })
+  broadcastToAll('task:status', { taskId, status: 'running' })
   try {
-    await agentService.resumeSession(
+    await agentService!.resumeSession(
       taskId, task.projectId, task.phaseId,
       project.workspacePath, task.sessionId,
       project.settings.agentEngine || 'claude'
@@ -705,6 +710,10 @@ ipcMain.handle('agent:resume', async (_event, taskId: string) => {
     return { success: true }
   } catch (err) {
     dataStore.taskUpdate(taskId, { status: 'failed' })
+    broadcastToAll('task:status', { taskId, status: 'failed' })
+    const errLog = { id: `${taskId}-err-${Date.now()}`, taskId, timestamp: new Date().toISOString(), type: 'error' as const, content: String(err) }
+    dataStore.taskAddLog(taskId, errLog)
+    broadcastToAll('task:log', { taskId, log: errLog })
     return { success: false, error: String(err) }
   }
 })
@@ -805,34 +814,43 @@ ipcMain.handle('task:run', async (_event, taskId: string) => {
   if (!task) return { success: false, error: 'Task not found' }
   const project = dataStore.projectList().find(p => p.id === task.projectId)
   if (!project) return { success: false, error: 'Project not found' }
-  if (!agentService) return { success: false, error: 'Not connected' }
+
+  // Ensure agent service is ready
+  initAgentService()
+
+  // Auto-connect project if not connected
+  try {
+    await connMgr.getConnection(project)
+  } catch (connErr) {
+    const errMsg = `Connection failed: ${connErr}`
+    broadcastToAll('task:log', { taskId, log: { id: `${taskId}-err-${Date.now()}`, taskId, timestamp: new Date().toISOString(), type: 'error', content: errMsg } })
+    return { success: false, error: errMsg }
+  }
 
   dataStore.taskUpdate(taskId, { status: 'running' })
-  dataStore.taskAddLog(taskId, {
-    id: `${taskId}-start-${Date.now()}`,
-    taskId,
-    timestamp: new Date().toISOString(),
-    type: 'agent_start',
-    content: 'Agent started',
-  })
+  broadcastToAll('task:status', { taskId, status: 'running' })
+
+  const startLog = { id: `${taskId}-start-${Date.now()}`, taskId, timestamp: new Date().toISOString(), type: 'agent_start' as const, content: 'Agent started' }
+  dataStore.taskAddLog(taskId, startLog)
+  broadcastToAll('task:log', { taskId, log: startLog })
 
   try {
-    await agentService.startAgent(
+    await agentService!.startAgent(
       task.projectId, task.phaseId, taskId,
       project.workspacePath, task.prompt,
       project.settings.agentEngine || 'claude'
     )
     return { success: true }
   } catch (err) {
+    const errMsg = String(err)
     dataStore.taskUpdate(taskId, { status: 'failed' })
-    dataStore.taskAddLog(taskId, {
-      id: `${taskId}-err-${Date.now()}`,
-      taskId,
-      timestamp: new Date().toISOString(),
-      type: 'error',
-      content: String(err),
-    })
-    return { success: false, error: String(err) }
+    broadcastToAll('task:status', { taskId, status: 'failed' })
+
+    const errLog = { id: `${taskId}-err-${Date.now()}`, taskId, timestamp: new Date().toISOString(), type: 'error' as const, content: errMsg }
+    dataStore.taskAddLog(taskId, errLog)
+    broadcastToAll('task:log', { taskId, log: errLog })
+
+    return { success: false, error: errMsg }
   }
 })
 
