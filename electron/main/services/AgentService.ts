@@ -134,37 +134,13 @@ export class AgentService extends EventEmitter {
       const ptySession = await conn.spawnPTY(fullCmd, `pty-${taskId}`)
       agent.ptySession = ptySession
 
-      // Forward PTY output to Terminal tab + capture for Log
-      let ptyLogBuffer = ''
-      let ptyLogTimer: ReturnType<typeof setTimeout> | null = null
-
-      const flushPtyLog = () => {
-        if (ptyLogTimer) { clearTimeout(ptyLogTimer); ptyLogTimer = null }
-        const allLines = ptyLogBuffer.split('\n').map(l => l.trim())
-        console.log(`[FLUSH:${taskId}] buffer=${ptyLogBuffer.length}b, lines=${allLines.length}, sample: "${allLines.slice(0, 3).join(' | ')}"`)
-
-        const lines = allLines
-          .filter(l => l.length > 2)
-          .filter(l => !/^[─│┌┐└┘├┤┬┴┼━┃╔╗╚╝╠╣╦╩╬▶■●◌○·…\-=_+|]+$/.test(l))
-          .filter(l => !/^\d+[ms]?\s*$/.test(l))
-          .slice(-30)
-
-        console.log(`[FLUSH:${taskId}] after filter: ${lines.length} lines`)
-
-        if (lines.length > 0) {
-          this.emitLog(taskId, 'text', `[Claude] ${lines.join('\n').slice(0, 3000)}`)
-        }
-        ptyLogBuffer = ''
-      }
+      // Forward PTY output to Terminal tab + extract Claude responses for Log
+      let lastLoggedResponse = ''
 
       ptySession.onData((data) => {
         this.emit('pty:data', { taskId, data })
 
-        // DEBUG: log raw PTY data (hex for first 100 bytes)
-        const preview = data.slice(0, 200).replace(/\x1b/g, '\\e')
-        console.log(`[PTY:${taskId}] raw(${data.length}b): ${preview}`)
-
-        // Strip ANSI/terminal noise for logging
+        // Strip ANSI codes
         const clean = data
           .replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '')
           .replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, '')
@@ -174,24 +150,41 @@ export class AgentService extends EventEmitter {
           .replace(/\r/g, '\n')
           .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '')
 
-        console.log(`[PTY:${taskId}] clean(${clean.length}b): "${clean.slice(0, 200)}"`)
+        // Extract Claude responses: text after ● marker
+        const responseMatches = clean.match(/●([^●❯✶✻✢✽⏵]+)/g)
+        if (responseMatches) {
+          for (const match of responseMatches) {
+            const text = match
+              .replace(/^●\s*/, '')
+              // Remove TUI noise
+              .replace(/bypasspermissionson.*$/s, '')
+              .replace(/shift\+tabtocycle.*$/s, '')
+              .replace(/esctointerrupt.*$/s, '')
+              .replace(/RemoteControlactive.*$/s, '')
+              .replace(/Improvising….*$/s, '')
+              .replace(/Evaporating….*$/s, '')
+              .replace(/CodeinCLI.*$/s, '')
+              .replace(/◐.*$/s, '')
+              .replace(/⏵.*$/s, '')
+              .trim()
 
-        if (clean.trim()) {
-          ptyLogBuffer += clean
-
-          // Flush if buffer is large (don't wait for timer)
-          if (ptyLogBuffer.length > 500) {
-            console.log(`[PTY:${taskId}] flush(size): ${ptyLogBuffer.length}b`)
-            flushPtyLog()
-            return
+            // Deduplicate: skip if same as last logged response
+            if (text && text.length > 3 && text !== lastLoggedResponse) {
+              lastLoggedResponse = text
+              this.emitLog(taskId, 'text', `[Claude] ${text.slice(0, 2000)}`)
+            }
           }
+        }
 
-          // Debounce: flush after 2s of no data
-          if (ptyLogTimer) clearTimeout(ptyLogTimer)
-          ptyLogTimer = setTimeout(() => {
-            console.log(`[PTY:${taskId}] flush(timer): ${ptyLogBuffer.length}b`)
-            flushPtyLog()
-          }, 2000)
+        // Also detect user prompts echoed in terminal (❯ marker)
+        const promptMatch = clean.match(/❯\s*([^❯●✶\n]+)/)
+        if (promptMatch) {
+          const userText = promptMatch[1].trim()
+            .replace(/bypasspermissionson.*$/s, '')
+            .replace(/shift\+tabtocycle.*$/s, '')
+            .trim()
+          // Don't re-log if already logged from sendMessage/writePTY
+          // Just skip — user input is captured elsewhere
         }
       })
 
