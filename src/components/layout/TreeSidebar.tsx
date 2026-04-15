@@ -51,32 +51,34 @@ function TaskItemMonitor({ task, isActive, onSelect, onAcknowledge, onPin }: {
   onSelect: () => void; onAcknowledge: () => void; onPin: () => void
 }) {
   return (
-    <button
+    <div
       className={`${styles.treeItem} ${styles.taskLevel} ${isActive ? styles.active : ''}`}
       onClick={onSelect}
+      role="button"
+      tabIndex={0}
     >
       <StatusDot status={task.status} size={7} />
       <span className={styles.taskName}>{task.name}</span>
-      {/* Pin button */}
-      <button
+      <span
         className={`${styles.pinBtn} ${task.pinned ? styles.pinned : ''}`}
         onClick={e => { e.stopPropagation(); onPin() }}
         title={task.pinned ? 'Unpin' : 'Pin to monitor'}
+        role="button"
       >
         📌
-      </button>
-      {/* Ack button for completed */}
+      </span>
       {task.status === 'completed' && !task.acknowledgedAt && (
-        <button
+        <span
           className={styles.ackButton}
           onClick={e => { e.stopPropagation(); onAcknowledge() }}
           title="Mark as reviewed"
-        >✓</button>
+          role="button"
+        >✓</span>
       )}
       {task.status === 'failed' && !task.acknowledgedAt && (
         <span className={styles.unreadDot} />
       )}
-    </button>
+    </div>
   )
 }
 
