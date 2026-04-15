@@ -407,6 +407,29 @@ export function MainPanel({
   )
 }
 
+// Inline markdown → HTML for chat messages
+function renderMarkdownInline(text: string): string {
+  return text
+    // Code blocks
+    .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre class="chatCodeBlock"><code>$2</code></pre>')
+    // Inline code
+    .replace(/`([^`]+)`/g, '<code class="chatInlineCode">$1</code>')
+    // Bold + italic
+    .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+    // Bold
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    // Italic
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    // Headers (## → bold)
+    .replace(/^###?\s+(.+)$/gm, '<strong>$1</strong>')
+    // Bullet lists
+    .replace(/^[-•]\s+(.+)$/gm, '<span class="chatListItem">$1</span>')
+    // Numbered lists
+    .replace(/^\d+\.\s+(.+)$/gm, '<span class="chatListItem">$1</span>')
+    // Line breaks
+    .replace(/\n/g, '<br />')
+}
+
 function ChatView({ task }: { task: Task }) {
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -478,9 +501,14 @@ function ChatView({ task }: { task: Task }) {
                   {msg.role === 'user' ? 'You' : 'Claude'}
                   <span className={styles.chatSenderTime}>{msg.time}</span>
                 </div>
-                <div className={msg.role === 'user' ? styles.chatUserText : styles.chatAssistantText}>
-                  {msg.content}
-                </div>
+                {msg.role === 'user' ? (
+                  <div className={styles.chatUserText}>{msg.content}</div>
+                ) : (
+                  <div
+                    className={styles.chatAssistantText}
+                    dangerouslySetInnerHTML={{ __html: renderMarkdownInline(msg.content) }}
+                  />
+                )}
               </div>
             </div>
           </div>

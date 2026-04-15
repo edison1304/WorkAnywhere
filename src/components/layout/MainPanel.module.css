@@ -376,8 +376,38 @@
   font-size: 14px;
   line-height: 1.8;
   color: var(--text-primary);
-  white-space: pre-wrap;
   word-break: break-word;
+}
+.chatAssistantText strong { font-weight: 700; color: var(--text-primary); }
+.chatAssistantText em { font-style: italic; }
+.chatAssistantText :global(.chatCodeBlock) {
+  background: var(--bg-tertiary);
+  padding: 10px 14px;
+  border-radius: 6px;
+  margin: 8px 0;
+  overflow-x: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  display: block;
+}
+.chatAssistantText :global(.chatInlineCode) {
+  background: var(--bg-tertiary);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.9em;
+}
+.chatAssistantText :global(.chatListItem) {
+  display: block;
+  padding-left: 16px;
+  position: relative;
+}
+.chatAssistantText :global(.chatListItem)::before {
+  content: '•';
+  position: absolute;
+  left: 4px;
+  color: var(--text-muted);
 }
 
 /* Tool calls — inline, subtle */
