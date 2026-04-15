@@ -30,7 +30,7 @@ export interface ISession {
 export interface IConnectionService {
   getShellPrefix(engine?: string): string
   getEngineCmd(engine: string, extraArgs: string[]): string
-  spawnAgentStream(engine: string, workspacePath: string, prompt: string, sessionId: string): Promise<StreamHandle>
+  spawnAgentStream(engine: string, workspacePath: string, prompt: string, sessionId: string, resumeSessionId?: string): Promise<StreamHandle>
   spawnPTY(command: string, sessionId: string, cols?: number, rows?: number): Promise<ISession>
   exec(command: string, useLogin?: boolean): Promise<string>
   isConnected(): boolean

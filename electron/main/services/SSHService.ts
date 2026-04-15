@@ -192,11 +192,13 @@ export class SSHService extends EventEmitter {
   }
 
   // Spawn agent with structured output (claude stream-json or opencode json)
+  // resumeSessionId: if provided, resumes an existing conversation
   async spawnAgentStream(
     engine: string,
     workspacePath: string,
     prompt: string,
-    sessionId: string
+    sessionId: string,
+    resumeSessionId?: string
   ): Promise<{
     onEvent: (cb: (event: ClaudeStreamEvent) => void) => void
     onClose: (cb: (code: number) => void) => void
@@ -207,10 +209,11 @@ export class SSHService extends EventEmitter {
     return new Promise((resolve, reject) => {
       const prefix = this.getShellPrefix(engine)
       let agentCmd: string
+      const resumeArgs = resumeSessionId ? ['--resume', resumeSessionId] : []
       if (engine === 'opencode') {
-        agentCmd = this.getEngineCmd('opencode', ['-p', JSON.stringify(prompt), '-f', 'json'])
+        agentCmd = this.getEngineCmd('opencode', [...resumeArgs, '-p', JSON.stringify(prompt), '-f', 'json'])
       } else {
-        agentCmd = this.getEngineCmd('claude', ['-p', JSON.stringify(prompt), '--output-format', 'stream-json', '--verbose'])
+        agentCmd = this.getEngineCmd('claude', [...resumeArgs, '-p', JSON.stringify(prompt), '--output-format', 'stream-json', '--verbose'])
       }
       // Build command: setup prefix + cd + agent command
       // prefix already ends with " && " if non-empty, so just concatenate

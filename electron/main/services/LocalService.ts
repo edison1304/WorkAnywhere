@@ -155,18 +155,20 @@ export class LocalService extends EventEmitter {
     engine: string,
     workspacePath: string,
     prompt: string,
-    _sessionId: string
+    _sessionId: string,
+    resumeSessionId?: string
   ): Promise<{
     onEvent: (cb: (event: ClaudeStreamEvent) => void) => void
     onClose: (cb: (code: number) => void) => void
     kill: () => void
   }> {
     const prefix = this.getShellPrefix(engine)
+    const resumeArgs = resumeSessionId ? ['--resume', resumeSessionId] : []
     let agentCmd: string
     if (engine === 'opencode') {
-      agentCmd = this.getEngineCmd('opencode', ['-p', JSON.stringify(prompt), '-f', 'json'])
+      agentCmd = this.getEngineCmd('opencode', [...resumeArgs, '-p', JSON.stringify(prompt), '-f', 'json'])
     } else {
-      agentCmd = this.getEngineCmd('claude', ['-p', JSON.stringify(prompt), '--output-format', 'stream-json', '--verbose'])
+      agentCmd = this.getEngineCmd('claude', [...resumeArgs, '-p', JSON.stringify(prompt), '--output-format', 'stream-json', '--verbose'])
     }
     const wslPath = this.toWslPath(workspacePath)
     const innerCmd = `${prefix}cd ${JSON.stringify(wslPath)} && ${agentCmd}`

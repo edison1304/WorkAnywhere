@@ -134,58 +134,11 @@ export class AgentService extends EventEmitter {
       const ptySession = await conn.spawnPTY(fullCmd, `pty-${taskId}`)
       agent.ptySession = ptySession
 
-      // Forward PTY output to Terminal tab + extract Claude responses for Log
-      let lastLoggedResponse = ''
-
+      // Forward PTY output to Terminal tab only
+      // (Claude responses are captured via stream-json in sendViaStreamJson,
+      //  not from PTY output which is full of TUI noise)
       ptySession.onData((data) => {
         this.emit('pty:data', { taskId, data })
-
-        // Strip ANSI codes
-        const clean = data
-          .replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '')
-          .replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, '')
-          .replace(/\x1b[()][0-9A-B]/g, '')
-          .replace(/\x1b[>=<]/g, '')
-          .replace(/\r\n/g, '\n')
-          .replace(/\r/g, '\n')
-          .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '')
-
-        // Extract Claude responses: text after ● marker
-        const responseMatches = clean.match(/●([^●❯✶✻✢✽⏵]+)/g)
-        if (responseMatches) {
-          for (const match of responseMatches) {
-            const text = match
-              .replace(/^●\s*/, '')
-              // Remove TUI noise
-              .replace(/bypasspermissionson.*$/s, '')
-              .replace(/shift\+tabtocycle.*$/s, '')
-              .replace(/esctointerrupt.*$/s, '')
-              .replace(/RemoteControlactive.*$/s, '')
-              .replace(/Improvising….*$/s, '')
-              .replace(/Evaporating….*$/s, '')
-              .replace(/CodeinCLI.*$/s, '')
-              .replace(/◐.*$/s, '')
-              .replace(/⏵.*$/s, '')
-              .trim()
-
-            // Deduplicate: skip if same as last logged response
-            if (text && text.length > 3 && text !== lastLoggedResponse) {
-              lastLoggedResponse = text
-              this.emitLog(taskId, 'text', `[Claude] ${text.slice(0, 2000)}`)
-            }
-          }
-        }
-
-        // Also detect user prompts echoed in terminal (❯ marker)
-        const promptMatch = clean.match(/❯\s*([^❯●✶\n]+)/)
-        if (promptMatch) {
-          const userText = promptMatch[1].trim()
-            .replace(/bypasspermissionson.*$/s, '')
-            .replace(/shift\+tabtocycle.*$/s, '')
-            .trim()
-          // Don't re-log if already logged from sendMessage/writePTY
-          // Just skip — user input is captured elsewhere
-        }
       })
 
       ptySession.onClose(() => {
@@ -322,22 +275,66 @@ export class AgentService extends EventEmitter {
 
   /**
    * Send a follow-up message to a running agent.
-   * If still in Phase 1, queues the message.
+   * Uses stream-json (--resume + -p) for clean structured response.
+   * Falls back to PTY write if no sessionId.
    */
   sendMessage(taskId: string, message: string): void {
     const agent = this.agents.get(taskId)
     if (!agent) return
 
-    if (agent.ptySession) {
-      console.log(`[SEND:${taskId}] "${message}" → ptySession exists: ${!!agent.ptySession}`)
-      // Send message + Enter to PTY
-      agent.ptySession.write(message + '\r')
-      console.log(`[SEND:${taskId}] wrote "${message}\\r" to PTY`)
-      this.emitLog(taskId, 'text', `[YOU] ${message}`)
-    } else {
-      // Phase 1 still running — queue message for Phase 2
+    if (!agent.ptySession && !agent.streamHandle) {
       agent.messageQueue.push(message)
-      this.emitLog(taskId, 'text', `[QUEUED] ${message} (waiting for initial prompt to complete)`)
+      this.emitLog(taskId, 'text', `[QUEUED] ${message}`)
+      return
+    }
+
+    this.emitLog(taskId, 'text', `[YOU] ${message}`)
+
+    // Prefer stream-json for clean response logging
+    if (agent.claudeSessionId) {
+      this.sendViaStreamJson(taskId, agent, message)
+    } else if (agent.ptySession) {
+      // Fallback: write directly to PTY
+      agent.ptySession.write(message + '\r')
+    }
+  }
+
+  /**
+   * Send message via stream-json (--resume --sessionId -p "msg")
+   * Gets structured response → clean log entries.
+   */
+  private async sendViaStreamJson(taskId: string, agent: AgentInstance, message: string): Promise<void> {
+    try {
+      const conn = agent.conn
+      const project = this.getProject(agent.projectId)
+      const workspacePath = project?.workspacePath || '~'
+
+      const stream = await conn.spawnAgentStream(
+        agent.engine,
+        workspacePath,
+        message,
+        `msg-${taskId}-${Date.now()}`,
+        agent.claudeSessionId || undefined  // resume existing conversation
+      )
+
+      stream.onEvent((event) => {
+        // Capture session_id update if changed
+        if (event.session_id && event.session_id !== agent.claudeSessionId) {
+          agent.claudeSessionId = event.session_id
+          this.emit('task:sessionId', { taskId, sessionId: event.session_id })
+        }
+        this.handleStreamEvent(taskId, agent, event)
+      })
+
+      stream.onClose((_code) => {
+        // Stream finished — response fully captured in logs
+      })
+    } catch (err) {
+      this.emitLog(taskId, 'error', `Failed to send message: ${err}`)
+      // Fallback to PTY
+      if (agent.ptySession) {
+        agent.ptySession.write(message + '\r')
+      }
     }
   }
 
