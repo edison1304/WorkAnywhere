@@ -416,35 +416,33 @@ function ChatView({ task }: { task: Task }) {
   if (task.logs.length === 0) {
     return (
       <div className={styles.emptyContent}>
-        <p>Click "Run Agent" to start a conversation.</p>
+        <p>Click "Run Agent" to start.</p>
       </div>
     )
   }
 
-  // Group consecutive logs by role for chat bubbles
-  const messages: Array<{ role: 'user' | 'assistant' | 'system' | 'tool'; content: string; time: string; tool?: string }> = []
+  // Group consecutive logs by role
+  type Msg = { role: 'user' | 'assistant' | 'system' | 'tool'; content: string; time: string; tool?: string }
+  const messages: Msg[] = []
 
   for (const log of task.logs) {
     const time = new Date(log.timestamp).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
 
-    if (log.content.startsWith('[YOU] ')) {
-      messages.push({ role: 'user', content: log.content.slice(6), time })
-    } else if (log.content.startsWith('[QUEUED] ')) {
-      messages.push({ role: 'user', content: log.content.slice(9), time })
+    if (log.content.startsWith('[YOU] ') || log.content.startsWith('[QUEUED] ')) {
+      const text = log.content.replace(/^\[(YOU|QUEUED)\]\s*/, '')
+      messages.push({ role: 'user', content: text, time })
     } else if (log.type === 'tool_call') {
-      // Compact tool call
       const last = messages[messages.length - 1]
       if (last?.role === 'tool') {
-        last.content += `\n${log.meta?.tool || 'tool'}: ${log.content.slice(0, 100)}`
+        last.content += `\n${log.meta?.tool || 'tool'}: ${log.content.slice(0, 120)}`
       } else {
-        messages.push({ role: 'tool', content: `${log.meta?.tool || 'tool'}: ${log.content.slice(0, 100)}`, time, tool: log.meta?.tool })
+        messages.push({ role: 'tool', content: `${log.meta?.tool || 'tool'}: ${log.content.slice(0, 120)}`, time, tool: log.meta?.tool })
       }
     } else if (log.type === 'agent_start' || log.type === 'agent_end') {
       messages.push({ role: 'system', content: log.content, time })
     } else if (log.type === 'error') {
-      messages.push({ role: 'system', content: `Error: ${log.content}`, time })
+      messages.push({ role: 'system', content: log.content, time })
     } else if (log.type === 'text') {
-      // Assistant response — merge consecutive
       const last = messages[messages.length - 1]
       if (last?.role === 'assistant') {
         last.content += '\n' + log.content
@@ -456,31 +454,44 @@ function ChatView({ task }: { task: Task }) {
 
   return (
     <div className={styles.chatMessages}>
-      {messages.map((msg, i) => (
-        <div key={i} className={styles.chatBubbleWrap} data-role={msg.role}>
-          {msg.role === 'system' ? (
-            <div className={styles.chatSystem}>
-              <span>{msg.content}</span>
-              <span className={styles.chatTime}>{msg.time}</span>
+      {messages.map((msg, i) => {
+        if (msg.role === 'system') {
+          return <div key={i} className={styles.chatSystemRow}>{msg.content}</div>
+        }
+        if (msg.role === 'tool') {
+          return (
+            <div key={i} className={styles.chatToolRow}>
+              <span className={styles.chatToolLabel}>{msg.tool || 'tool'}</span>
+              <span className={styles.chatToolDetail}>{msg.content}</span>
             </div>
-          ) : msg.role === 'tool' ? (
-            <div className={styles.chatTool}>
-              <span className={styles.chatToolIcon}>{'>'}_</span>
-              <pre className={styles.chatToolContent}>{msg.content}</pre>
+          )
+        }
+        return (
+          <div key={i} className={styles.chatBlock} data-role={msg.role}>
+            <div className={styles.chatUserRow}>
+              <div className={styles.chatAvatar} data-role={msg.role}>
+                {msg.role === 'user' ? 'Y' : 'C'}
+              </div>
+              <div className={styles.chatMsgBody}>
+                <div className={styles.chatSender}>
+                  {msg.role === 'user' ? 'You' : 'Claude'}
+                  <span className={styles.chatSenderTime}>{msg.time}</span>
+                </div>
+                <div className={msg.role === 'user' ? styles.chatUserText : styles.chatAssistantText}>
+                  {msg.content}
+                </div>
+              </div>
             </div>
-          ) : (
-            <div className={styles.chatBubble} data-role={msg.role}>
-              <div className={styles.chatBubbleContent}>{msg.content}</div>
-              <span className={styles.chatTime}>{msg.time}</span>
-            </div>
-          )}
-        </div>
-      ))}
+          </div>
+        )
+      })}
       {task.status === 'running' && (
-        <div className={styles.chatBubbleWrap} data-role="assistant">
-          <div className={styles.chatBubble} data-role="assistant">
-            <div className={styles.chatTyping}>
-              <span /><span /><span />
+        <div className={styles.chatBlock} data-role="assistant">
+          <div className={styles.chatUserRow}>
+            <div className={styles.chatAvatar} data-role="assistant">C</div>
+            <div className={styles.chatMsgBody}>
+              <div className={styles.chatSender}>Claude</div>
+              <div className={styles.chatTyping}><span /><span /><span /></div>
             </div>
           </div>
         </div>

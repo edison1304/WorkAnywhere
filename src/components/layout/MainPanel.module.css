@@ -302,90 +302,124 @@
   font-size: 13px;
 }
 
-/* Chat view */
+/* Chat view — ChatGPT style: clean, report-like */
 .chatMessages {
-  padding: 16px 20px;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
   overflow-y: auto;
   flex: 1;
 }
 
-.chatBubbleWrap {
-  display: flex;
+.chatBlock {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-subtle);
 }
-.chatBubbleWrap[data-role="user"] { justify-content: flex-end; }
-.chatBubbleWrap[data-role="assistant"] { justify-content: flex-start; }
-.chatBubbleWrap[data-role="system"] { justify-content: center; }
-.chatBubbleWrap[data-role="tool"] { justify-content: flex-start; }
+.chatBlock[data-role="user"] {
+  background: var(--bg-secondary);
+}
+.chatBlock[data-role="assistant"] {
+  background: var(--bg-primary);
+}
 
-.chatBubble {
-  max-width: 75%;
-  padding: 10px 14px;
-  border-radius: 16px;
-  font-size: 13px;
-  line-height: 1.6;
-  word-break: break-word;
+/* User message — compact, right-labeled */
+.chatUserRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
 }
-.chatBubble[data-role="user"] {
+.chatAvatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.chatAvatar[data-role="user"] {
   background: var(--accent);
   color: white;
-  border-bottom-right-radius: 4px;
 }
-.chatBubble[data-role="assistant"] {
-  background: var(--bg-tertiary);
+.chatAvatar[data-role="assistant"] {
+  background: var(--success);
+  color: #000;
+}
+.chatMsgBody {
+  flex: 1;
+  min-width: 0;
+}
+.chatSender {
+  font-size: 12px;
+  font-weight: 600;
   color: var(--text-primary);
-  border-bottom-left-radius: 4px;
-}
-
-.chatBubbleContent {
-  white-space: pre-wrap;
-}
-
-.chatTime {
-  font-size: 10px;
-  color: var(--text-muted);
-  margin-top: 4px;
-  display: block;
-}
-.chatBubble[data-role="user"] .chatTime { color: rgba(255,255,255,0.6); text-align: right; }
-
-.chatSystem {
+  margin-bottom: 4px;
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 11px;
+}
+.chatSenderTime {
+  font-size: 10px;
+  font-weight: 400;
   color: var(--text-muted);
-  padding: 4px 12px;
-  background: var(--bg-secondary);
-  border-radius: 12px;
+}
+.chatUserText {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-primary);
 }
 
-.chatTool {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  max-width: 80%;
-  padding: 6px 10px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  font-size: 11px;
-}
-.chatToolIcon {
-  color: var(--info);
-  font-weight: 700;
-  font-family: 'JetBrains Mono', monospace;
-  flex-shrink: 0;
-}
-.chatToolContent {
-  margin: 0;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  color: var(--text-secondary);
+/* Assistant response — report-like typography */
+.chatAssistantText {
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--text-primary);
   white-space: pre-wrap;
-  word-break: break-all;
+  word-break: break-word;
+}
+
+/* Tool calls — inline, subtle */
+.chatToolRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 24px;
+  font-size: 11px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-primary);
+}
+.chatToolLabel {
+  color: var(--info);
+  font-weight: 600;
+  font-family: 'JetBrains Mono', monospace;
+}
+.chatToolDetail {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* System messages — minimal divider */
+.chatSystemRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 24px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.chatSystemRow::before,
+.chatSystemRow::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-subtle);
 }
 
 /* Typing indicator */
