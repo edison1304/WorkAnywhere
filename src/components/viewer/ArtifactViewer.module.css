@@ -1,0 +1,299 @@
+/* ─── Shared ─── */
+.viewerLoading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 100%;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--accent);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.viewerError {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 100%;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.viewerErrorIcon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--error);
+  border-radius: 50%;
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.viewerErrorPath {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* ─── Code Viewer ─── */
+.codeViewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.codeHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.codeLang {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.codeLines {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.codeBody {
+  flex: 1;
+  overflow: auto;
+}
+
+.codePre {
+  margin: 0;
+  padding: 8px 0;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  tab-size: 4;
+}
+
+.codeLine {
+  display: flex;
+  padding: 0 12px;
+}
+.codeLine:hover {
+  background: var(--bg-hover);
+}
+
+.lineNum {
+  display: inline-block;
+  width: 48px;
+  flex-shrink: 0;
+  text-align: right;
+  padding-right: 16px;
+  color: var(--text-muted);
+  user-select: none;
+  opacity: 0.5;
+}
+
+.lineContent {
+  flex: 1;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+/* ─── Markdown Viewer ─── */
+.markdownViewer {
+  height: 100%;
+  overflow: auto;
+}
+
+.markdownBody {
+  padding: 24px 32px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text-primary);
+  max-width: 800px;
+}
+
+.markdownBody h1 {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 24px 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.markdownBody h2 {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 20px 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.markdownBody h3 { font-size: 16px; font-weight: 600; margin: 16px 0 8px; }
+.markdownBody h4 { font-size: 14px; font-weight: 600; margin: 12px 0 6px; }
+.markdownBody h5, .markdownBody h6 { font-size: 13px; font-weight: 600; margin: 10px 0 4px; color: var(--text-secondary); }
+
+.markdownBody p { margin: 8px 0; }
+.markdownBody strong { font-weight: 700; }
+.markdownBody em { font-style: italic; }
+.markdownBody del { text-decoration: line-through; color: var(--text-muted); }
+
+.markdownBody a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.markdownBody a:hover { text-decoration: underline; }
+
+.markdownBody blockquote {
+  margin: 8px 0;
+  padding: 8px 16px;
+  border-left: 3px solid var(--accent);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border-radius: 0 4px 4px 0;
+}
+
+.markdownBody ul, .markdownBody ol {
+  margin: 8px 0;
+  padding-left: 24px;
+}
+.markdownBody li { margin: 4px 0; }
+
+.markdownBody hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 16px 0;
+}
+
+.markdownBody :global(.md-code-block) {
+  background: var(--bg-tertiary);
+  padding: 12px 16px;
+  border-radius: 6px;
+  margin: 12px 0;
+  overflow-x: auto;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.markdownBody :global(.md-inline-code) {
+  background: var(--bg-tertiary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.9em;
+}
+
+/* ─── Image Viewer ─── */
+.imageViewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.imageToolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.imageToolbar button {
+  padding: 2px 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.imageToolbar button:hover {
+  border-color: var(--accent);
+}
+
+.imageContainer {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  background: repeating-conic-gradient(var(--bg-tertiary) 0% 25%, var(--bg-secondary) 0% 50%) 50% / 20px 20px;
+}
+
+.imageContent {
+  max-width: 100%;
+  transition: transform 0.15s;
+}
+
+/* ─── PDF Viewer ─── */
+.pdfViewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.pdfHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.pdfDownload {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 12px;
+}
+.pdfDownload:hover { text-decoration: underline; }
+
+.pdfObject {
+  flex: 1;
+  width: 100%;
+  border: none;
+}
+
+.pdfFallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  height: 100%;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+.pdfFallback a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.pdfFallback a:hover { text-decoration: underline; }

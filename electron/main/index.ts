@@ -2,9 +2,8 @@ import { app, BrowserWindow, ipcMain, Notification, screen } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { is } from '@electron-toolkit/utils'
-import { SSHService } from './services/SSHService'
-import { WorkspaceManager } from './services/WorkspaceManager'
 import { AgentService } from './services/AgentService'
+import { ConnectionManager } from './services/ConnectionManager'
 import { DataStore } from './services/DataStore'
 
 let mainWindow: BrowserWindow | null = null
@@ -157,6 +156,13 @@ ipcMain.on('state:sync', (_event, data) => {
   broadcastToAll('state:sync', data)
 })
 
+// Set window title dynamically
+ipcMain.on('window:set-title', (_event, title: string) => {
+  if (mainWindow) {
+    mainWindow.setTitle(title)
+  }
+})
+
 // Focus main window (called from detached windows)
 ipcMain.handle('window:focus-main', async () => {
   if (mainWindow) {
@@ -194,83 +200,225 @@ ipcMain.handle('notify:send', async (_event, options: {
   return { success: true }
 })
 
-// ─── SSH + Agent Services ───
-let sshService: SSHService | null = null
-let workspaceManager: WorkspaceManager | null = null
+// ─── Connection + Agent Services ───
+const connMgr = new ConnectionManager()
 let agentService: AgentService | null = null
 
-// SSH connection
-ipcMain.handle('ssh:connect', async (_event, config: import('../../../shared/types').ConnectionConfig, appConfig?: import('../../../shared/types').AppConfig) => {
-  try {
-    sshService = new SSHService()
+// Forward ConnectionManager reconnection events to renderer
+connMgr.on('connection:lost', (data) => broadcastToAll('connection:status', { ...data, status: 'lost' }))
+connMgr.on('connection:reconnecting', (data) => broadcastToAll('connection:status', { ...data, status: 'reconnecting' }))
+connMgr.on('connection:restored', (data) => broadcastToAll('connection:status', { ...data, status: 'restored' }))
+connMgr.on('connection:failed', (data) => broadcastToAll('connection:status', { ...data, status: 'failed' }))
 
-    // Apply claude/opencode config from app settings
-    if (appConfig) {
-      sshService.setClaudeConfig(appConfig)
-    } else {
-      // Fallback: read from file
-      const configPath = getConfigPath()
-      if (existsSync(configPath)) {
-        try {
-          sshService.setClaudeConfig(JSON.parse(readFileSync(configPath, 'utf-8')))
-        } catch { /* ignore */ }
+/** Helper: get connection for a project by ID (lazy connect) */
+async function getConnForProject(projectId: string) {
+  const project = dataStore.projectList().find(p => p.id === projectId)
+  if (!project) throw new Error('Project not found')
+  return connMgr.getConnection(project)
+}
+
+/** Helper: get any available connection (for browse/utility ops) */
+function getAnyConn() {
+  // Try __browse__ first, then any connected project
+  const browse = connMgr.getByProjectId('__browse__')
+  if (browse) return browse
+  const statuses = connMgr.getStatus()
+  if (statuses.length > 0) return connMgr.getByProjectId(statuses[0].projectId)
+  return null
+}
+
+/**
+ * Write task summary to phase context file on server.
+ * Other agents in the same phase will read this at startup.
+ */
+async function writePhaseContext(taskId: string): Promise<void> {
+  if (!dataStore) return
+  const task = dataStore.taskGet(taskId)
+  if (!task) return
+  const project = dataStore.projectList().find(p => p.id === task.projectId)
+  if (!project) return
+  const conn = connMgr.getExisting(project)
+  if (!conn) return
+
+  const contextPath = `${project.workspacePath}/.workanywhere/phase-${task.phaseId}-context.md`
+
+  // Build context entry from task
+  const artifactList = task.artifacts.length > 0
+    ? `  Artifacts: ${task.artifacts.map(a => `${a.action} ${a.filePath}`).join(', ')}`
+    : ''
+  const summaryText = task.summary
+    ? `  Summary: ${task.summary.progress}\n  Completed: ${task.summary.completedSteps.join('; ')}`
+    : ''
+  const lastLogs = task.logs
+    .filter(l => l.type !== 'agent_start' && l.type !== 'agent_end')
+    .slice(-5)
+    .map(l => `  [${l.type}] ${l.content.slice(0, 150)}`)
+    .join('\n')
+
+  const entry = [
+    `## Task: ${task.name}`,
+    `Purpose: ${task.purpose || 'N/A'}`,
+    `Status: ${task.status}`,
+    `Prompt: ${task.prompt.slice(0, 300)}`,
+    summaryText,
+    artifactList,
+    lastLogs ? `Recent activity:\n${lastLogs}` : '',
+    `---`,
+    '',
+  ].filter(Boolean).join('\n')
+
+  try {
+    // Ensure directory exists, then append
+    await conn.exec(`mkdir -p ${JSON.stringify(project.workspacePath + '/.workanywhere')}`)
+    // Write entry — replace if task already has a section, otherwise append
+    const escapedEntry = entry.replace(/'/g, "'\\''")
+    const markerStart = `## Task: ${task.name}`
+    // Remove old entry for this task if exists, then append new
+    await conn.exec(
+      `sed -i '/^## Task: ${task.name.replace(/[/\\&]/g, '\\$&')}$/,/^---$/d' ${JSON.stringify(contextPath)} 2>/dev/null; printf '%s\\n' '${escapedEntry}' >> ${JSON.stringify(contextPath)}`
+    )
+  } catch { /* best-effort */ }
+}
+
+function initAgentService(): AgentService {
+  if (agentService) return agentService
+  agentService = new AgentService(connMgr, (pid) => dataStore.projectList().find(p => p.id === pid) || null)
+  setupAgentListeners(agentService)
+  return agentService
+}
+
+function setupAgentListeners(agent: AgentService): void {
+  agent.on('task:status', (data) => {
+    if (dataStore) {
+      const patch: Partial<import('../../../shared/types').Task> = { status: data.status }
+      if (data.status === 'completed' || data.status === 'failed' || data.status === 'review') {
+        patch.completedAt = new Date().toISOString()
+      }
+      dataStore.taskUpdate(data.taskId, patch)
+    }
+    broadcastToAll('task:status', data)
+    // Write phase context when task finishes
+    if (data.status === 'review' || data.status === 'completed') {
+      writePhaseContext(data.taskId).catch(() => {})
+    }
+    if (data.status === 'review' || data.status === 'completed' || data.status === 'failed') {
+      const emoji = data.status === 'review' ? '👀' : data.status === 'completed' ? '✅' : '❌'
+      if (Notification.isSupported()) {
+        const n = new Notification({
+          title: `${emoji} Task ${data.status === 'review' ? 'needs review' : data.status}`,
+          body: `Task ${data.taskId} — ${data.status}`,
+          urgency: data.status === 'failed' ? 'critical' : 'normal',
+        })
+        n.on('click', () => {
+          if (mainWindow) {
+            if (mainWindow.isMinimized()) mainWindow.restore()
+            mainWindow.focus()
+          }
+        })
+        n.show()
       }
     }
+  })
 
-    await sshService.connect(config)
+  agent.on('task:log', (data) => {
+    if (dataStore) {
+      dataStore.taskAddLog(data.taskId, data.log)
+    }
+    broadcastToAll('task:log', data)
+  })
+  agent.on('task:sessionId', (data) => {
+    if (dataStore) {
+      dataStore.taskUpdate(data.taskId, { sessionId: data.sessionId })
+    }
+  })
+  agent.on('task:artifact', (data: { taskId: string; artifact: import('../../../shared/types').Artifact }) => {
+    if (dataStore) {
+      dataStore.taskAddArtifact(data.taskId, data.artifact)
+    }
+    broadcastToAll('artifact:new', data)
+  })
+  agent.on('pty:data', (data) => broadcastToAll('pty:data', data))
+  agent.on('pty:close', (data) => broadcastToAll('pty:close', data))
+}
 
-    workspaceManager = new WorkspaceManager(sshService)
-    await workspaceManager.init()
+// ─── Project connection (per-project, lazy) ───
+ipcMain.handle('project:connect', async (_event, projectId: string, appConfig?: import('../../../shared/types').AppConfig) => {
+  try {
+    if (appConfig) connMgr.setAppConfig(appConfig)
+    const project = dataStore.projectList().find(p => p.id === projectId)
+    if (!project) return { success: false, error: 'Project not found' }
 
-    agentService = new AgentService(sshService, workspaceManager)
+    const conn = await connMgr.getConnection(project)
+    initAgentService()
 
-    // Forward agent events to all windows + persist to DataStore
-    agentService.on('task:status', (data) => {
-      if (dataStore) {
-        const patch: Partial<import('../../../shared/types').Task> = { status: data.status }
-        if (data.status === 'completed' || data.status === 'failed') {
-          patch.completedAt = new Date().toISOString()
-        }
-        dataStore.taskUpdate(data.taskId, patch)
-      }
-      broadcastToAll('task:status', data)
-      // Send desktop notification on completion/failure
-      if (data.status === 'completed' || data.status === 'failed') {
-        const emoji = data.status === 'completed' ? '✅' : '❌'
-        if (Notification.isSupported()) {
-          const n = new Notification({
-            title: `${emoji} Task ${data.status}`,
-            body: `Task ${data.taskId} has ${data.status}`,
-            urgency: data.status === 'failed' ? 'critical' : 'normal',
-          })
-          n.on('click', () => {
-            if (mainWindow) {
-              if (mainWindow.isMinimized()) mainWindow.restore()
-              mainWindow.focus()
-            }
-          })
-          n.show()
-        }
-      }
-    })
+    const claude = await conn.checkClaude()
+    return { success: true, claude }
+  } catch (err) {
+    return { success: false, error: String(err) }
+  }
+})
 
-    agentService.on('task:log', (data) => {
-      if (dataStore) {
-        dataStore.taskAddLog(data.taskId, data.log)
-      }
-      broadcastToAll('task:log', data)
-    })
-    agentService.on('task:sessionId', (data) => {
-      if (dataStore) {
-        dataStore.taskUpdate(data.taskId, { sessionId: data.sessionId })
-      }
-    })
-    agentService.on('pty:data', (data) => broadcastToAll('pty:data', data))
-    agentService.on('pty:close', (data) => broadcastToAll('pty:close', data))
+ipcMain.handle('project:disconnect', async (_event, projectId: string) => {
+  await connMgr.disconnect(projectId)
+  return { success: true }
+})
 
-    // Check claude availability
-    const claude = await sshService.checkClaude()
+// Legacy: global SSH connect (for initial project setup / browsing)
+ipcMain.handle('ssh:connect', async (_event, config: import('../../../shared/types').ConnectionConfig, appConfig?: import('../../../shared/types').AppConfig) => {
+  try {
+    if (appConfig) connMgr.setAppConfig(appConfig)
+    // Create a temporary "browse" project to hold this connection
+    const tempProject: import('../../../shared/types').Project = {
+      id: '__browse__',
+      name: 'Browse',
+      workspacePath: '~',
+      connection: config,
+      settings: { agentEngine: 'claude', autoArtifactScan: true },
+      createdAt: '', updatedAt: '',
+    }
+    const conn = await connMgr.getConnection(tempProject)
+    initAgentService()
+    const claude = await conn.checkClaude()
+    return { success: true, claude }
+  } catch (err) {
+    return { success: false, error: String(err) }
+  }
+})
 
+ipcMain.handle('local:connect', async (_event, appConfig?: import('../../../shared/types').AppConfig) => {
+  try {
+    if (appConfig) connMgr.setAppConfig(appConfig)
+    const tempProject: import('../../../shared/types').Project = {
+      id: '__browse__',
+      name: 'Browse',
+      workspacePath: '~',
+      connection: { type: 'local' },
+      settings: { agentEngine: 'claude', autoArtifactScan: true },
+      createdAt: '', updatedAt: '',
+    }
+    const conn = await connMgr.getConnection(tempProject)
+    initAgentService()
+    const claude = await conn.checkClaude()
+    return { success: true, claude }
+  } catch (err) {
+    return { success: false, error: String(err) }
+  }
+})
+
+ipcMain.handle('remote:connect', async (_event, remoteLink: string, appConfig?: import('../../../shared/types').AppConfig) => {
+  try {
+    if (appConfig) connMgr.setAppConfig(appConfig)
+    const tempProject: import('../../../shared/types').Project = {
+      id: '__browse__',
+      name: 'Remote',
+      workspacePath: '~',
+      connection: { type: 'remote', remote: { link: remoteLink } },
+      settings: { agentEngine: 'claude', autoArtifactScan: true },
+      createdAt: '', updatedAt: '',
+    }
+    const conn = await connMgr.getConnection(tempProject)
+    initAgentService()
+    const claude = await conn.checkClaude()
     return { success: true, claude }
   } catch (err) {
     return { success: false, error: String(err) }
@@ -279,31 +427,244 @@ ipcMain.handle('ssh:connect', async (_event, config: import('../../../shared/typ
 
 ipcMain.handle('ssh:disconnect', async () => {
   agentService?.removeAllListeners()
-  sshService?.disconnect()
-  sshService = null
-  workspaceManager = null
+  connMgr.disconnectAll()
   agentService = null
   return { success: true }
 })
 
 ipcMain.handle('ssh:status', async () => {
-  return { connected: sshService?.isConnected() || false }
+  const statuses = connMgr.getStatus()
+  return { connected: statuses.length > 0, statuses }
 })
 
-// Update engine config at runtime (without reconnecting)
+// Update engine config at runtime (applies to all connections)
 ipcMain.handle('ssh:update-engine-config', async (_event, appConfig: import('../../../shared/types').AppConfig) => {
-  if (sshService) {
-    sshService.setClaudeConfig(appConfig)
-    return { success: true }
-  }
-  return { success: false, error: 'Not connected' }
+  connMgr.setAppConfig(appConfig)
+  return { success: true }
 })
 
-ipcMain.handle('ssh:exec', async (_event, command: string) => {
-  if (!sshService) return { success: false, error: 'Not connected' }
+ipcMain.handle('ssh:exec', async (_event, command: string, projectId?: string) => {
   try {
-    const output = await sshService.exec(command)
+    let conn
+    if (projectId) {
+      conn = await getConnForProject(projectId)
+    } else {
+      // Fallback: use __browse__ or first available connection
+      conn = connMgr.getByProjectId('__browse__')
+      if (!conn) {
+        const statuses = connMgr.getStatus()
+        if (statuses.length > 0) conn = connMgr.getByProjectId(statuses[0].projectId)
+      }
+    }
+    if (!conn) return { success: false, error: 'Not connected' }
+    const output = await conn.exec(command)
     return { success: true, output }
+  } catch (err) {
+    return { success: false, error: String(err) }
+  }
+})
+
+/** Run a Claude prompt on a project's server and return raw output */
+async function runClaudeOnProject(projectId: string, prompt: string): Promise<string> {
+  const project = dataStore.projectList().find(p => p.id === projectId)
+  if (!project) throw new Error('Project not found')
+  const conn = await connMgr.getConnection(project)
+  const engine = project.settings?.agentEngine || 'claude'
+  const prefix = conn.getShellPrefix(engine)
+  const claudeCmd = conn.getEngineCmd(engine, ['-p', JSON.stringify(prompt), '--output-format', 'text'])
+  const cwd = project.workspacePath
+  const fullCmd = `${prefix}cd ${JSON.stringify(cwd)} && ${claudeCmd}`
+  return conn.exec(`bash -lc ${JSON.stringify(fullCmd)}`)
+}
+
+/** Write content to a file on a project's server */
+async function writeFileOnProject(projectId: string, filePath: string, content: string): Promise<void> {
+  const project = dataStore.projectList().find(p => p.id === projectId)
+  if (!project) return
+  const conn = connMgr.getExisting(project)
+  if (!conn) return
+  const dir = filePath.substring(0, filePath.lastIndexOf('/'))
+  await conn.exec(`mkdir -p ${JSON.stringify(dir)} && cat > ${JSON.stringify(filePath)} << 'WEOF'\n${content}\nWEOF`)
+}
+
+// ─── Task Summary (via Claude CLI) ───
+ipcMain.handle('task:summarize', async (_event, taskId: string) => {
+  const task = dataStore.taskGet(taskId)
+  if (!task) return { success: false, error: 'Task not found' }
+
+  try {
+    // Prepare condensed log text (last 200 entries, truncated)
+    const logText = task.logs
+      .slice(-200)
+      .map(l => `[${l.type}] ${l.content}`)
+      .join('\n')
+      .slice(0, 8000)
+
+    const artifactText = task.artifacts.length > 0
+      ? '\nArtifacts: ' + task.artifacts.map(a => `${a.action} ${a.filePath}`).join(', ')
+      : ''
+
+    const prompt = `You are a task progress analyzer. Given the following agent execution logs for a task, produce a JSON summary.
+
+Task name: ${task.name}
+Task prompt: ${task.prompt}
+Current status: ${task.status}
+
+Logs:
+${logText}
+${artifactText}
+
+Respond with ONLY a JSON object (no markdown, no backticks):
+{
+  "currentStep": "what is happening or just finished (1 sentence)",
+  "completedSteps": ["step 1 done", "step 2 done"],
+  "nextSteps": ["likely next step"],
+  "issues": ["any errors or problems found"],
+  "progress": "one-line overall progress summary"
+}`
+
+    const rawOutput = await runClaudeOnProject(task.projectId, prompt)
+
+    // Parse JSON from output (strip any surrounding text)
+    const jsonMatch = rawOutput.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) return { success: false, error: 'Failed to parse summary' }
+
+    const parsed = JSON.parse(jsonMatch[0])
+    const summary: import('../../../shared/types').TaskSummary = {
+      currentStep: String(parsed.currentStep || ''),
+      completedSteps: Array.isArray(parsed.completedSteps) ? parsed.completedSteps.map(String) : [],
+      nextSteps: Array.isArray(parsed.nextSteps) ? parsed.nextSteps.map(String) : [],
+      issues: Array.isArray(parsed.issues) ? parsed.issues.map(String) : [],
+      progress: String(parsed.progress || ''),
+      updatedAt: new Date().toISOString(),
+    }
+
+    // Persist summary + update phase context
+    dataStore.taskUpdate(taskId, { summary })
+    broadcastToAll('task:status', { taskId, status: task.status })
+    writePhaseContext(taskId).catch(() => {})
+
+    return { success: true, summary }
+  } catch (err) {
+    return { success: false, error: String(err) }
+  }
+})
+
+// ─── Phase Summary (compose from task summaries → cheap) ───
+ipcMain.handle('phase:summarize', async (_event, phaseId: string) => {
+  let phase: import('../../../shared/types').Phase | null = null
+  for (const p of dataStore.projectList()) {
+    const found = dataStore.phaseList(p.id).find(x => x.id === phaseId)
+    if (found) { phase = found; break }
+  }
+  if (!phase) return { success: false, error: 'Phase not found' }
+
+  const tasks = dataStore.taskList(phaseId)
+  if (tasks.length === 0) return { success: false, error: 'No tasks in phase' }
+
+  const project = dataStore.projectList().find(p => p.id === phase.projectId)
+  if (!project) return { success: false, error: 'Project not found' }
+
+  try {
+    const taskDescriptions = tasks.map(t => {
+      const desc = t.summary
+        ? `Progress: ${t.summary.progress}, Completed: ${t.summary.completedSteps.join('; ')}, Issues: ${t.summary.issues.join('; ')}`
+        : `Status: ${t.status}`
+      return `- ${t.name} [${t.status}]: Purpose: ${t.purpose || 'N/A'}. ${desc}`
+    }).join('\n')
+
+    const prompt = `You are a phase progress analyzer. Given the following tasks in a development phase, produce a JSON summary showing the local pipeline flow and current state.
+
+Phase: ${phase.name}
+Description: ${phase.description || 'N/A'}
+
+Tasks:
+${taskDescriptions}
+
+Respond with ONLY a JSON object (no markdown, no backticks):
+{
+  "pipeline": "step1 → step2 → step3 (show the logical flow of tasks, use → arrows)",
+  "currentState": "what is happening now in this phase (1 sentence)",
+  "completedWork": ["what has been done"],
+  "pendingWork": ["what still needs to be done"],
+  "issues": ["current problems or blockers"],
+  "dependencies": ["task A must finish before task B can start"]
+}`
+
+    const rawOutput = await runClaudeOnProject(project.id, prompt)
+    const jsonMatch = rawOutput.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) return { success: false, error: 'Failed to parse phase summary' }
+
+    const parsed = JSON.parse(jsonMatch[0])
+    const summary: import('../../../shared/types').PhaseSummary = {
+      pipeline: String(parsed.pipeline || ''),
+      currentState: String(parsed.currentState || ''),
+      completedWork: Array.isArray(parsed.completedWork) ? parsed.completedWork.map(String) : [],
+      pendingWork: Array.isArray(parsed.pendingWork) ? parsed.pendingWork.map(String) : [],
+      issues: Array.isArray(parsed.issues) ? parsed.issues.map(String) : [],
+      dependencies: Array.isArray(parsed.dependencies) ? parsed.dependencies.map(String) : [],
+      updatedAt: new Date().toISOString(),
+    }
+
+    dataStore.phaseUpdate(phaseId, { summary })
+    const summaryMd = `# Phase: ${phase.name}\nPipeline: ${summary.pipeline}\nCurrent: ${summary.currentState}\nCompleted: ${summary.completedWork.join('; ')}\nPending: ${summary.pendingWork.join('; ')}\nIssues: ${summary.issues.join('; ')}\nDependencies: ${summary.dependencies.join('; ')}`
+    writeFileOnProject(project.id, `${project.workspacePath}/.workanywhere/phase-${phaseId}-summary.md`, summaryMd).catch(() => {})
+
+    return { success: true, summary }
+  } catch (err) {
+    return { success: false, error: String(err) }
+  }
+})
+
+// ─── Project Summary (compose from phase summaries → cheapest) ───
+ipcMain.handle('project:summarize', async (_event, projectId: string) => {
+  const project = dataStore.projectList().find(p => p.id === projectId)
+  if (!project) return { success: false, error: 'Project not found' }
+
+  const phases = dataStore.phaseList(projectId)
+  if (phases.length === 0) return { success: false, error: 'No phases in project' }
+
+  try {
+    const phaseDescriptions = phases.map(ph => {
+      const tasks = dataStore.taskList(ph.id)
+      const stats = { total: tasks.length, done: tasks.filter(t => t.status === 'completed').length, review: tasks.filter(t => t.status === 'review').length, failed: tasks.filter(t => t.status === 'failed').length }
+      const sum = ph.summary ? `Pipeline: ${ph.summary.pipeline}, Current: ${ph.summary.currentState}` : `Status: ${ph.status}`
+      return `- ${ph.name} [${ph.status}] (${stats.done}/${stats.total} done, ${stats.review} review, ${stats.failed} failed): ${sum}`
+    }).join('\n')
+
+    const prompt = `You are a project progress analyzer. Given the following phases, produce a JSON summary of the overall project pipeline.
+
+Project: ${project.name}
+
+Phases:
+${phaseDescriptions}
+
+Respond with ONLY a JSON object (no markdown, no backticks):
+{
+  "pipeline": "phase1 → phase2 → phase3 (overall flow, use → arrows)",
+  "currentPhase": "which phase is active and what is happening",
+  "overallProgress": "one-line summary",
+  "blockers": ["any project-level blockers"]
+}`
+
+    const rawOutput = await runClaudeOnProject(projectId, prompt)
+    const jsonMatch = rawOutput.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) return { success: false, error: 'Failed to parse project summary' }
+
+    const parsed = JSON.parse(jsonMatch[0])
+    const summary: import('../../../shared/types').ProjectSummary = {
+      pipeline: String(parsed.pipeline || ''),
+      currentPhase: String(parsed.currentPhase || ''),
+      overallProgress: String(parsed.overallProgress || ''),
+      blockers: Array.isArray(parsed.blockers) ? parsed.blockers.map(String) : [],
+      updatedAt: new Date().toISOString(),
+    }
+
+    dataStore.projectUpdate(projectId, { summary })
+    const summaryMd = `# Project: ${project.name}\nPipeline: ${summary.pipeline}\nCurrent: ${summary.currentPhase}\nOverall: ${summary.overallProgress}\nBlockers: ${summary.blockers.join('; ')}`
+    writeFileOnProject(projectId, `${project.workspacePath}/.workanywhere/project-summary.md`, summaryMd).catch(() => {})
+
+    return { success: true, summary }
   } catch (err) {
     return { success: false, error: String(err) }
   }
@@ -322,6 +683,28 @@ ipcMain.handle('agent:start', async (_event, opts: {
     )
     return { success: true }
   } catch (err) {
+    return { success: false, error: String(err) }
+  }
+})
+
+ipcMain.handle('agent:resume', async (_event, taskId: string) => {
+  const task = dataStore.taskGet(taskId)
+  if (!task) return { success: false, error: 'Task not found' }
+  if (!task.sessionId) return { success: false, error: 'No session ID to resume' }
+  const project = dataStore.projectList().find(p => p.id === task.projectId)
+  if (!project) return { success: false, error: 'Project not found' }
+  if (!agentService) return { success: false, error: 'Not connected' }
+
+  dataStore.taskUpdate(taskId, { status: 'running' })
+  try {
+    await agentService.resumeSession(
+      taskId, task.projectId, task.phaseId,
+      project.workspacePath, task.sessionId,
+      project.settings.agentEngine || 'claude'
+    )
+    return { success: true }
+  } catch (err) {
+    dataStore.taskUpdate(taskId, { status: 'failed' })
     return { success: false, error: String(err) }
   }
 })
@@ -345,25 +728,13 @@ ipcMain.on('pty:resize', (_event, taskId: string, cols: number, rows: number) =>
   agentService?.resizePTY(taskId, cols, rows)
 })
 
-// ─── Workspace management ───
+// ─── Workspace management (legacy — data now in DataStore) ───
 ipcMain.handle('workspace:load', async () => {
-  if (!workspaceManager) return { success: false, error: 'Not connected' }
-  try {
-    const workspace = await workspaceManager.load()
-    return { success: true, workspace }
-  } catch (err) {
-    return { success: false, error: String(err) }
-  }
+  return { success: true, workspace: null }
 })
 
-ipcMain.handle('workspace:save', async (_event, workspace) => {
-  if (!workspaceManager) return { success: false, error: 'Not connected' }
-  try {
-    await workspaceManager.save(workspace)
-    return { success: true }
-  } catch (err) {
-    return { success: false, error: String(err) }
-  }
+ipcMain.handle('workspace:save', async () => {
+  return { success: true }
 })
 
 // ─── Local persistence ───
@@ -417,8 +788,8 @@ ipcMain.handle('task:list', async (_event, phaseId: string) => {
   return dataStore.taskList(phaseId)
 })
 
-ipcMain.handle('task:create', async (_event, phaseId: string, name: string, prompt: string) => {
-  return dataStore.taskCreate(phaseId, name, prompt)
+ipcMain.handle('task:create', async (_event, phaseId: string, name: string, purpose: string, prompt: string) => {
+  return dataStore.taskCreate(phaseId, name, purpose, prompt)
 })
 
 ipcMain.handle('task:update', async (_event, id: string, patch: Partial<import('../../../shared/types').Task>) => {
@@ -522,12 +893,119 @@ ipcMain.handle('config:save', async (_event, config: Record<string, unknown>) =>
   }
 })
 
+// ─── Session Descriptor export/import ───
+ipcMain.handle('descriptor:export', async (_event, projectId: string) => {
+  try {
+    const project = dataStore.projectList().find(p => p.id === projectId)
+    if (!project) return { success: false, error: 'Project not found' }
+
+    const phases = dataStore.phaseList(projectId)
+    const allTasks: import('../../../shared/types').Task[] = []
+    for (const ph of phases) {
+      allTasks.push(...dataStore.taskList(ph.id))
+    }
+
+    const descriptor: import('../../../shared/types').SessionDescriptor = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      exportedFrom: require('os').hostname(),
+      project: {
+        name: project.name,
+        workspacePath: project.workspacePath,
+        connection: project.connection,
+        settings: project.settings,
+      },
+      phases: phases.map(ph => ({
+        name: ph.name,
+        description: ph.description,
+        order: ph.order,
+        status: ph.status,
+      })),
+      tasks: allTasks.map(t => {
+        const phase = phases.find(ph => ph.id === t.phaseId)
+        return {
+          phaseName: phase?.name || '',
+          name: t.name,
+          purpose: t.purpose || '',
+          prompt: t.prompt,
+          status: t.status,
+          sessionId: t.sessionId,
+        }
+      }),
+    }
+    return { success: true, descriptor }
+  } catch (err) {
+    return { success: false, error: String(err) }
+  }
+})
+
+ipcMain.handle('descriptor:import', async (_event, descriptor: import('../../../shared/types').SessionDescriptor) => {
+  try {
+    // Create project
+    const project = dataStore.projectCreate({
+      name: descriptor.project.name,
+      workspacePath: descriptor.project.workspacePath,
+      connection: descriptor.project.connection,
+    })
+    dataStore.projectUpdate(project.id, { settings: descriptor.project.settings })
+
+    // Create phases
+    const phaseMap = new Map<string, string>() // phaseName → phaseId
+    for (const ph of descriptor.phases) {
+      const phase = dataStore.phaseCreate(project.id, ph.name, ph.description)
+      phaseMap.set(ph.name, phase.id)
+    }
+
+    // Create tasks
+    for (const t of descriptor.tasks) {
+      const phaseId = phaseMap.get(t.phaseName)
+      if (!phaseId) continue
+      const task = dataStore.taskCreate(phaseId, t.name, t.purpose || '', t.prompt)
+      if (t.sessionId) {
+        dataStore.taskUpdate(task.id, { sessionId: t.sessionId })
+      }
+    }
+
+    return { success: true, projectId: project.id }
+  } catch (err) {
+    return { success: false, error: String(err) }
+  }
+})
+
+// ─── Remote file read ───
+ipcMain.handle('ssh:read-file', async (_event, filePath: string) => {
+  const conn = getAnyConn()
+  if (!conn) return { success: false, error: 'Not connected' }
+  try {
+    // Check file size first (limit 2MB for text, 5MB for binary)
+    const statOut = await conn.exec(`stat -c '%s' ${JSON.stringify(filePath)} 2>/dev/null || echo '-1'`)
+    const fileSize = parseInt(statOut.trim(), 10)
+    if (fileSize < 0) return { success: false, error: 'File not found' }
+
+    const ext = filePath.split('.').pop()?.toLowerCase() || ''
+    const binaryExts = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg', 'pdf', 'ico']
+    const isBinary = binaryExts.includes(ext)
+
+    if (isBinary) {
+      if (fileSize > 5 * 1024 * 1024) return { success: false, error: 'File too large (>5MB)' }
+      const content = await conn.exec(`base64 ${JSON.stringify(filePath)}`)
+      return { success: true, content: content.replace(/\n/g, ''), encoding: 'base64' as const, size: fileSize }
+    } else {
+      if (fileSize > 2 * 1024 * 1024) return { success: false, error: 'File too large (>2MB)' }
+      const content = await conn.exec(`cat ${JSON.stringify(filePath)}`)
+      return { success: true, content, encoding: 'utf8' as const, size: fileSize }
+    }
+  } catch (err) {
+    return { success: false, error: String(err) }
+  }
+})
+
 // ─── Remote folder browser ───
 ipcMain.handle('ssh:list-dir', async (_event, dirPath: string) => {
-  if (!sshService?.isConnected()) return { success: false, error: 'Not connected' }
+  const conn = getAnyConn()
+  if (!conn) return { success: false, error: 'Not connected' }
   try {
-    // List directories and files with type indicators
-    const output = await sshService.exec(
+    const output = await conn.exec(
       `ls -1pa ${JSON.stringify(dirPath)} 2>/dev/null | head -100`
     )
     const entries = output.trim().split('\n').filter(Boolean).map(name => {
@@ -550,9 +1028,10 @@ ipcMain.handle('ssh:list-dir', async (_event, dirPath: string) => {
 })
 
 ipcMain.handle('ssh:mkdir', async (_event, dirPath: string) => {
-  if (!sshService?.isConnected()) return { success: false, error: 'Not connected' }
+  const conn = getAnyConn()
+  if (!conn) return { success: false, error: 'Not connected' }
   try {
-    await sshService.exec(`mkdir -p ${JSON.stringify(dirPath)}`)
+    await conn.exec(`mkdir -p ${JSON.stringify(dirPath)}`)
     return { success: true }
   } catch (err) {
     return { success: false, error: String(err) }
@@ -560,9 +1039,10 @@ ipcMain.handle('ssh:mkdir', async (_event, dirPath: string) => {
 })
 
 ipcMain.handle('ssh:home', async () => {
-  if (!sshService?.isConnected()) return { success: false, error: 'Not connected' }
+  const conn = getAnyConn()
+  if (!conn) return { success: false, error: 'Not connected' }
   try {
-    const home = (await sshService.exec('echo $HOME')).trim()
+    const home = (await conn.exec('echo $HOME')).trim()
     return { success: true, home }
   } catch (err) {
     return { success: false, error: String(err) }
@@ -575,11 +1055,22 @@ ipcMain.handle('ssh:upload-file', async (_event, opts: {
   data: number[]  // Buffer serialized as array
   workspacePath: string
 }) => {
-  if (!sshService?.isConnected()) return { success: false, error: 'Not connected' }
+  const conn = getAnyConn()
+  if (!conn) return { success: false, error: 'Not connected' }
   try {
     const remotePath = `${opts.workspacePath.replace(/\/$/, '')}/${opts.fileName}`
     const buf = Buffer.from(opts.data)
-    await sshService.uploadFile(buf, remotePath)
+    // Use base64 upload via exec (works for both SSH and local)
+    const b64 = buf.toString('base64')
+    await conn.exec(`mkdir -p "$(dirname ${JSON.stringify(remotePath)})"`)
+    // Split into chunks for large files
+    await conn.exec(`rm -f ${JSON.stringify(remotePath)}.b64tmp`)
+    const chunkSize = 60000
+    for (let i = 0; i < b64.length; i += chunkSize) {
+      const chunk = b64.slice(i, i + chunkSize)
+      await conn.exec(`printf '%s' ${JSON.stringify(chunk)} >> ${JSON.stringify(remotePath)}.b64tmp`)
+    }
+    await conn.exec(`base64 -d ${JSON.stringify(remotePath)}.b64tmp > ${JSON.stringify(remotePath)} && rm -f ${JSON.stringify(remotePath)}.b64tmp`)
     return { success: true, remotePath }
   } catch (err) {
     return { success: false, error: String(err) }

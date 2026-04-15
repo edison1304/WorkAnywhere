@@ -5,12 +5,21 @@ export interface Project {
   workspacePath: string
   connection: ConnectionConfig
   settings: ProjectSettings
+  summary?: ProjectSummary
   createdAt: string
   updatedAt: string
 }
 
+export interface ProjectSummary {
+  pipeline: string            // 전체 파이프라인 흐름 (e.g. "전처리 → 학습 → 평가")
+  currentPhase: string        // 현재 진행 중인 단계
+  overallProgress: string     // 전체 진행 요약
+  blockers: string[]          // 프로젝트 레벨 블로커
+  updatedAt: string
+}
+
 export interface ConnectionConfig {
-  type: 'local' | 'ssh'
+  type: 'local' | 'ssh' | 'remote'
   ssh?: {
     host: string
     port: number
@@ -18,6 +27,10 @@ export interface ConnectionConfig {
     authMethod: 'key' | 'password' | 'agent'
     keyPath?: string
     password?: string
+  }
+  remote?: {
+    link: string            // Claude Remote Control link/URL
+    label?: string          // 사용자 지정 라벨 (e.g. "GPU Server Main Claude")
   }
 }
 
@@ -52,7 +65,18 @@ export interface Phase {
   description?: string
   order: number
   status: PhaseStatus
+  summary?: PhaseSummary
   createdAt: string
+  updatedAt: string
+}
+
+export interface PhaseSummary {
+  pipeline: string            // 로컬 파이프라인 (e.g. "디버깅 → 오류수정 → 재검토")
+  currentState: string        // 현재 상태 요약
+  completedWork: string[]     // 완료된 작업들
+  pendingWork: string[]       // 남은 작업들
+  issues: string[]            // 현재 문제점
+  dependencies: string[]      // 태스크 간 의존성 (e.g. "A 완료 후 B 실행 가능")
   updatedAt: string
 }
 
@@ -64,11 +88,13 @@ export interface Task {
   phaseId: string
   projectId: string
   name: string
+  purpose: string             // 이 태스크의 본래 목적/목표
   status: TaskStatus
   sessionId?: string
   prompt: string
   logs: LogEntry[]
   artifacts: Artifact[]
+  summary?: TaskSummary       // Claude CLI로 생성된 요약
   acknowledgedAt?: string    // 사용자가 결과를 확인한 시각
   pinned?: boolean           // 핀 고정 — monitor에서 영구 표시
   createdAt: string
@@ -81,6 +107,7 @@ export type TaskStatus =
   | 'queued'      // 대기 중
   | 'running'     // 에이전트 실행 중
   | 'waiting'     // 사용자 입력 대기
+  | 'review'      // 완료 후 사용자 검토 필요
   | 'completed'   // 완료 (에이전트 종료, 로그 보존)
   | 'failed'      // 실패 (에이전트 종료, 로그 보존)
 
@@ -95,6 +122,16 @@ export interface LogEntry {
     tool?: string
     duration?: number
   }
+}
+
+// ─── Task Summary (Claude API 기반 요약) ───
+export interface TaskSummary {
+  currentStep: string         // 현재 진행 중인 단계
+  completedSteps: string[]    // 완료된 단계들
+  nextSteps: string[]         // 예상 다음 단계
+  issues: string[]            // 발견된 문제/에러
+  progress: string            // 전체 진행 요약 (한 줄)
+  updatedAt: string
 }
 
 // ─── Artifact ───
@@ -127,7 +164,7 @@ export interface IpcApi {
 
   // Task (소분류)
   taskList(phaseId: string): Promise<Task[]>
-  taskCreate(phaseId: string, name: string, prompt: string): Promise<Task>
+  taskCreate(phaseId: string, name: string, purpose: string, prompt: string): Promise<Task>
   taskUpdate(id: string, patch: Partial<Task>): Promise<Task | null>
   taskDelete(id: string): Promise<void>
   taskRun(taskId: string): Promise<{ success: boolean; error?: string }>
@@ -138,6 +175,7 @@ export interface IpcApi {
   onTaskStatus(cb: (data: { taskId: string; status: TaskStatus }) => void): () => void
   onTaskLog(cb: (data: { taskId: string; log: LogEntry }) => void): () => void
   onArtifactNew(cb: (data: { taskId: string; artifact: Artifact }) => void): () => void
+  onConnectionStatus(cb: (data: { key: string; status: 'lost' | 'reconnecting' | 'restored' | 'failed'; attempt?: number; maxRetries?: number; projectIds?: string[] }) => void): () => void
 
   // Window management (dual monitor)
   windowDetach(panelId: string, options: DetachOptions): Promise<{ success: boolean; reused?: boolean }>
@@ -155,8 +193,14 @@ export interface IpcApi {
   // Focus main window (from detached)
   focusMain(): Promise<{ success: boolean }>
 
-  // SSH connection
+  // Connection (per-project)
+  projectConnect(projectId: string, appConfig?: AppConfig): Promise<{ success: boolean; claude?: { available: boolean; version?: string }; error?: string }>
+  projectDisconnect(projectId: string): Promise<{ success: boolean }>
+
+  // Connection (legacy / browse mode)
+  localConnect(appConfig?: AppConfig): Promise<{ success: boolean; claude?: { available: boolean; version?: string }; error?: string }>
   sshConnect(config: ConnectionConfig, appConfig?: AppConfig): Promise<{ success: boolean; claude?: { available: boolean; version?: string }; error?: string }>
+  remoteConnect(remoteLink: string, appConfig?: AppConfig): Promise<{ success: boolean; claude?: { available: boolean; version?: string }; error?: string }>
   sshUpdateEngineConfig(appConfig: AppConfig): Promise<{ success: boolean }>
   sshDisconnect(): Promise<{ success: boolean }>
   sshStatus(): Promise<{ connected: boolean }>
@@ -165,12 +209,14 @@ export interface IpcApi {
   // Agent control
   agentStart(opts: { projectId: string; phaseId: string; taskId: string; workspacePath: string; prompt: string; engine?: AgentEngine }): Promise<{ success: boolean; error?: string }>
   agentStop(taskId: string): Promise<{ success: boolean }>
+  agentResume(taskId: string): Promise<{ success: boolean; error?: string }>
   agentSend(taskId: string, message: string): Promise<{ success: boolean }>
 
   // PTY I/O (for xterm.js)
   ptyWrite(taskId: string, data: string): void
   ptyResize(taskId: string, cols: number, rows: number): void
   onPtyData(cb: (data: { taskId: string; data: string }) => void): () => void
+  onPtyClose(cb: (data: { taskId: string }) => void): () => void
 
   // Workspace management
   workspaceLoad(): Promise<{ success: boolean; workspace?: unknown; error?: string }>
@@ -184,13 +230,26 @@ export interface IpcApi {
   dataLoad(): Promise<{ success: boolean; data: SavedData | null }>
   dataSave(data: SavedData): Promise<{ success: boolean }>
 
+  // Remote file read
+  sshReadFile(filePath: string): Promise<{ success: boolean; content?: string; encoding?: 'utf8' | 'base64'; size?: number; error?: string }>
+
   // Remote folder browser
   sshUploadFile(opts: { fileName: string; data: number[]; workspacePath: string }): Promise<{ success: boolean; remotePath?: string; error?: string }>
   sshListDir(path: string): Promise<{ success: boolean; entries?: DirEntry[]; currentPath?: string; error?: string }>
   sshMkdir(path: string): Promise<{ success: boolean; error?: string }>
   sshHome(): Promise<{ success: boolean; home?: string; error?: string }>
 
+  // Summarize (Claude CLI)
+  taskSummarize(taskId: string): Promise<{ success: boolean; summary?: TaskSummary; error?: string }>
+  phaseSummarize(phaseId: string): Promise<{ success: boolean; summary?: PhaseSummary; error?: string }>
+  projectSummarize(projectId: string): Promise<{ success: boolean; summary?: ProjectSummary; error?: string }>
+
+  // Session Descriptor
+  descriptorExport(projectId: string): Promise<{ success: boolean; descriptor?: SessionDescriptor; error?: string }>
+  descriptorImport(descriptor: SessionDescriptor): Promise<{ success: boolean; projectId?: string; error?: string }>
+
   // Window info
+  setWindowTitle(title: string): void
   getWindowHash(): string
 }
 
@@ -240,4 +299,31 @@ export interface CreateProjectInput {
   name: string
   workspacePath: string
   connection: ConnectionConfig
+}
+
+// ─── Session Descriptor (export/import) ───
+export interface SessionDescriptor {
+  version: 1
+  exportedAt: string
+  exportedFrom: string    // hostname
+  project: {
+    name: string
+    workspacePath: string
+    connection: ConnectionConfig
+    settings: ProjectSettings
+  }
+  phases: Array<{
+    name: string
+    description?: string
+    order: number
+    status: PhaseStatus
+  }>
+  tasks: Array<{
+    phaseName: string     // reference by name for portability
+    name: string
+    purpose: string
+    prompt: string
+    status: TaskStatus
+    sessionId?: string
+  }>
 }

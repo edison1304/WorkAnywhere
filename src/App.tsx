@@ -3,7 +3,7 @@ import { CommandCenter } from './components/layout/CommandCenter'
 import { DetachedMonitor } from './components/layout/DetachedMonitor'
 import { DetachedStatusRail } from './components/layout/DetachedStatusRail'
 import { SSHConnectDialog } from './components/project/SSHConnectDialog'
-import type { Project, Phase, Task, ConnectionConfig, LogEntry } from '../shared/types'
+import type { Project, Phase, Task, ConnectionConfig, LogEntry, Artifact, TaskSummary } from '../shared/types'
 import type { SidebarView } from './components/layout/TreeSidebar'
 
 export default function App() {
@@ -38,7 +38,8 @@ export default function App() {
     })
   }, [dataLoaded])
 
-  // SSH state
+  // Connection state
+  const [connectionStatus, setConnectionStatus] = useState<string | null>(null) // 'lost' | 'reconnecting' | 'restored' | 'failed' | null
   const [sshConnected, setSshConnected] = useState(false)
   const [sshDialogOpen, setSshDialogOpen] = useState(false)
   const [sshConnecting, setSshConnecting] = useState(false)
@@ -61,6 +62,7 @@ export default function App() {
       if (result.success) {
         setSshConnected(true)
         setSshDialogOpen(false)
+        setLastConnectionConfig(config)
         if (result.claude?.version) setClaudeVersion(result.claude.version)
         if (!result.claude?.available) {
           setSshError('Connected, but claude CLI not found on server')
@@ -68,6 +70,46 @@ export default function App() {
         // Config is saved by the SSH form component
       } else {
         setSshError(result.error || 'Connection failed')
+      }
+    } catch (err) {
+      setSshError(String(err))
+    } finally {
+      setSshConnecting(false)
+    }
+  }, [])
+
+  const handleRemoteConnect = useCallback(async (remoteLink: string) => {
+    if (!window.api) return
+    setSshConnecting(true)
+    setSshError(undefined)
+    try {
+      const result = await window.api.remoteConnect(remoteLink)
+      if (result.success) {
+        setSshConnected(true)
+        setLastConnectionConfig({ type: 'remote', remote: { link: remoteLink } })
+        if (result.claude?.version) setClaudeVersion(result.claude.version)
+      } else {
+        setSshError(result.error || 'Remote connection failed')
+      }
+    } catch (err) {
+      setSshError(String(err))
+    } finally {
+      setSshConnecting(false)
+    }
+  }, [])
+
+  const handleLocalConnect = useCallback(async () => {
+    if (!window.api) return
+    setSshConnecting(true)
+    setSshError(undefined)
+    try {
+      const result = await window.api.localConnect()
+      if (result.success) {
+        setSshConnected(true)
+        setLastConnectionConfig({ type: 'local' })
+        if (result.claude?.version) setClaudeVersion(result.claude.version)
+      } else {
+        setSshError(result.error || 'Local connection failed')
       }
     } catch (err) {
       setSshError(String(err))
@@ -85,11 +127,24 @@ export default function App() {
 
   // ─── Agent control (via IPC) ───
   const handleRunAgent = useCallback(async (taskId: string) => {
-    if (!window.api || !sshConnected) {
-      setSshDialogOpen(true)
-      return
+    if (!window.api) return
+    const task = tasks.find(t => t.id === taskId)
+    if (!task) return
+
+    // Auto-connect project if not connected
+    if (!sshConnected) {
+      const project = projects.find(p => p.id === task.projectId)
+      if (!project) return
+      const connectResult = await window.api.projectConnect(project.id)
+      if (!connectResult.success) {
+        setSshError(connectResult.error)
+        setSshDialogOpen(true)
+        return
+      }
+      setSshConnected(true)
+      if (connectResult.claude?.version) setClaudeVersion(connectResult.claude.version)
     }
-    // Optimistic UI update
+
     setTasks(prev => prev.map(t =>
       t.id === taskId ? { ...t, status: 'running' as const } : t
     ))
@@ -100,7 +155,32 @@ export default function App() {
         t.id === taskId ? { ...t, status: 'failed' as const } : t
       ))
     }
-  }, [sshConnected])
+  }, [sshConnected, tasks, projects])
+
+  const handleResumeAgent = useCallback(async (taskId: string) => {
+    if (!window.api) return
+    const task = tasks.find(t => t.id === taskId)
+    if (!task) return
+
+    // Auto-connect
+    if (!sshConnected) {
+      const project = projects.find(p => p.id === task.projectId)
+      if (project) {
+        const r = await window.api.projectConnect(project.id)
+        if (r.success) setSshConnected(true)
+      }
+    }
+
+    setTasks(prev => prev.map(t =>
+      t.id === taskId ? { ...t, status: 'running' as const } : t
+    ))
+    const result = await window.api.agentResume(taskId)
+    if (!result.success) {
+      setTasks(prev => prev.map(t =>
+        t.id === taskId ? { ...t, status: 'failed' as const } : t
+      ))
+    }
+  }, [sshConnected, tasks, projects])
 
   const handleStopAgent = useCallback(async (taskId: string) => {
     if (!window.api) return
@@ -126,12 +206,15 @@ export default function App() {
   }, [])
 
   // ─── Create project/phase/task (via IPC → DataStore) ───
+  // Store the last used connection config for new projects
+  const [lastConnectionConfig, setLastConnectionConfig] = useState<ConnectionConfig>({ type: 'ssh' })
+
   const handleCreateProject = useCallback(async (name: string, path: string, engine?: string) => {
     if (!window.api) return
     const project = await window.api.projectCreate({
       name,
       workspacePath: path,
-      connection: { type: 'ssh' },
+      connection: lastConnectionConfig,
     })
     // Apply engine setting if specified
     if (engine && engine !== 'claude') {
@@ -154,12 +237,235 @@ export default function App() {
     setActiveTaskId(null)
   }, [activeProjectId])
 
-  const handleCreateTask = useCallback(async (name: string, prompt: string) => {
+  const handleCreateTask = useCallback(async (name: string, purpose: string, prompt: string) => {
     if (!activePhaseId || !window.api) return
-    const task = await window.api.taskCreate(activePhaseId, name, prompt)
+    const task = await window.api.taskCreate(activePhaseId, name, purpose, prompt)
     setTasks(prev => [...prev, task])
     setActiveTaskId(task.id)
   }, [activePhaseId])
+
+  const handleMarkCompleted = useCallback(async (taskId: string) => {
+    const task = tasks.find(t => t.id === taskId)
+    setTasks(prev => prev.map(t =>
+      t.id === taskId ? { ...t, status: 'completed' as const } : t
+    ))
+    window.api?.taskUpdate(taskId, { status: 'completed' })
+
+    // Auto-generate phase summary when last task in phase is completed
+    if (task) {
+      const phaseTasks = tasks.filter(t => t.phaseId === task.phaseId)
+      const allDone = phaseTasks.every(t =>
+        t.id === taskId || t.status === 'completed'
+      )
+      if (allDone && phaseTasks.length > 0) {
+        window.api?.phaseSummarize(task.phaseId).then(result => {
+          if (result.success && result.summary) {
+            setPhases(prev => prev.map(ph =>
+              ph.id === task.phaseId ? { ...ph, summary: result.summary } : ph
+            ))
+          }
+        })
+      }
+    }
+  }, [tasks])
+
+  const handleSummarize = useCallback(async (taskId: string) => {
+    if (!window.api) return
+    // Show loading state in summary
+    setTasks(prev => prev.map(t =>
+      t.id === taskId ? {
+        ...t,
+        summary: { currentStep: '', completedSteps: [], nextSteps: [], issues: [], progress: 'Generating summary...', updatedAt: new Date().toISOString() }
+      } : t
+    ))
+    const result = await window.api.taskSummarize(taskId)
+    if (result.success && result.summary) {
+      setTasks(prev => prev.map(t =>
+        t.id === taskId ? { ...t, summary: result.summary } : t
+      ))
+    } else {
+      setTasks(prev => prev.map(t =>
+        t.id === taskId ? {
+          ...t,
+          summary: { currentStep: '', completedSteps: [], nextSteps: [], issues: [result.error || 'Summary failed'], progress: 'Summary generation failed', updatedAt: new Date().toISOString() }
+        } : t
+      ))
+    }
+  }, [])
+
+  const handlePhaseSummarize = useCallback(async (phaseId: string) => {
+    if (!window.api) return
+    // Loading state
+    setPhases(prev => prev.map(ph =>
+      ph.id === phaseId ? { ...ph, summary: { pipeline: '...', currentState: 'Generating summary...', completedWork: [], pendingWork: [], issues: [], dependencies: [], updatedAt: new Date().toISOString() } } : ph
+    ))
+    const result = await window.api.phaseSummarize(phaseId)
+    if (result.success && result.summary) {
+      setPhases(prev => prev.map(ph =>
+        ph.id === phaseId ? { ...ph, summary: result.summary } : ph
+      ))
+    }
+  }, [])
+
+  const handleProjectSummarize = useCallback(async (projectId: string) => {
+    if (!window.api) return
+    setProjects(prev => prev.map(p =>
+      p.id === projectId ? { ...p, summary: { pipeline: '...', currentPhase: 'Generating summary...', overallProgress: '', blockers: [], updatedAt: new Date().toISOString() } } : p
+    ))
+    const result = await window.api.projectSummarize(projectId)
+    if (result.success && result.summary) {
+      setProjects(prev => prev.map(p =>
+        p.id === projectId ? { ...p, summary: result.summary } : p
+      ))
+    }
+  }, [])
+
+  const handleRestartFresh = useCallback(async (taskId: string) => {
+    if (!window.api) return
+    const task = tasks.find(t => t.id === taskId)
+    if (!task) return
+
+    // 1. Summarize current progress
+    const sumResult = await window.api.taskSummarize(taskId)
+    const summaryText = sumResult.success && sumResult.summary
+      ? `Previous session summary:\n- Progress: ${sumResult.summary.progress}\n- Completed: ${sumResult.summary.completedSteps.join('; ')}\n- Issues: ${sumResult.summary.issues.join('; ')}\n\n`
+      : ''
+
+    // 2. Stop the current agent
+    await window.api.taskStop(taskId)
+    setTasks(prev => prev.map(t =>
+      t.id === taskId ? { ...t, status: 'completed' as const, summary: sumResult.summary || t.summary } : t
+    ))
+
+    // 3. Create a fresh continuation task with summary as context
+    const newName = `${task.name} (continued)`
+    const newPrompt = `${summaryText}Continue the following task from where the previous session left off:\n\n${task.prompt}`
+    const newTask = await window.api.taskCreate(task.phaseId, newName, task.purpose, newPrompt)
+    setTasks(prev => [...prev, newTask])
+    setActiveTaskId(newTask.id)
+
+    // 4. Auto-run the new task
+    setTimeout(() => handleRunAgent(newTask.id), 500)
+  }, [tasks, handleRunAgent])
+
+  const handleImportProject = useCallback(async (projectId: string) => {
+    // Reload all data from DataStore after import
+    if (!window.api) return
+    const result = await window.api.dataLoad()
+    if (result.success && result.data) {
+      setProjects(result.data.projects || [])
+      setPhases(result.data.phases || [])
+      setTasks(result.data.tasks || [])
+      setActiveProjectId(projectId)
+      const firstPhase = (result.data.phases || []).find(
+        (ph: Phase) => ph.projectId === projectId
+      )
+      setActivePhaseId(firstPhase?.id || null)
+      setActiveTaskId(null)
+    }
+  }, [])
+
+  // ─── Dynamic window title ───
+  useEffect(() => {
+    if (!window.api || windowHash) return // only main window
+    const parts = ['Workanywhere']
+    if (activeProject) parts.push(activeProject.name)
+    if (activeTask) {
+      const statusIcon = activeTask.status === 'running' ? '▶' :
+        activeTask.status === 'review' ? '👀' :
+        activeTask.status === 'completed' ? '✓' :
+        activeTask.status === 'failed' ? '✕' : ''
+      parts.push(`${statusIcon} ${activeTask.name}`.trim())
+    }
+    window.api.setWindowTitle(parts.join(' — '))
+  }, [activeProject?.name, activeTask?.name, activeTask?.status, windowHash])
+
+  // ─── Keyboard shortcuts ───
+  useEffect(() => {
+    if (windowHash) return // only main window
+
+    // Build list of visible tasks for Ctrl+1~9 switching
+    const getVisibleTasks = (): Task[] => {
+      return tasks.filter(t => t.projectId === activeProjectId)
+    }
+
+    const handler = (e: KeyboardEvent) => {
+      const ctrl = e.ctrlKey || e.metaKey
+      const shift = e.shiftKey
+
+      // Ctrl+1~9: switch to Nth task
+      if (ctrl && !shift && e.key >= '1' && e.key <= '9') {
+        e.preventDefault()
+        const idx = parseInt(e.key) - 1
+        const visible = getVisibleTasks()
+        if (visible[idx]) {
+          setActiveTaskId(visible[idx].id)
+          setActivePhaseId(visible[idx].phaseId)
+        }
+        return
+      }
+
+      // Ctrl+Tab / Ctrl+Shift+Tab: cycle tasks
+      if (ctrl && e.key === 'Tab') {
+        e.preventDefault()
+        const visible = getVisibleTasks()
+        if (visible.length === 0) return
+        const currentIdx = visible.findIndex(t => t.id === activeTaskId)
+        const nextIdx = shift
+          ? (currentIdx <= 0 ? visible.length - 1 : currentIdx - 1)
+          : (currentIdx >= visible.length - 1 ? 0 : currentIdx + 1)
+        setActiveTaskId(visible[nextIdx].id)
+        setActivePhaseId(visible[nextIdx].phaseId)
+        return
+      }
+
+      // Ctrl+Shift+S: summarize current task
+      if (ctrl && shift && e.key.toLowerCase() === 's') {
+        e.preventDefault()
+        if (activeTaskId) handleSummarize(activeTaskId)
+        return
+      }
+
+      // Ctrl+Shift+R: run or resume current task
+      if (ctrl && shift && e.key.toLowerCase() === 'r') {
+        e.preventDefault()
+        if (!activeTask) return
+        if (activeTask.status === 'idle' || activeTask.status === 'completed' || activeTask.status === 'failed') {
+          handleRunAgent(activeTask.id)
+        } else if (activeTask.status === 'review' && activeTask.sessionId) {
+          handleResumeAgent(activeTask.id)
+        }
+        return
+      }
+
+      // Ctrl+.: stop current task
+      if (ctrl && e.key === '.') {
+        e.preventDefault()
+        if (activeTask && (activeTask.status === 'running' || activeTask.status === 'waiting')) {
+          handleStopAgent(activeTask.id)
+        }
+        return
+      }
+
+      // Ctrl+M: toggle sidebar view
+      if (ctrl && !shift && e.key.toLowerCase() === 'm') {
+        e.preventDefault()
+        setSidebarView(prev => prev === 'monitor' ? 'manage' : 'monitor')
+        return
+      }
+
+      // Ctrl+Shift+A: approve (mark completed) current task
+      if (ctrl && shift && e.key.toLowerCase() === 'a') {
+        e.preventDefault()
+        if (activeTask?.status === 'review') handleMarkCompleted(activeTask.id)
+        return
+      }
+    }
+
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [windowHash, activeTaskId, activeProjectId, activeTask, tasks,
+      handleSummarize, handleRunAgent, handleResumeAgent, handleStopAgent, handleMarkCompleted])
 
   // ─── Listen for agent events from main process ───
   useEffect(() => {
@@ -181,7 +487,34 @@ export default function App() {
       ))
     })
 
-    return () => { unsubStatus(); unsubLog() }
+    const unsubArtifact = window.api.onArtifactNew(({ taskId, artifact }) => {
+      setTasks(prev => prev.map(t => {
+        if (t.id !== taskId) return t
+        const existing = t.artifacts.findIndex(a => a.filePath === artifact.filePath)
+        if (existing >= 0) {
+          const updated = [...t.artifacts]
+          updated[existing] = { ...artifact, action: 'modified' }
+          return { ...t, artifacts: updated }
+        }
+        return { ...t, artifacts: [...t.artifacts, artifact] }
+      }))
+    })
+
+    const unsubConnStatus = window.api.onConnectionStatus((data) => {
+      setConnectionStatus(data.status)
+      if (data.status === 'lost') {
+        setSshError('Connection lost — reconnecting...')
+      } else if (data.status === 'restored') {
+        setSshError(undefined)
+        setConnectionStatus(null) // clear after a moment
+        setTimeout(() => setConnectionStatus(null), 3000)
+      } else if (data.status === 'failed') {
+        setSshConnected(false)
+        setSshError('Connection lost — reconnection failed')
+      }
+    })
+
+    return () => { unsubStatus(); unsubLog(); unsubArtifact(); unsubConnStatus() }
   }, [])
 
   // Sync detached panels list
@@ -288,6 +621,7 @@ export default function App() {
         sshConnecting={sshConnecting}
         sshError={sshError}
         claudeVersion={claudeVersion}
+        connectionStatus={connectionStatus}
         onSidebarViewChange={setSidebarView}
         onSelectProject={(id) => {
           setActiveProjectId(id)
@@ -306,13 +640,22 @@ export default function App() {
         onReattach={handleReattach}
         onRunAgent={handleRunAgent}
         onStopAgent={handleStopAgent}
+        onResumeAgent={handleResumeAgent}
+        onMarkCompleted={handleMarkCompleted}
+        onSummarize={handleSummarize}
+        onRestartFresh={handleRestartFresh}
         onSendMessage={handleSendMessage}
         onSSHConnect={handleSSHConnect}
+        onLocalConnect={handleLocalConnect}
+        onRemoteConnect={handleRemoteConnect}
         onOpenSSH={() => setSshDialogOpen(true)}
         onDisconnectSSH={handleSSHDisconnect}
         onCreateProject={handleCreateProject}
         onCreatePhase={handleCreatePhase}
         onCreateTask={handleCreateTask}
+        onImportProject={handleImportProject}
+        onPhaseSummarize={handlePhaseSummarize}
+        onProjectSummarize={handleProjectSummarize}
       />
       <SSHConnectDialog
         isOpen={sshDialogOpen}

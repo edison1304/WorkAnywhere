@@ -13,7 +13,7 @@ const api: IpcApi = {
   phaseDelete: (id) => ipcRenderer.invoke('phase:delete', id),
 
   taskList: (phaseId) => ipcRenderer.invoke('task:list', phaseId),
-  taskCreate: (phaseId, name, prompt) => ipcRenderer.invoke('task:create', phaseId, name, prompt),
+  taskCreate: (phaseId, name, purpose, prompt) => ipcRenderer.invoke('task:create', phaseId, name, purpose, prompt),
   taskUpdate: (id, patch) => ipcRenderer.invoke('task:update', id, patch),
   taskDelete: (id) => ipcRenderer.invoke('task:delete', id),
   taskRun: (taskId) => ipcRenderer.invoke('task:run', taskId),
@@ -34,6 +34,11 @@ const api: IpcApi = {
     const handler = (_event: unknown, data: Parameters<typeof cb>[0]) => cb(data)
     ipcRenderer.on('artifact:new', handler)
     return () => ipcRenderer.removeListener('artifact:new', handler)
+  },
+  onConnectionStatus: (cb) => {
+    const handler = (_event: unknown, data: Parameters<typeof cb>[0]) => cb(data)
+    ipcRenderer.on('connection:status', handler)
+    return () => ipcRenderer.removeListener('connection:status', handler)
   },
 
   // Window management
@@ -60,8 +65,14 @@ const api: IpcApi = {
   // Focus main window (from detached windows)
   focusMain: () => ipcRenderer.invoke('window:focus-main'),
 
-  // SSH connection
+  // Connection (per-project)
+  projectConnect: (projectId, appConfig?) => ipcRenderer.invoke('project:connect', projectId, appConfig),
+  projectDisconnect: (projectId) => ipcRenderer.invoke('project:disconnect', projectId),
+
+  // Connection (legacy / browse mode)
+  localConnect: (appConfig?) => ipcRenderer.invoke('local:connect', appConfig),
   sshConnect: (config, appConfig?) => ipcRenderer.invoke('ssh:connect', config, appConfig),
+  remoteConnect: (remoteLink, appConfig?) => ipcRenderer.invoke('remote:connect', remoteLink, appConfig),
   sshUpdateEngineConfig: (appConfig) => ipcRenderer.invoke('ssh:update-engine-config', appConfig),
   sshDisconnect: () => ipcRenderer.invoke('ssh:disconnect'),
   sshStatus: () => ipcRenderer.invoke('ssh:status'),
@@ -70,6 +81,7 @@ const api: IpcApi = {
   // Agent control
   agentStart: (opts) => ipcRenderer.invoke('agent:start', opts),
   agentStop: (taskId) => ipcRenderer.invoke('agent:stop', taskId),
+  agentResume: (taskId) => ipcRenderer.invoke('agent:resume', taskId),
   agentSend: (taskId, message) => ipcRenderer.invoke('agent:send', taskId, message),
 
   // PTY I/O
@@ -79,6 +91,11 @@ const api: IpcApi = {
     const handler = (_event: unknown, data: { taskId: string; data: string }) => cb(data)
     ipcRenderer.on('pty:data', handler)
     return () => ipcRenderer.removeListener('pty:data', handler)
+  },
+  onPtyClose: (cb) => {
+    const handler = (_event: unknown, data: { taskId: string }) => cb(data)
+    ipcRenderer.on('pty:close', handler)
+    return () => ipcRenderer.removeListener('pty:close', handler)
   },
 
   // Workspace
@@ -93,7 +110,8 @@ const api: IpcApi = {
   dataLoad: () => ipcRenderer.invoke('data:load'),
   dataSave: (data) => ipcRenderer.invoke('data:save', data),
 
-  // File upload
+  // File read/upload
+  sshReadFile: (filePath) => ipcRenderer.invoke('ssh:read-file', filePath),
   sshUploadFile: (opts) => ipcRenderer.invoke('ssh:upload-file', opts),
 
   // Remote folder browser
@@ -101,7 +119,17 @@ const api: IpcApi = {
   sshMkdir: (path) => ipcRenderer.invoke('ssh:mkdir', path),
   sshHome: () => ipcRenderer.invoke('ssh:home'),
 
+  // Summarize (Claude CLI)
+  taskSummarize: (taskId) => ipcRenderer.invoke('task:summarize', taskId),
+  phaseSummarize: (phaseId) => ipcRenderer.invoke('phase:summarize', phaseId),
+  projectSummarize: (projectId) => ipcRenderer.invoke('project:summarize', projectId),
+
+  // Session Descriptor
+  descriptorExport: (projectId) => ipcRenderer.invoke('descriptor:export', projectId),
+  descriptorImport: (descriptor) => ipcRenderer.invoke('descriptor:import', descriptor),
+
   // Window info
+  setWindowTitle: (title) => ipcRenderer.send('window:set-title', title),
   getWindowHash: () => window.location.hash.replace('#', ''),
 }
 

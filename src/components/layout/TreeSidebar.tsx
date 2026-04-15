@@ -26,9 +26,9 @@ interface Props {
 const ACTIVE_STATUSES = new Set(['running', 'waiting', 'queued'])
 
 function isVisibleInMonitor(task: Task): boolean {
-  // Pinned tasks always visible
   if (task.pinned) return true
   if (ACTIVE_STATUSES.has(task.status)) return true
+  if (task.status === 'review') return true  // review는 항상 표시
   if (task.status === 'completed' || task.status === 'failed') {
     if (!task.acknowledgedAt) return true
     const twoHours = 2 * 60 * 60 * 1000
@@ -38,7 +38,7 @@ function isVisibleInMonitor(task: Task): boolean {
 }
 
 function isActiveTask(task: Task): boolean {
-  return ACTIVE_STATUSES.has(task.status)
+  return ACTIVE_STATUSES.has(task.status) || task.status === 'review'
 }
 
 function isDoneTask(task: Task): boolean {

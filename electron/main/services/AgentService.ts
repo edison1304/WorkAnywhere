@@ -1,33 +1,34 @@
 import { EventEmitter } from 'events'
-import type { SSHService, SSHSession, ClaudeStreamEvent } from './SSHService'
-import type { WorkspaceManager } from './WorkspaceManager'
-import type { LogEntry, TaskStatus } from '../../../shared/types'
-
-interface StreamHandle {
-  onEvent: (cb: (event: ClaudeStreamEvent) => void) => void
-  onClose: (cb: (code: number) => void) => void
-  kill: () => void
-}
+import type { ConnectionManager, AnyConnection } from './ConnectionManager'
+import type { ClaudeStreamEvent, StreamHandle, ISession } from './ConnectionTypes'
+import type { LogEntry, TaskStatus, Artifact, ArtifactType, Project } from '../../../shared/types'
 
 interface AgentInstance {
   taskId: string
   projectId: string
   phaseId: string
   engine: string
-  ptySession: SSHSession | null       // null during Phase 1 (stream-json)
-  streamHandle: StreamHandle | null   // non-null during Phase 1
+  conn: AnyConnection                  // connection for this agent's project
+  ptySession: ISession | null          // null during Phase 1 (stream-json)
+  streamHandle: StreamHandle | null    // non-null during Phase 1
   claudeSessionId: string | null
-  messageQueue: string[]              // messages queued during Phase 1
+  messageQueue: string[]               // messages queued during Phase 1
 }
 
 export class AgentService extends EventEmitter {
   private agents = new Map<string, AgentInstance>()
 
   constructor(
-    private ssh: SSHService,
-    private workspace: WorkspaceManager
+    private connMgr: ConnectionManager,
+    private getProject: (projectId: string) => Project | null
   ) {
     super()
+  }
+
+  private async getConn(projectId: string): Promise<AnyConnection> {
+    const project = this.getProject(projectId)
+    if (!project) throw new Error(`Project ${projectId} not found`)
+    return this.connMgr.getConnection(project)
   }
 
   /**
@@ -47,11 +48,14 @@ export class AgentService extends EventEmitter {
       throw new Error(`Agent already running for task ${taskId}`)
     }
 
+    // Get connection for this project (lazy connect)
+    const conn = await this.getConn(projectId)
+
     this.emitStatus(taskId, 'running')
     this.emitLog(taskId, 'agent_start', `Agent started (${engine})`)
 
     const agent: AgentInstance = {
-      taskId, projectId, phaseId, engine,
+      taskId, projectId, phaseId, engine, conn,
       ptySession: null,
       streamHandle: null,
       claudeSessionId: null,
@@ -59,12 +63,23 @@ export class AgentService extends EventEmitter {
     }
     this.agents.set(taskId, agent)
 
+    // ── Load phase context (shared between agents in same phase) ──
+    let enrichedPrompt = prompt
+    try {
+      const contextPath = `${workspacePath}/.workanywhere/phase-${phaseId}-context.md`
+      const context = await conn.exec(`cat ${JSON.stringify(contextPath)} 2>/dev/null || true`)
+      if (context.trim()) {
+        enrichedPrompt = `[Phase Context — other tasks in this phase have reported the following]\n${context.trim()}\n\n[Your Task]\n${prompt}`
+        this.emitLog(taskId, 'text', `Phase context loaded (${context.trim().split('\n').length} lines)`)
+      }
+    } catch { /* no context file yet — fine */ }
+
     // ── Phase 1: stream-json for structured output ──
     try {
       this.emitLog(taskId, 'text', `[Phase 1] Running prompt via stream-json...`)
 
-      const stream = await this.ssh.spawnAgentStream(
-        engine, workspacePath, prompt, `stream-${taskId}`
+      const stream = await conn.spawnAgentStream(
+        engine, workspacePath, enrichedPrompt, `stream-${taskId}`
       )
       agent.streamHandle = stream
 
@@ -106,16 +121,17 @@ export class AgentService extends EventEmitter {
     workspacePath: string
   ): Promise<void> {
     try {
-      const prefix = this.ssh.getShellPrefix(agent.engine)
+      const conn = agent.conn
+      const prefix = conn.getShellPrefix(agent.engine)
       const resumeArgs = agent.claudeSessionId
         ? ['--resume', agent.claudeSessionId]
         : []
-      const agentCmd = this.ssh.getEngineCmd(agent.engine, resumeArgs)
+      const agentCmd = conn.getEngineCmd(agent.engine, resumeArgs)
       const fullCmd = `${prefix}cd ${JSON.stringify(workspacePath)} && ${agentCmd}`
 
       this.emitLog(taskId, 'text', `[Phase 2] Interactive terminal ready`)
 
-      const ptySession = await this.ssh.spawnPTY(fullCmd, `pty-${taskId}`)
+      const ptySession = await conn.spawnPTY(fullCmd, `pty-${taskId}`)
       agent.ptySession = ptySession
 
       // Forward PTY output to Terminal tab
@@ -126,8 +142,10 @@ export class AgentService extends EventEmitter {
       ptySession.onClose(() => {
         this.emit('pty:close', { taskId })
         if (this.agents.has(taskId)) {
-          this.emitStatus(taskId, 'completed')
-          this.emitLog(taskId, 'agent_end', 'Agent session closed')
+          // Completed → review (사용자가 검토 후 completed로 전환)
+          this.emitStatus(taskId, 'review')
+          this.emitLog(taskId, 'agent_end', 'Agent finished — review needed')
+          this.cleanupArtifacts(taskId)
           this.agents.delete(taskId)
         }
       })
@@ -187,6 +205,10 @@ export class AgentService extends EventEmitter {
                 this.emitLog(taskId, 'tool_call', `${block.name}(${inputStr})`, {
                   tool: block.name,
                 })
+                // Artifact detection
+                if (block.input && typeof block.input === 'object') {
+                  this.detectArtifact(taskId, block.name, block.input as Record<string, unknown>)
+                }
               }
             }
           }
@@ -197,6 +219,9 @@ export class AgentService extends EventEmitter {
         this.emitLog(taskId, 'tool_call', `${event.tool || 'unknown'}`, {
           tool: event.tool,
         })
+        if (event.tool && event.input && typeof event.input === 'object') {
+          this.detectArtifact(taskId, event.tool, event.input)
+        }
         break
 
       case 'tool_result':
@@ -308,7 +333,41 @@ export class AgentService extends EventEmitter {
 
     this.emitStatus(taskId, 'failed')
     this.emitLog(taskId, 'agent_end', 'Agent stopped by user')
+    this.cleanupArtifacts(taskId)
     this.agents.delete(taskId)
+  }
+
+  /**
+   * Resume a Claude session by session ID (Phase 2 only — interactive PTY).
+   * Used when reopening a previously completed/failed task.
+   */
+  async resumeSession(
+    taskId: string,
+    projectId: string,
+    phaseId: string,
+    workspacePath: string,
+    sessionId: string,
+    engine: string = 'claude'
+  ): Promise<void> {
+    if (this.agents.has(taskId)) {
+      throw new Error(`Agent already running for task ${taskId}`)
+    }
+
+    const conn = await this.getConn(projectId)
+
+    this.emitStatus(taskId, 'running')
+    this.emitLog(taskId, 'agent_start', `Resuming session ${sessionId}`)
+
+    const agent: AgentInstance = {
+      taskId, projectId, phaseId, engine, conn,
+      ptySession: null,
+      streamHandle: null,
+      claudeSessionId: sessionId,
+      messageQueue: [],
+    }
+    this.agents.set(taskId, agent)
+
+    await this.startPTYResume(taskId, agent, workspacePath)
   }
 
   isRunning(taskId: string): boolean {
@@ -329,5 +388,103 @@ export class AgentService extends EventEmitter {
       meta,
     }
     this.emit('task:log', { taskId, log })
+  }
+
+  // ─── Artifact Indexer ───
+
+  private seenArtifacts = new Map<string, Set<string>>() // taskId → set of filePaths
+
+  /**
+   * Detect file artifacts from tool_use content blocks.
+   * Emits 'task:artifact' for each new file detected.
+   */
+  private detectArtifact(taskId: string, toolName: string, input: Record<string, unknown>): void {
+    let filePath: string | undefined
+    let action: Artifact['action'] = 'modified'
+
+    switch (toolName) {
+      case 'Edit':
+        filePath = input.file_path as string
+        action = 'modified'
+        break
+      case 'Write':
+        filePath = input.file_path as string
+        action = 'created'
+        break
+      case 'Read':
+        // Don't track reads as artifacts
+        return
+      case 'Bash': {
+        // Try to extract file paths from common patterns
+        const cmd = String(input.command || '')
+        // Match: > file, >> file, tee file, cp ... file, mv ... file
+        const writePatterns = [
+          />\s*(\S+\.[\w]+)/,           // redirect: > file.ext
+          /tee\s+(\S+\.[\w]+)/,          // tee file.ext
+          /cp\s+\S+\s+(\S+\.[\w]+)/,    // cp src dest
+          /mv\s+\S+\s+(\S+\.[\w]+)/,    // mv src dest
+          /mkdir\s+-?p?\s+(\S+)/,        // mkdir
+        ]
+        for (const pat of writePatterns) {
+          const m = cmd.match(pat)
+          if (m) {
+            filePath = m[1]
+            action = 'created'
+            break
+          }
+        }
+        if (!filePath) return
+        break
+      }
+      default:
+        return
+    }
+
+    if (!filePath) return
+
+    // Deduplicate per task
+    if (!this.seenArtifacts.has(taskId)) {
+      this.seenArtifacts.set(taskId, new Set())
+    }
+    const seen = this.seenArtifacts.get(taskId)!
+    // For Edit, update action if already created
+    if (seen.has(filePath)) {
+      action = 'modified'
+      // Still emit update for the UI
+    }
+    seen.add(filePath)
+
+    const ext = filePath.split('.').pop()?.toLowerCase() || ''
+    const typeMap: Record<string, ArtifactType> = {
+      ts: 'code', tsx: 'code', js: 'code', jsx: 'code', py: 'code',
+      rs: 'code', go: 'code', java: 'code', c: 'code', cpp: 'code',
+      h: 'code', css: 'code', scss: 'code', html: 'code', sh: 'code',
+      sql: 'code', rb: 'code', php: 'code', swift: 'code', kt: 'code',
+      md: 'markdown', markdown: 'markdown',
+      yaml: 'yaml', yml: 'yaml',
+      json: 'json', jsonl: 'json',
+      png: 'image', jpg: 'image', jpeg: 'image', gif: 'image',
+      bmp: 'image', webp: 'image', svg: 'image',
+      pdf: 'pdf',
+      txt: 'text', log: 'text', csv: 'text', tsv: 'text',
+    }
+
+    const artifact: Artifact = {
+      id: `${taskId}-art-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      taskId,
+      filePath,
+      type: typeMap[ext] || 'other',
+      action,
+      detectedAt: new Date().toISOString(),
+    }
+
+    this.emit('task:artifact', { taskId, artifact })
+  }
+
+  /**
+   * Clean up artifact tracking when agent stops.
+   */
+  private cleanupArtifacts(taskId: string): void {
+    this.seenArtifacts.delete(taskId)
   }
 }

@@ -4,6 +4,46 @@
   flex-direction: column;
   overflow: hidden;
   min-width: 0;
+  position: relative;
+  outline: none;
+}
+
+.panelDragOver {
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+}
+
+.dropOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  background: rgba(99, 102, 241, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--accent);
+  pointer-events: none;
+}
+
+.uploadToast {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 101;
+  padding: 6px 14px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--accent);
+  animation: toastIn 0.2s ease;
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .empty {
@@ -47,7 +87,76 @@
   font-weight: 500;
 }
 
+.taskTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .taskTitle { font-size: 16px; font-weight: 600; }
+
+/* Drift badge */
+.driftBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+.driftBadge[data-level="warning"] {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--warning);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+.driftBadge[data-level="critical"] {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--error);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  animation: pulse-drift 2s infinite;
+}
+.driftScore { font-variant-numeric: tabular-nums; }
+
+@keyframes pulse-drift {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* Drift gauge */
+.driftGauge {
+  position: relative;
+  height: 3px;
+  background: var(--bg-tertiary);
+  border-radius: 2px;
+  margin-top: 4px;
+  overflow: hidden;
+}
+.driftGaugeFill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.5s ease;
+}
+.driftGaugeFill[data-level="ok"] { background: var(--success); }
+.driftGaugeFill[data-level="warning"] { background: var(--warning); }
+.driftGaugeFill[data-level="critical"] { background: var(--error); }
+
+.driftGaugeLabel {
+  position: absolute;
+  right: 0;
+  top: 5px;
+  font-size: 9px;
+  color: var(--text-muted);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.taskPurpose {
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 500;
+}
 
 .taskPrompt {
   font-size: 12px;
@@ -82,6 +191,55 @@
 }
 .actionBtn[data-variant="primary"]:hover { background: var(--accent-hover); }
 .actionBtn[data-variant="danger"]:hover { border-color: var(--error); color: var(--error); }
+
+/* Summary panel */
+.summaryPanel {
+  padding: 10px 20px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.summaryProgress {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.summaryGrid {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.summarySection {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.summarySectionTitle {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+
+.summaryItem {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  padding-left: 8px;
+  border-left: 2px solid var(--border);
+}
+.summaryItem[data-type="done"] { border-left-color: var(--success); }
+.summaryItem[data-type="current"] { border-left-color: var(--accent); color: var(--text-primary); }
+.summaryItem[data-type="next"] { border-left-color: var(--text-muted); }
+.summaryItem[data-type="issue"] { border-left-color: var(--error); color: var(--error); }
 
 /* Tabs */
 .tabBar {
@@ -219,30 +377,117 @@
   to { transform: rotate(360deg); }
 }
 
-/* Artifacts */
-.artifactList {
-  padding: 12px 16px;
+/* Artifacts — split layout */
+.artifactSplit {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  height: 100%;
+  overflow: hidden;
 }
 
-.artifactItem {
+.artifactFileList {
+  width: 240px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border-subtle);
+  overflow-y: auto;
+  background: var(--bg-secondary);
+}
+
+.artifactFileListHeader {
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border-subtle);
+  position: sticky;
+  top: 0;
+  background: var(--bg-secondary);
+  z-index: 1;
+}
+
+.artifactFileItem {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
   padding: 8px 12px;
-  background: var(--bg-secondary);
-  border-radius: 6px;
-  font-size: 13px;
+  border: none;
+  background: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background 0.1s;
+}
+.artifactFileItem:hover { background: var(--bg-hover); }
+.artifactFileActive { background: var(--bg-tertiary); }
+.artifactFileActive:hover { background: var(--bg-tertiary); }
+
+.artifactFileIcon {
+  width: 28px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  border-radius: 3px;
+  flex-shrink: 0;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+}
+.artifactFileIcon[data-type="code"] { color: var(--info); }
+.artifactFileIcon[data-type="markdown"] { color: var(--accent); }
+.artifactFileIcon[data-type="image"] { color: var(--success); }
+.artifactFileIcon[data-type="pdf"] { color: var(--error); }
+.artifactFileIcon[data-type="json"],
+.artifactFileIcon[data-type="yaml"] { color: var(--warning); }
+
+.artifactFileInfo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 
-.artifactType {
-  font-size: 11px;
+.artifactFileName {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifactFilePath {
+  font-size: 10px;
   color: var(--text-muted);
-  background: var(--bg-tertiary);
-  padding: 2px 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifactFileAction {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 3px;
+}
+.artifactFileAction[data-action="created"] { color: var(--success); }
+.artifactFileAction[data-action="modified"] { color: var(--warning); }
+.artifactFileAction[data-action="deleted"] { color: var(--error); }
+
+.artifactViewerPane {
+  flex: 1;
+  overflow: hidden;
+  min-width: 0;
 }
 
 /* ─── Inline SSH Connect Form ─── */
@@ -470,3 +715,60 @@
 }
 .sshConnectBtn:hover { background: var(--accent-hover); }
 .sshConnectBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.localConnectBtn {
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-top: 4px;
+}
+.localConnectBtn:hover { border-color: var(--accent); color: var(--accent); }
+.localConnectBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.altConnectRow {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin-top: 4px;
+}
+
+.remoteForm {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.remoteForm .sshInput {
+  width: 220px;
+  padding: 7px 10px;
+  font-size: 12px;
+}
+
+.remoteConnectBtn {
+  padding: 7px 12px;
+  border: none;
+  background: var(--accent);
+  color: white;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.remoteConnectBtn:hover { background: var(--accent-hover); }
+.remoteConnectBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.remoteCancelBtn {
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.remoteCancelBtn:hover { border-color: var(--text-secondary); color: var(--text-secondary); }

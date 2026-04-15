@@ -5,6 +5,7 @@ const STATUS_COLORS: Record<TaskStatus, string> = {
   queued: 'var(--text-muted)',
   running: 'var(--accent)',
   waiting: 'var(--warning)',
+  review: 'var(--warning)',
   completed: 'var(--success)',
   failed: 'var(--error)',
 }

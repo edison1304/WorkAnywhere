@@ -145,7 +145,7 @@ export class DataStore {
     return this.tasks.find(t => t.id === id) || null
   }
 
-  taskCreate(phaseId: string, name: string, prompt: string): Task {
+  taskCreate(phaseId: string, name: string, purpose: string, prompt: string): Task {
     const phase = this.phases.find(ph => ph.id === phaseId)
     const now = new Date().toISOString()
     const task: Task = {
@@ -153,6 +153,7 @@ export class DataStore {
       phaseId,
       projectId: phase?.projectId || '',
       name,
+      purpose,
       status: 'idle',
       prompt,
       logs: [],
@@ -187,6 +188,21 @@ export class DataStore {
     const task = this.tasks.find(t => t.id === taskId)
     if (task) {
       task.logs.push(log)
+      task.updatedAt = new Date().toISOString()
+      this.persist()
+    }
+  }
+
+  taskAddArtifact(taskId: string, artifact: import('../../../shared/types').Artifact): void {
+    const task = this.tasks.find(t => t.id === taskId)
+    if (task) {
+      // Update existing artifact for same filePath, or add new
+      const idx = task.artifacts.findIndex(a => a.filePath === artifact.filePath)
+      if (idx >= 0) {
+        task.artifacts[idx] = { ...artifact, action: 'modified' }
+      } else {
+        task.artifacts.push(artifact)
+      }
       task.updatedAt = new Date().toISOString()
       this.persist()
     }

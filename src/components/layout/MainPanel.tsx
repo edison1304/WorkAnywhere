@@ -1,8 +1,58 @@
-import { useState, useEffect, useRef } from 'react'
-import type { Task, Phase, ConnectionConfig, AppConfig } from '../../../shared/types'
+import { useState, useEffect, useRef, useMemo } from 'react'
+import type { Task, Phase, ConnectionConfig, AppConfig, Artifact } from '../../../shared/types'
 import { SessionTerminal } from '../terminal/SessionTerminal'
 import { FolderBrowser } from '../project/FolderBrowser'
+import { ArtifactViewer } from '../viewer/ArtifactViewer'
 import styles from './MainPanel.module.css'
+
+// ─── Session Drift Detection ───
+interface DriftInfo {
+  level: 'ok' | 'warning' | 'critical'
+  score: number           // 0~100
+  reason: string
+  elapsedMin: number
+  logCount: number
+  toolCalls: number
+  estimatedTokensK: number  // in thousands
+}
+
+function calcDrift(task: Task): DriftInfo {
+  const logs = task.logs
+  const logCount = logs.length
+  const toolCalls = logs.filter(l => l.type === 'tool_call').length
+
+  // Estimate tokens: ~4 chars per token
+  const totalChars = logs.reduce((sum, l) => sum + l.content.length, 0)
+  const estimatedTokensK = Math.round(totalChars / 4 / 1000)
+
+  // Elapsed time since first log
+  const firstLog = logs[0]
+  const elapsedMs = firstLog ? Date.now() - new Date(firstLog.timestamp).getTime() : 0
+  const elapsedMin = Math.round(elapsedMs / 60000)
+
+  // Score components (0~100 each, take max)
+  const timeScore = Math.min(100, (elapsedMin / 60) * 100)        // 60min = 100
+  const toolScore = Math.min(100, (toolCalls / 150) * 100)         // 150 calls = 100
+  const tokenScore = Math.min(100, (estimatedTokensK / 400) * 100) // 400K tokens = 100
+  const score = Math.round(Math.max(timeScore, toolScore, tokenScore))
+
+  let level: DriftInfo['level'] = 'ok'
+  let reason = ''
+
+  if (score >= 70) {
+    level = 'critical'
+    if (tokenScore >= 70) reason = `~${estimatedTokensK}K tokens`
+    else if (toolScore >= 70) reason = `${toolCalls} tool calls`
+    else reason = `${elapsedMin}min elapsed`
+  } else if (score >= 40) {
+    level = 'warning'
+    if (tokenScore >= 40) reason = `~${estimatedTokensK}K tokens`
+    else if (toolScore >= 40) reason = `${toolCalls} tool calls`
+    else reason = `${elapsedMin}min elapsed`
+  }
+
+  return { level, score, reason, elapsedMin, logCount, toolCalls, estimatedTokensK }
+}
 
 interface Props {
   activeTask: Task | null
@@ -12,12 +62,18 @@ interface Props {
   sshError?: string
   onRunAgent?: (taskId: string) => void
   onStopAgent?: (taskId: string) => void
+  onResumeAgent?: (taskId: string) => void
+  onMarkCompleted?: (taskId: string) => void
+  onSummarize?: (taskId: string) => void
+  onRestartFresh?: (taskId: string) => void
   onSendMessage?: (taskId: string, message: string) => void
   onSSHConnect?: (config: ConnectionConfig, appConfig?: AppConfig) => void
+  onLocalConnect?: () => void
+  onRemoteConnect?: (remoteLink: string) => void
   onOpenSSH?: () => void
   onCreateProject?: (name: string, path: string) => void
   onCreatePhase?: (name: string, description: string) => void
-  onCreateTask?: (name: string, prompt: string) => void
+  onCreateTask?: (name: string, purpose: string, prompt: string) => void
   hasProjects?: boolean
   hasPhases?: boolean
   activeProjectName?: string
@@ -26,7 +82,7 @@ interface Props {
 
 export function MainPanel({
   activeTask, activePhase, sshConnected, sshConnecting, sshError, workspacePath,
-  onRunAgent, onStopAgent, onSendMessage, onSSHConnect, onOpenSSH,
+  onRunAgent, onStopAgent, onResumeAgent, onMarkCompleted, onSummarize, onRestartFresh, onSendMessage, onSSHConnect, onLocalConnect, onRemoteConnect, onOpenSSH,
   onCreateProject, onCreatePhase, onCreateTask,
   hasProjects, hasPhases, activeProjectName
 }: Props) {
@@ -41,11 +97,26 @@ export function MainPanel({
           <h2 className={styles.emptyTitle}>Workanywhere</h2>
 
           {!sshConnected ? (
-            <SSHInlineConnect
-              onConnect={onSSHConnect}
-              connecting={sshConnecting}
-              error={sshError}
-            />
+            <>
+              <SSHInlineConnect
+                onConnect={onSSHConnect}
+                connecting={sshConnecting}
+                error={sshError}
+              />
+              <div className={styles.altConnectRow}>
+                <button
+                  className={styles.localConnectBtn}
+                  onClick={onLocalConnect}
+                  disabled={sshConnecting}
+                >
+                  Local Mode
+                </button>
+                <RemoteConnectInline
+                  onConnect={onRemoteConnect}
+                  disabled={sshConnecting}
+                />
+              </div>
+            </>
           ) : !hasProjects ? (
             <CreateProjectForm onSubmit={onCreateProject} />
           ) : !hasPhases ? (
@@ -61,16 +132,122 @@ export function MainPanel({
   const isRunning = activeTask.status === 'running'
   const isWaiting = activeTask.status === 'waiting'
   const isIdle = activeTask.status === 'idle'
+  const isReview = activeTask.status === 'review'
   const isDone = activeTask.status === 'completed' || activeTask.status === 'failed'
 
+  // ─── Session drift detection ───
+  const drift = useMemo(() => calcDrift(activeTask), [activeTask.logs.length, activeTask.createdAt])
+
+  // ─── Panel-wide drop zone + paste handler ───
+  const [dragOver, setDragOver] = useState(false)
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null)
+
+  const handlePanelUpload = async (file: File) => {
+    if (!window.api || !workspacePath) return
+    setUploadStatus(`Uploading ${file.name}...`)
+    try {
+      const arrayBuf = await file.arrayBuffer()
+      const data = Array.from(new Uint8Array(arrayBuf))
+      const result = await window.api.sshUploadFile({
+        fileName: file.name,
+        data,
+        workspacePath,
+      })
+      if (result.success && result.remotePath) {
+        // Copy path to clipboard and show toast
+        navigator.clipboard?.writeText(result.remotePath).catch(() => {})
+        setUploadStatus(`Uploaded: ${result.remotePath}`)
+        setTimeout(() => setUploadStatus(null), 4000)
+        return result.remotePath
+      } else {
+        setUploadStatus('Upload failed')
+        setTimeout(() => setUploadStatus(null), 3000)
+      }
+    } catch {
+      setUploadStatus('Upload failed')
+      setTimeout(() => setUploadStatus(null), 3000)
+    }
+    return undefined
+  }
+
+  const handlePanelDrop = async (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOver(false)
+    const files = e.dataTransfer?.files
+    if (!files?.length) return
+    for (const file of files) {
+      await handlePanelUpload(file)
+    }
+  }
+
+  const handlePanelPaste = async (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items
+    if (!items) return
+    for (const item of items) {
+      if (item.kind === 'file') {
+        e.preventDefault()
+        const file = item.getAsFile()
+        if (file) await handlePanelUpload(file)
+        return
+      }
+    }
+  }
+
   return (
-    <div className={styles.panel}>
+    <div
+      className={`${styles.panel} ${dragOver ? styles.panelDragOver : ''}`}
+      onDrop={handlePanelDrop}
+      onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+      onDragLeave={() => setDragOver(false)}
+      onPaste={handlePanelPaste}
+      tabIndex={0}
+    >
+      {/* Upload toast */}
+      {uploadStatus && (
+        <div className={styles.uploadToast}>{uploadStatus}</div>
+      )}
+
+      {/* Drop overlay */}
+      {dragOver && (
+        <div className={styles.dropOverlay}>
+          <span>Drop files to upload to server</span>
+        </div>
+      )}
+
       {/* Task header */}
       <div className={styles.taskHeader}>
         <div className={styles.taskHeaderLeft}>
           {activePhase && <span className={styles.phaseLabel}>{activePhase.name}</span>}
-          <h2 className={styles.taskTitle}>{activeTask.name}</h2>
+          <div className={styles.taskTitleRow}>
+            <h2 className={styles.taskTitle}>{activeTask.name}</h2>
+            {drift.level !== 'ok' && (
+              <span
+                className={styles.driftBadge}
+                data-level={drift.level}
+                title={`Session drift: ${drift.score}% — ${drift.reason}\n${drift.toolCalls} tool calls, ~${drift.estimatedTokensK}K tokens, ${drift.elapsedMin}min`}
+              >
+                {drift.level === 'critical' ? 'DRIFT' : 'DRIFT'}
+                <span className={styles.driftScore}>{drift.score}%</span>
+              </span>
+            )}
+          </div>
+          {activeTask.purpose && (
+            <span className={styles.taskPurpose}>{activeTask.purpose}</span>
+          )}
           <span className={styles.taskPrompt}>{activeTask.prompt}</span>
+          {/* Drift gauge — always visible when task has logs */}
+          {activeTask.logs.length > 0 && (
+            <div className={styles.driftGauge}>
+              <div
+                className={styles.driftGaugeFill}
+                data-level={drift.level}
+                style={{ width: `${Math.min(100, drift.score)}%` }}
+              />
+              <span className={styles.driftGaugeLabel}>
+                {drift.toolCalls} calls / ~{drift.estimatedTokensK}K tok / {drift.elapsedMin}m
+              </span>
+            </div>
+          )}
         </div>
         <div className={styles.taskActions}>
           {isIdle && (
@@ -85,6 +262,16 @@ export function MainPanel({
           {isWaiting && (
             <button className={styles.actionBtn} data-variant="primary">Send</button>
           )}
+          {(isRunning || isWaiting) && drift.level !== 'ok' && (
+            <button
+              className={styles.actionBtn}
+              data-variant="primary"
+              onClick={() => onRestartFresh?.(activeTask.id)}
+              title="Summarize current progress, stop, and start a fresh session"
+            >
+              Restart Fresh
+            </button>
+          )}
           {(isRunning || isWaiting) && (
             <button
               className={styles.actionBtn}
@@ -94,7 +281,32 @@ export function MainPanel({
               Stop
             </button>
           )}
-          {isDone && (
+          {isReview && (
+            <button
+              className={styles.actionBtn}
+              data-variant="primary"
+              onClick={() => onMarkCompleted?.(activeTask.id)}
+            >
+              Approve
+            </button>
+          )}
+          {(isReview || isDone) && activeTask.logs.length > 0 && (
+            <button
+              className={styles.actionBtn}
+              onClick={() => onSummarize?.(activeTask.id)}
+            >
+              Summarize
+            </button>
+          )}
+          {(isReview || isDone) && activeTask.sessionId && (
+            <button
+              className={styles.actionBtn}
+              onClick={() => onResumeAgent?.(activeTask.id)}
+            >
+              Resume
+            </button>
+          )}
+          {(isReview || isDone) && (
             <button
               className={styles.actionBtn}
               onClick={() => onRunAgent?.(activeTask.id)}
@@ -104,6 +316,45 @@ export function MainPanel({
           )}
         </div>
       </div>
+
+      {/* Summary panel (when available) */}
+      {activeTask.summary && (
+        <div className={styles.summaryPanel}>
+          <div className={styles.summaryProgress}>{activeTask.summary.progress}</div>
+          <div className={styles.summaryGrid}>
+            {activeTask.summary.completedSteps.length > 0 && (
+              <div className={styles.summarySection}>
+                <span className={styles.summarySectionTitle}>Done</span>
+                {activeTask.summary.completedSteps.map((s, i) => (
+                  <span key={i} className={styles.summaryItem} data-type="done">{s}</span>
+                ))}
+              </div>
+            )}
+            {activeTask.summary.currentStep && (
+              <div className={styles.summarySection}>
+                <span className={styles.summarySectionTitle}>Current</span>
+                <span className={styles.summaryItem} data-type="current">{activeTask.summary.currentStep}</span>
+              </div>
+            )}
+            {activeTask.summary.nextSteps.length > 0 && (
+              <div className={styles.summarySection}>
+                <span className={styles.summarySectionTitle}>Next</span>
+                {activeTask.summary.nextSteps.map((s, i) => (
+                  <span key={i} className={styles.summaryItem} data-type="next">{s}</span>
+                ))}
+              </div>
+            )}
+            {activeTask.summary.issues.length > 0 && (
+              <div className={styles.summarySection}>
+                <span className={styles.summarySectionTitle}>Issues</span>
+                {activeTask.summary.issues.map((s, i) => (
+                  <span key={i} className={styles.summaryItem} data-type="issue">{s}</span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className={styles.tabBar}>
@@ -143,18 +394,16 @@ export function MainPanel({
           <SessionTerminal taskId={activeTask.id} />
         </div>
         <div style={{ display: activeTab === 'artifacts' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
-          <ArtifactsView task={activeTask} />
+          <ArtifactsView task={activeTask} workspacePath={workspacePath} />
         </div>
       </div>
 
-      {/* Chat input — always visible when agent is active */}
-      {(isRunning || isWaiting) && (
-        <ChatInput
-          onSend={(msg) => onSendMessage?.(activeTask.id, msg)}
-          disabled={false}
-          workspacePath={workspacePath}
-        />
-      )}
+      {/* Chat input — always visible, send only when agent active */}
+      <ChatInput
+        onSend={(msg) => onSendMessage?.(activeTask.id, msg)}
+        disabled={!isRunning && !isWaiting}
+        workspacePath={workspacePath}
+      />
     </div>
   )
 }
@@ -223,6 +472,7 @@ function ChatInput({ onSend, disabled, workspacePath }: {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleSubmit = () => {
+    if (disabled) return
     const msg = message.trim()
     if (!msg) return
     onSend(msg)
@@ -311,7 +561,7 @@ function ChatInput({ onSend, disabled, workspacePath }: {
       <button
         className={styles.chatFileBtn}
         onClick={() => fileInputRef.current?.click()}
-        disabled={disabled || uploading}
+        disabled={uploading}
         title="Upload file to server"
       >
         {uploading ? '⏳' : '📎'}
@@ -323,9 +573,9 @@ function ChatInput({ onSend, disabled, workspacePath }: {
         onChange={e => setMessage(e.target.value)}
         onKeyDown={handleKeyDown}
         onPaste={handlePaste}
-        placeholder={uploading ? 'Uploading...' : 'Message (Enter to send) — Paste/drop files to upload'}
+        placeholder={uploading ? 'Uploading...' : disabled ? 'Drop/paste files to upload — agent not running' : 'Message (Enter to send) — Paste/drop files to upload'}
         rows={2}
-        disabled={disabled || uploading}
+        disabled={uploading}
       />
       <button
         className={styles.chatSendBtn}
@@ -338,7 +588,14 @@ function ChatInput({ onSend, disabled, workspacePath }: {
   )
 }
 
-function ArtifactsView({ task }: { task: Task }) {
+function ArtifactsView({ task, workspacePath }: { task: Task; workspacePath?: string }) {
+  const [selected, setSelected] = useState<Artifact | null>(null)
+
+  // Reset selection when task changes
+  useEffect(() => {
+    setSelected(null)
+  }, [task.id])
+
   if (task.artifacts.length === 0) {
     return (
       <div className={styles.emptyContent}>
@@ -347,14 +604,60 @@ function ArtifactsView({ task }: { task: Task }) {
     )
   }
 
+  const iconMap: Record<string, string> = {
+    code: '>_', markdown: 'MD', yaml: 'YM', json: '{}',
+    image: 'IMG', pdf: 'PDF', text: 'TXT', other: '...',
+  }
+
+  const actionLabel: Record<string, string> = {
+    created: '+', modified: '~', deleted: '-',
+  }
+
   return (
-    <div className={styles.artifactList}>
-      {task.artifacts.map(a => (
-        <div key={a.id} className={styles.artifactItem}>
-          <span>{a.filePath}</span>
-          <span className={styles.artifactType}>{a.type}</span>
+    <div className={styles.artifactSplit}>
+      {/* File list */}
+      <div className={styles.artifactFileList}>
+        <div className={styles.artifactFileListHeader}>
+          Files ({task.artifacts.length})
         </div>
-      ))}
+        {task.artifacts.map(a => {
+          const fileName = a.filePath.split('/').pop() || a.filePath
+          const isActive = selected?.id === a.id
+          return (
+            <button
+              key={a.id}
+              className={`${styles.artifactFileItem} ${isActive ? styles.artifactFileActive : ''}`}
+              onClick={() => setSelected(isActive ? null : a)}
+            >
+              <span className={styles.artifactFileIcon} data-type={a.type}>
+                {iconMap[a.type] || '?'}
+              </span>
+              <div className={styles.artifactFileInfo}>
+                <span className={styles.artifactFileName}>{fileName}</span>
+                <span className={styles.artifactFilePath}>{a.filePath}</span>
+              </div>
+              <span className={styles.artifactFileAction} data-action={a.action}>
+                {actionLabel[a.action] || '?'}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Viewer pane */}
+      <div className={styles.artifactViewerPane}>
+        {selected ? (
+          <ArtifactViewer
+            key={selected.id}
+            artifact={selected}
+            workspacePath={workspacePath || ''}
+          />
+        ) : (
+          <div className={styles.emptyContent}>
+            <p>Select a file to preview</p>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -640,12 +943,13 @@ function CreatePhaseForm({ projectName, onSubmit }: { projectName?: string; onSu
 }
 
 // ─── Create Task Form ───
-function CreateTaskForm({ onSubmit }: { onSubmit?: (name: string, prompt: string) => void }) {
+function CreateTaskForm({ onSubmit }: { onSubmit?: (name: string, purpose: string, prompt: string) => void }) {
   const [name, setName] = useState('')
+  const [purpose, setPurpose] = useState('')
   const [prompt, setPrompt] = useState('')
 
   return (
-    <form onSubmit={e => { e.preventDefault(); onSubmit?.(name, prompt) }} className={styles.sshForm}>
+    <form onSubmit={e => { e.preventDefault(); onSubmit?.(name, purpose, prompt) }} className={styles.sshForm}>
       <p className={styles.sshFormTitle}>Add a task</p>
       <input
         className={styles.sshInput}
@@ -654,16 +958,64 @@ function CreateTaskForm({ onSubmit }: { onSubmit?: (name: string, prompt: string
         placeholder="Task name (e.g. 데이터셋 전처리)"
         required
       />
+      <input
+        className={styles.sshInput}
+        value={purpose}
+        onChange={e => setPurpose(e.target.value)}
+        placeholder="Purpose — 이 태스크의 목적 (e.g. ERA5 데이터를 학습에 쓸 수 있는 형태로 변환)"
+        required
+      />
       <textarea
         className={styles.sshTextarea}
         value={prompt}
         onChange={e => setPrompt(e.target.value)}
-        placeholder="Prompt for Claude agent (e.g. ERA5 데이터를 전처리하고...)"
+        placeholder="Prompt for agent (e.g. ERA5 데이터를 전처리하고...)"
         rows={4}
         required
       />
-      <button type="submit" className={styles.sshConnectBtn} disabled={!name || !prompt}>
+      <button type="submit" className={styles.sshConnectBtn} disabled={!name || !purpose || !prompt}>
         Create Task
+      </button>
+    </form>
+  )
+}
+
+// ─── Remote Connect Inline ───
+function RemoteConnectInline({ onConnect, disabled }: {
+  onConnect?: (link: string) => void; disabled?: boolean
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const [link, setLink] = useState('')
+
+  if (!expanded) {
+    return (
+      <button
+        className={styles.localConnectBtn}
+        onClick={() => setExpanded(true)}
+        disabled={disabled}
+      >
+        Remote Mode
+      </button>
+    )
+  }
+
+  return (
+    <form
+      className={styles.remoteForm}
+      onSubmit={e => { e.preventDefault(); if (link.trim()) onConnect?.(link.trim()) }}
+    >
+      <input
+        className={styles.sshInput}
+        value={link}
+        onChange={e => setLink(e.target.value)}
+        placeholder="Claude Remote Control link"
+        autoFocus
+      />
+      <button type="submit" className={styles.remoteConnectBtn} disabled={!link.trim()}>
+        Connect
+      </button>
+      <button type="button" className={styles.remoteCancelBtn} onClick={() => setExpanded(false)}>
+        Cancel
       </button>
     </form>
   )
