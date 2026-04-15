@@ -88,7 +88,7 @@ export class AgentService extends EventEmitter {
         this.handleStreamEvent(taskId, agent, event)
       })
 
-      // When stream-json finishes → start Phase 2 (PTY resume)
+      // When stream-json finishes → ready for follow-up messages
       stream.onClose((code) => {
         agent.streamHandle = null
 
@@ -96,13 +96,23 @@ export class AgentService extends EventEmitter {
 
         if (code !== 0 && !agent.claudeSessionId) {
           this.emitStatus(taskId, 'failed')
-          this.emitLog(taskId, 'error', `stream-json exited with code ${code}`)
+          this.emitLog(taskId, 'error', `Agent exited with code ${code}`)
           this.agents.delete(taskId)
           return
         }
 
-        this.emitLog(taskId, 'text', `[Phase 1] Initial prompt completed`)
-        this.startPTYResume(taskId, agent, workspacePath)
+        // Ready for follow-up messages via stream-json --resume
+        this.emitStatus(taskId, 'waiting')
+        this.emitLog(taskId, 'agent_end', 'Ready for follow-up messages')
+
+        // Process any queued messages
+        if (agent.messageQueue.length > 0) {
+          const queued = [...agent.messageQueue]
+          agent.messageQueue = []
+          for (const msg of queued) {
+            this.sendMessage(taskId, msg)
+          }
+        }
       })
 
     } catch (err) {
@@ -113,82 +123,32 @@ export class AgentService extends EventEmitter {
   }
 
   /**
-   * Phase 2: Start interactive PTY by resuming the Claude session.
+   * Open an optional PTY terminal (for manual terminal access).
+   * Not auto-started — user can open Terminal tab if needed.
    */
-  private async startPTYResume(
-    taskId: string,
-    agent: AgentInstance,
-    workspacePath: string
-  ): Promise<void> {
+  async openTerminal(taskId: string): Promise<void> {
+    const agent = this.agents.get(taskId)
+    if (!agent || agent.ptySession) return
+
     try {
       const conn = agent.conn
+      const project = this.getProject(agent.projectId)
+      const workspacePath = project?.workspacePath || '~'
       const prefix = conn.getShellPrefix(agent.engine)
-      const resumeArgs = agent.claudeSessionId
-        ? ['--resume', agent.claudeSessionId]
-        : []
+      const resumeArgs = agent.claudeSessionId ? ['--resume', agent.claudeSessionId] : []
       const agentCmd = conn.getEngineCmd(agent.engine, resumeArgs)
       const fullCmd = `${prefix}cd ${JSON.stringify(workspacePath)} && ${agentCmd}`
-
-      this.emitLog(taskId, 'text', `[Phase 2] Interactive terminal ready`)
 
       const ptySession = await conn.spawnPTY(fullCmd, `pty-${taskId}`)
       agent.ptySession = ptySession
 
-      // Forward PTY output to Terminal tab + extract Claude responses for Log
-      let lastLoggedResponse = ''
-
-      ptySession.onData((data) => {
-        this.emit('pty:data', { taskId, data })
-
-        // Extract Claude responses using ● marker
-        // ● is Claude Code's prefix for assistant messages in TUI
-        const matches = data.match(/●([\s\S]*?)(?=✶|✻|✢|✽|⏵|❯|$)/g)
-        if (matches) {
-          for (const match of matches) {
-            // Strip ANSI codes from the extracted response
-            let text = match
-              .replace(/^●\s*/, '')
-              .replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '')
-              .replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, '')
-              .replace(/[\x00-\x1f]/g, ' ')
-              .replace(/\s+/g, ' ')
-              .trim()
-
-            if (text.length > 3 && text !== lastLoggedResponse) {
-              lastLoggedResponse = text
-              this.emitLog(taskId, 'text', `[Claude] ${text.slice(0, 2000)}`)
-            }
-          }
-        }
-      })
-
+      ptySession.onData((data) => this.emit('pty:data', { taskId, data }))
       ptySession.onClose(() => {
         this.emit('pty:close', { taskId })
-        if (this.agents.has(taskId)) {
-          // Completed → review (사용자가 검토 후 completed로 전환)
-          this.emitStatus(taskId, 'review')
-          this.emitLog(taskId, 'agent_end', 'Agent finished — review needed')
-          this.cleanupArtifacts(taskId)
-          this.agents.delete(taskId)
-        }
+        if (agent) agent.ptySession = null
       })
-
-      // Replay any messages queued during Phase 1
-      if (agent.messageQueue.length > 0) {
-        // Wait for PTY to initialize
-        setTimeout(() => {
-          for (const msg of agent.messageQueue) {
-            ptySession.write(msg + '\r')
-            this.emitLog(taskId, 'text', `[YOU] ${msg}`)
-          }
-          agent.messageQueue = []
-        }, 2000)
-      }
-
     } catch (err) {
-      this.emitStatus(taskId, 'failed')
-      this.emitLog(taskId, 'error', `Failed to start PTY: ${err}`)
-      this.agents.delete(taskId)
+      this.emitLog(taskId, 'error', `Terminal failed: ${err}`)
     }
   }
 
@@ -295,19 +255,63 @@ export class AgentService extends EventEmitter {
   }
 
   /**
-   * Send a follow-up message to a running agent.
-   * Writes directly to PTY so it appears in the terminal.
+   * Send a follow-up message via stream-json (--resume sessionId -p "msg").
+   * Clean structured response — no TUI parsing needed.
    */
-  sendMessage(taskId: string, message: string): void {
+  async sendMessage(taskId: string, message: string): Promise<void> {
     const agent = this.agents.get(taskId)
     if (!agent) return
 
-    if (agent.ptySession) {
-      agent.ptySession.write(message + '\r')
-      this.emitLog(taskId, 'text', `[YOU] ${message}`)
-    } else {
+    // If still processing (stream or PTY active), queue
+    if (agent.streamHandle) {
       agent.messageQueue.push(message)
       this.emitLog(taskId, 'text', `[QUEUED] ${message}`)
+      return
+    }
+
+    if (!agent.claudeSessionId) {
+      this.emitLog(taskId, 'error', 'No session ID — cannot send follow-up')
+      return
+    }
+
+    this.emitLog(taskId, 'text', `[YOU] ${message}`)
+    this.emitStatus(taskId, 'running')
+
+    try {
+      const conn = agent.conn
+      const project = this.getProject(agent.projectId)
+      const workspacePath = project?.workspacePath || '~'
+
+      const stream = await conn.spawnAgentStream(
+        agent.engine, workspacePath, message,
+        `msg-${taskId}-${Date.now()}`,
+        agent.claudeSessionId
+      )
+      agent.streamHandle = stream
+
+      stream.onEvent((event) => {
+        if (event.session_id) {
+          agent.claudeSessionId = event.session_id
+          this.emit('task:sessionId', { taskId, sessionId: event.session_id })
+        }
+        this.handleStreamEvent(taskId, agent, event)
+      })
+
+      stream.onClose((_code) => {
+        agent.streamHandle = null
+        if (this.agents.has(taskId)) {
+          this.emitStatus(taskId, 'waiting')
+
+          // Process next queued message if any
+          if (agent.messageQueue.length > 0) {
+            const next = agent.messageQueue.shift()!
+            this.sendMessage(taskId, next)
+          }
+        }
+      })
+    } catch (err) {
+      this.emitLog(taskId, 'error', `Send failed: ${err}`)
+      this.emitStatus(taskId, 'waiting')
     }
   }
 

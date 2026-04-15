@@ -363,17 +363,14 @@ export function MainPanel({
           className={`${styles.tab} ${activeTab === 'log' ? styles.tabActive : ''}`}
           onClick={() => setActiveTab('log')}
         >
-          Log
-          {activeTask.logs.length > 0 && (
-            <span className={styles.tabBadge}>{activeTask.logs.length}</span>
-          )}
+          Chat
+          {(isRunning || isWaiting) && <span className={styles.tabLive}>LIVE</span>}
         </button>
         <button
           className={`${styles.tab} ${activeTab === 'terminal' ? styles.tabActive : ''}`}
           onClick={() => setActiveTab('terminal')}
         >
           Terminal
-          {isRunning && <span className={styles.tabLive}>LIVE</span>}
         </button>
         <button
           className={`${styles.tab} ${activeTab === 'artifacts' ? styles.tabActive : ''}`}
@@ -386,10 +383,10 @@ export function MainPanel({
         </button>
       </div>
 
-      {/* Content — terminal always mounted, hidden via CSS to preserve session */}
+      {/* Content */}
       <div className={styles.content}>
         <div style={{ display: activeTab === 'log' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
-          <LogView task={activeTask} />
+          <ChatView task={activeTask} />
         </div>
         <div style={{ display: activeTab === 'terminal' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
           <SessionTerminal taskId={activeTask.id} />
@@ -409,10 +406,9 @@ export function MainPanel({
   )
 }
 
-function LogView({ task }: { task: Task }) {
+function ChatView({ task }: { task: Task }) {
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  // Auto-scroll to bottom when logs change
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [task.logs.length])
@@ -420,42 +416,73 @@ function LogView({ task }: { task: Task }) {
   if (task.logs.length === 0) {
     return (
       <div className={styles.emptyContent}>
-        <p>No logs yet. Click "Run Agent" to start.</p>
+        <p>Click "Run Agent" to start a conversation.</p>
       </div>
     )
   }
 
+  // Group consecutive logs by role for chat bubbles
+  const messages: Array<{ role: 'user' | 'assistant' | 'system' | 'tool'; content: string; time: string; tool?: string }> = []
+
+  for (const log of task.logs) {
+    const time = new Date(log.timestamp).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+
+    if (log.content.startsWith('[YOU] ')) {
+      messages.push({ role: 'user', content: log.content.slice(6), time })
+    } else if (log.content.startsWith('[QUEUED] ')) {
+      messages.push({ role: 'user', content: log.content.slice(9), time })
+    } else if (log.type === 'tool_call') {
+      // Compact tool call
+      const last = messages[messages.length - 1]
+      if (last?.role === 'tool') {
+        last.content += `\n${log.meta?.tool || 'tool'}: ${log.content.slice(0, 100)}`
+      } else {
+        messages.push({ role: 'tool', content: `${log.meta?.tool || 'tool'}: ${log.content.slice(0, 100)}`, time, tool: log.meta?.tool })
+      }
+    } else if (log.type === 'agent_start' || log.type === 'agent_end') {
+      messages.push({ role: 'system', content: log.content, time })
+    } else if (log.type === 'error') {
+      messages.push({ role: 'system', content: `Error: ${log.content}`, time })
+    } else if (log.type === 'text') {
+      // Assistant response — merge consecutive
+      const last = messages[messages.length - 1]
+      if (last?.role === 'assistant') {
+        last.content += '\n' + log.content
+      } else {
+        messages.push({ role: 'assistant', content: log.content, time })
+      }
+    }
+  }
+
   return (
-    <div className={styles.logList}>
-      {task.logs.map(log => (
-        <div key={log.id} className={styles.logEntry} data-type={log.type}>
-          <span className={styles.logTime}>
-            {new Date(log.timestamp).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-          </span>
-          <span className={styles.logIcon}>
-            {log.type === 'agent_start' ? '▶' :
-             log.type === 'agent_end' ? '■' :
-             log.type === 'tool_call' ? '⚡' :
-             log.type === 'error' ? '✕' : '·'}
-          </span>
-          <div className={styles.logContent}>
-            <span>{log.content}</span>
-            {log.meta?.tool && (
-              <span className={styles.logMeta}>{log.meta.tool}</span>
-            )}
-            {log.meta?.duration !== undefined && log.meta.duration > 0 && (
-              <span className={styles.logDuration}>{(log.meta.duration / 1000).toFixed(1)}s</span>
-            )}
-          </div>
+    <div className={styles.chatMessages}>
+      {messages.map((msg, i) => (
+        <div key={i} className={styles.chatBubbleWrap} data-role={msg.role}>
+          {msg.role === 'system' ? (
+            <div className={styles.chatSystem}>
+              <span>{msg.content}</span>
+              <span className={styles.chatTime}>{msg.time}</span>
+            </div>
+          ) : msg.role === 'tool' ? (
+            <div className={styles.chatTool}>
+              <span className={styles.chatToolIcon}>{'>'}_</span>
+              <pre className={styles.chatToolContent}>{msg.content}</pre>
+            </div>
+          ) : (
+            <div className={styles.chatBubble} data-role={msg.role}>
+              <div className={styles.chatBubbleContent}>{msg.content}</div>
+              <span className={styles.chatTime}>{msg.time}</span>
+            </div>
+          )}
         </div>
       ))}
       {task.status === 'running' && (
-        <div className={styles.logEntry} data-type="running">
-          <span className={styles.logTime}></span>
-          <span className={styles.logIcon}>
-            <span className={styles.spinner} />
-          </span>
-          <span className={styles.logContent}>Agent working...</span>
+        <div className={styles.chatBubbleWrap} data-role="assistant">
+          <div className={styles.chatBubble} data-role="assistant">
+            <div className={styles.chatTyping}>
+              <span /><span /><span />
+            </div>
+          </div>
         </div>
       )}
       <div ref={bottomRef} />
