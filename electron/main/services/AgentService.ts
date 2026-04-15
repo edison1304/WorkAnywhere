@@ -391,14 +391,15 @@ export class AgentService extends EventEmitter {
   }
 
   /**
-   * Resume a Claude session by session ID (Phase 2 only — interactive PTY).
-   * Used when reopening a previously completed/failed task.
+   * Resume a Claude session by session ID.
+   * Registers the agent with its sessionId so follow-up messages
+   * can use --resume via stream-json.
    */
   async resumeSession(
     taskId: string,
     projectId: string,
     phaseId: string,
-    workspacePath: string,
+    _workspacePath: string,
     sessionId: string,
     engine: string = 'claude'
   ): Promise<void> {
@@ -407,9 +408,6 @@ export class AgentService extends EventEmitter {
     }
 
     const conn = await this.getConn(projectId)
-
-    this.emitStatus(taskId, 'running')
-    this.emitLog(taskId, 'agent_start', `Resuming session ${sessionId}`)
 
     const agent: AgentInstance = {
       taskId, projectId, phaseId, engine, conn,
@@ -420,7 +418,8 @@ export class AgentService extends EventEmitter {
     }
     this.agents.set(taskId, agent)
 
-    await this.startPTYResume(taskId, agent, workspacePath)
+    this.emitStatus(taskId, 'waiting')
+    this.emitLog(taskId, 'agent_start', `Session resumed (${sessionId.slice(0, 20)}...) — send a message to continue`)
   }
 
   isRunning(taskId: string): boolean {
