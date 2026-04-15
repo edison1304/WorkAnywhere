@@ -46,6 +46,18 @@ export class ConnectionManager extends EventEmitter {
    */
   async getConnection(project: Project): Promise<AnyConnection> {
     const key = this.connectionKey(project.connection)
+
+    // Incomplete SSH config → fall back to any available SSH connection
+    if (key === '__incomplete_ssh__') {
+      for (const entry of this.entries.values()) {
+        if (entry.type === 'ssh' && entry.connection.isConnected()) {
+          entry.projectIds.add(project.id)
+          return entry.connection
+        }
+      }
+      throw new Error('No SSH connection available and project has incomplete SSH config. Reconnect to server first.')
+    }
+
     const existing = this.entries.get(key)
 
     if (existing) {
@@ -219,8 +231,8 @@ export class ConnectionManager extends EventEmitter {
   private connectionKey(config: ConnectionConfig): string {
     if (config.type === 'local') return 'local'
     if (config.type === 'remote') return `remote:${config.remote?.link || 'unknown'}`
-    const ssh = config.ssh!
-    return `ssh:${ssh.host}:${ssh.port || 22}:${ssh.username}`
+    if (!config.ssh?.host) return '__incomplete_ssh__'
+    return `ssh:${config.ssh.host}:${config.ssh.port || 22}:${config.ssh.username}`
   }
 
   private async createConnection(config: ConnectionConfig): Promise<AnyConnection> {
@@ -238,6 +250,9 @@ export class ConnectionManager extends EventEmitter {
       return remote
     }
 
+    if (!config.ssh?.host) {
+      throw new Error('SSH config incomplete (missing host). Re-create the project with a valid SSH connection.')
+    }
     const ssh = new SSHService()
     if (this.appConfig) ssh.setClaudeConfig(this.appConfig)
     await ssh.connect(config)
