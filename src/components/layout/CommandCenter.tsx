@@ -264,6 +264,9 @@ export function CommandCenter({
             onDeleteTask={onDeleteTask}
             onForkTask={onForkTask}
             onMoveTask={onMoveTask}
+            onCreateProject={onCreateProject}
+            onCreatePhase={onCreatePhase}
+            onCreateTask={onCreateTask}
             onDetach={() => onDetach('monitor')}
           />
         ) : (

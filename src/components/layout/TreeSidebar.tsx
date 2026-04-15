@@ -23,6 +23,9 @@ interface Props {
   onDeleteTask?: (id: string) => void
   onForkTask?: (id: string) => void
   onMoveTask?: (taskId: string, targetPhaseId: string) => void
+  onCreateProject?: (name: string, path: string) => void
+  onCreatePhase?: (name: string, desc: string) => void
+  onCreateTask?: (name: string, purpose: string, prompt: string) => void
   onDetach?: () => void
 }
 
@@ -264,6 +267,56 @@ function MonitorSplit({
   )
 }
 
+// ─── Inline add forms ───
+function InlineAddPhase({ onAdd }: { onAdd?: (name: string, desc: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const [name, setName] = useState('')
+  if (!open) return <button className={styles.addBtn} onClick={() => setOpen(true)}>+ New Phase</button>
+  return (
+    <form className={styles.inlineForm} onSubmit={e => { e.preventDefault(); if (name.trim()) { onAdd?.(name, ''); setName(''); setOpen(false) } }}>
+      <input className={styles.inlineInput} value={name} onChange={e => setName(e.target.value)} placeholder="Phase name" autoFocus />
+      <button type="submit" className={styles.inlineSubmit} disabled={!name.trim()}>Add</button>
+      <button type="button" className={styles.inlineCancel} onClick={() => setOpen(false)}>x</button>
+    </form>
+  )
+}
+
+function InlineAddTask({ onAdd }: { onAdd?: (name: string, purpose: string, prompt: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const [name, setName] = useState('')
+  const [purpose, setPurpose] = useState('')
+  const [prompt, setPrompt] = useState('')
+  if (!open) return <button className={styles.addBtn} onClick={() => setOpen(true)}>+ New Task</button>
+  return (
+    <form className={styles.inlineForm} onSubmit={e => { e.preventDefault(); if (name.trim() && prompt.trim()) { onAdd?.(name, purpose, prompt); setName(''); setPurpose(''); setPrompt(''); setOpen(false) } }}>
+      <input className={styles.inlineInput} value={name} onChange={e => setName(e.target.value)} placeholder="Task name" autoFocus />
+      <input className={styles.inlineInput} value={purpose} onChange={e => setPurpose(e.target.value)} placeholder="Purpose" />
+      <input className={styles.inlineInput} value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Prompt" />
+      <div style={{ display: 'flex', gap: 4 }}>
+        <button type="submit" className={styles.inlineSubmit} disabled={!name.trim() || !prompt.trim()}>Add</button>
+        <button type="button" className={styles.inlineCancel} onClick={() => setOpen(false)}>x</button>
+      </div>
+    </form>
+  )
+}
+
+function InlineAddProject({ onAdd }: { onAdd?: (name: string, path: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const [name, setName] = useState('')
+  const [path, setPath] = useState('')
+  if (!open) return <button className={styles.addBtn} onClick={() => setOpen(true)}>+ New Project</button>
+  return (
+    <form className={styles.inlineForm} onSubmit={e => { e.preventDefault(); if (name.trim() && path.trim()) { onAdd?.(name, path); setName(''); setPath(''); setOpen(false) } }}>
+      <input className={styles.inlineInput} value={name} onChange={e => setName(e.target.value)} placeholder="Project name" autoFocus />
+      <input className={styles.inlineInput} value={path} onChange={e => setPath(e.target.value)} placeholder="Workspace path" />
+      <div style={{ display: 'flex', gap: 4 }}>
+        <button type="submit" className={styles.inlineSubmit} disabled={!name.trim() || !path.trim()}>Add</button>
+        <button type="button" className={styles.inlineCancel} onClick={() => setOpen(false)}>x</button>
+      </div>
+    </form>
+  )
+}
+
 // ─── Manage view ───
 function ManageView({
   phases, allTasks, activeProjectId, activePhaseId, activeTaskId,
@@ -276,6 +329,8 @@ function ManageView({
   onTaskContext?: (e: React.MouseEvent, taskId: string) => void
   onPhaseDrop?: (e: React.DragEvent, phaseId: string) => void
   dragOverPhase?: string | null
+  onCreatePhase?: (name: string, desc: string) => void
+  onCreateTask?: (name: string, purpose: string, prompt: string) => void
 }) {
   const projectPhases = phases.filter(ph => ph.projectId === activeProjectId)
   if (!activeProjectId) return <div className={styles.emptyHint}>Select a project</div>
@@ -323,13 +378,13 @@ function ManageView({
                     <span className={styles.manageTaskStatus}>{task.status}</span>
                   </div>
                 ))}
-                <button className={styles.addTaskBtn} onClick={() => { onSelectPhase(phase.id); onSelectTask(null) }}>+ New Task</button>
+                <InlineAddTask onAdd={(name, purpose, prompt) => { onSelectPhase(phase.id); onCreateTask?.(name, purpose, prompt) }} />
               </div>
             )}
           </div>
         )
       })}
-      <button className={styles.addPhaseBtn} onClick={() => onSelectTask(null)}>+ New Phase</button>
+      <InlineAddPhase onAdd={onCreatePhase} />
     </>
   )
 }
@@ -466,10 +521,16 @@ export function TreeSidebar(props: Props) {
               collapsed={collapsed} toggle={toggle}
               onSelectPhase={props.onSelectPhase} onSelectTask={props.onSelectTask}
               onTaskContext={handleTaskContext} onPhaseDrop={handlePhaseDrop} dragOverPhase={dragOverPhase}
+              onCreatePhase={props.onCreatePhase} onCreateTask={props.onCreateTask}
             />
           </div>
         </div>
       )}
+
+      {/* New Project button */}
+      <div className={styles.sidebarFooter}>
+        <InlineAddProject onAdd={props.onCreateProject} />
+      </div>
     </div>
   )
 }
