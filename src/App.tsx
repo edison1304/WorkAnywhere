@@ -192,8 +192,10 @@ export default function App() {
 
   const handleSendMessage = useCallback(async (taskId: string, message: string) => {
     if (!window.api) return
-    await window.api.taskSend(taskId, message)
-    // Optimistic UI: add message to logs locally
+    const task = tasks.find(t => t.id === taskId)
+    if (!task) return
+
+    // Add to UI immediately
     setTasks(prev => prev.map(t =>
       t.id === taskId ? { ...t, logs: [...t.logs, {
         id: `${taskId}-msg-${Date.now()}`,
@@ -203,7 +205,22 @@ export default function App() {
         content: `[YOU] ${message}`
       }]} : t
     ))
-  }, [])
+
+    if (task.status === 'idle') {
+      // First message on idle task → update prompt and run agent
+      await window.api.taskUpdate(taskId, { prompt: message })
+      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, prompt: message } : t))
+      handleRunAgent(taskId)
+    } else if (task.status === 'running' || task.status === 'waiting') {
+      // Active agent → send follow-up
+      await window.api.taskSend(taskId, message)
+    } else {
+      // review/completed/failed → resume with this message as prompt
+      await window.api.taskUpdate(taskId, { prompt: message })
+      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, prompt: message } : t))
+      handleRunAgent(taskId)
+    }
+  }, [tasks, handleRunAgent])
 
   // ─── Create project/phase/task (via IPC → DataStore) ───
   // Store the last used connection config for new projects
