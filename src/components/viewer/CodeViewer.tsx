@@ -57,7 +57,7 @@ export function CodeViewer({ content, fileName }: Props) {
             scrollBeyondLastLine: false,
             fontSize: 14,
             lineHeight: 19,
-            fontFamily: "Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+            fontFamily: "Consolas, 'Courier New', monospace",
             lineNumbers: 'on',
             renderLineHighlight: 'none',
             overviewRulerLanes: 0,
