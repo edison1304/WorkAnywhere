@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, Component, type ReactNode } from 'react'
+import { useState, useCallback, useEffect, useRef, Component, type ReactNode } from 'react'
 import type { Project, Phase, Task } from '../../../shared/types'
 import { StatusDot } from '../job/StatusDot'
 import styles from './TreeSidebar.module.css'
@@ -568,6 +568,16 @@ function useReorderDrag<T extends { id: string }>(
   const [dragOverHalf, setDragOverHalf] = useState<'top' | 'bottom'>('bottom')
   const [dragId, setDragId] = useState<string | null>(null)
 
+  // Use refs to avoid stale closures in drag callbacks
+  const itemsRef = useRef(items)
+  const dragOverIdRef = useRef(dragOverId)
+  const dragOverHalfRef = useRef(dragOverHalf)
+  const onReorderRef = useRef(onReorder)
+  itemsRef.current = items
+  dragOverIdRef.current = dragOverId
+  dragOverHalfRef.current = dragOverHalf
+  onReorderRef.current = onReorder
+
   const handleDragStart = useCallback((e: React.DragEvent, id: string) => {
     e.dataTransfer.setData(dragType, id)
     e.dataTransfer.effectAllowed = 'move'
@@ -587,20 +597,22 @@ function useReorderDrag<T extends { id: string }>(
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     const sourceId = e.dataTransfer.getData(dragType)
-    if (!sourceId || !dragOverId || sourceId === dragOverId) {
+    const overId = dragOverIdRef.current
+    const overHalf = dragOverHalfRef.current
+    if (!sourceId || !overId || sourceId === overId) {
       setDragOverId(null); setDragId(null); return
     }
-    const ids = items.map(i => i.id)
+    const ids = itemsRef.current.map(i => i.id)
     const fromIdx = ids.indexOf(sourceId)
-    const toIdx = ids.indexOf(dragOverId)
+    const toIdx = ids.indexOf(overId)
     if (fromIdx === -1 || toIdx === -1) { setDragOverId(null); setDragId(null); return }
     ids.splice(fromIdx, 1)
-    const insertIdx = dragOverHalf === 'top' ? ids.indexOf(dragOverId) : ids.indexOf(dragOverId) + 1
+    const insertIdx = overHalf === 'top' ? ids.indexOf(overId) : ids.indexOf(overId) + 1
     ids.splice(insertIdx, 0, sourceId)
-    onReorder(ids)
+    onReorderRef.current(ids)
     setDragOverId(null)
     setDragId(null)
-  }, [items, dragOverId, dragOverHalf, dragType, onReorder])
+  }, [dragType])
 
   const handleDragEnd = useCallback(() => {
     setDragOverId(null)
@@ -693,9 +705,9 @@ function ManageView({
               className={`${styles.managePhaseHeader} ${phase.id === activePhaseId ? styles.active : ''} ${phaseDrag.dragId === phase.id ? styles.dragging : ''}`}
               onClick={() => { onSelectPhase(phase.id); toggle(phaseKey) }}
               draggable
-              onDragStart={e => phaseDrag.handleDragStart(e, phase.id)}
-              onDragOver={e => phaseDrag.handleDragOver(e, phase.id)}
-              onDrop={phaseDrag.handleDrop}
+              onDragStart={e => { e.stopPropagation(); phaseDrag.handleDragStart(e, phase.id) }}
+              onDragOver={e => { e.stopPropagation(); phaseDrag.handleDragOver(e, phase.id) }}
+              onDrop={e => { e.stopPropagation(); phaseDrag.handleDrop(e) }}
               onDragEnd={phaseDrag.handleDragEnd}
             >
               <span className={styles.dragHandle}>⠿</span>
@@ -762,13 +774,14 @@ function ManageTaskList({
               onContextMenu={e => onTaskContext?.(e, task.id)}
               draggable
               onDragStart={e => {
+                e.stopPropagation()
                 e.dataTransfer.setData('task-id', task.id)
                 e.dataTransfer.effectAllowed = 'move'
                 taskDrag.handleDragStart(e, task.id)
               }}
-              onDragOver={e => taskDrag.handleDragOver(e, task.id)}
+              onDragOver={e => { e.stopPropagation(); taskDrag.handleDragOver(e, task.id) }}
               onDrop={e => {
-                // Only handle same-phase reorder, not cross-phase
+                e.stopPropagation()
                 if (e.dataTransfer.types.includes('task-id') && !e.dataTransfer.types.includes('phase-id')) {
                   taskDrag.handleDrop(e)
                 }
