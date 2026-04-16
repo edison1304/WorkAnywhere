@@ -30,7 +30,9 @@ interface Props {
   onCreateTask?: (name: string, purpose: string, prompt: string) => void
   onOpenFile?: (filePath: string) => void
   workspacePath?: string
+  monitorDetached?: boolean
   onDetach?: () => void
+  onReattach?: () => void
 }
 
 // ─── Context Menu ───
@@ -885,26 +887,39 @@ export function TreeSidebar(props: Props) {
       {/* View toggle + detach */}
       <div className={styles.viewToggle}>
         <div className={styles.viewBtnGroup}>
-          <button
-            className={`${styles.viewTab} ${sidebarView === 'monitor' || sidebarView === 'both' ? styles.viewTabActive : ''}`}
-            onClick={() => onSidebarViewChange(sidebarView === 'both' ? 'manage' : sidebarView === 'monitor' ? 'both' : 'monitor')}
-          >
-            Monitor
-          </button>
-          <button
-            className={`${styles.viewTab} ${sidebarView === 'manage' || sidebarView === 'both' ? styles.viewTabActive : ''}`}
-            onClick={() => onSidebarViewChange(sidebarView === 'both' ? 'monitor' : sidebarView === 'manage' ? 'both' : 'manage')}
-          >
-            Manage
-          </button>
-          {props.onDetach && (
-            <button className={styles.detachBtn} onClick={props.onDetach} title="Pop out to second monitor">↗</button>
+          {!props.monitorDetached ? (
+            <>
+              <button
+                className={`${styles.viewTab} ${sidebarView === 'monitor' || sidebarView === 'both' ? styles.viewTabActive : ''}`}
+                onClick={() => onSidebarViewChange(sidebarView === 'both' ? 'manage' : sidebarView === 'monitor' ? 'both' : 'monitor')}
+              >
+                Monitor
+              </button>
+              <button
+                className={`${styles.viewTab} ${sidebarView === 'manage' || sidebarView === 'both' ? styles.viewTabActive : ''}`}
+                onClick={() => onSidebarViewChange(sidebarView === 'both' ? 'monitor' : sidebarView === 'manage' ? 'both' : 'manage')}
+              >
+                Manage
+              </button>
+              {props.onDetach && (
+                <button className={styles.detachBtn} onClick={props.onDetach} title="Pop out Monitor to second display">↗</button>
+              )}
+            </>
+          ) : (
+            <>
+              <button className={`${styles.viewTab} ${styles.viewTabActive}`}>
+                Manage
+              </button>
+              <button className={styles.detachBtn} onClick={props.onReattach} title="Reattach Monitor">
+                ↩
+              </button>
+            </>
           )}
         </div>
       </div>
 
-      {/* Monitor view */}
-      {(sidebarView === 'monitor' || sidebarView === 'both') && (
+      {/* Monitor view — hidden when detached */}
+      {!props.monitorDetached && (sidebarView === 'monitor' || sidebarView === 'both') && (
         <div className={styles.viewSection}>
           <div className={styles.viewLabel}>
             <span>{sidebarView === 'both' ? 'MONITORING' : 'MONITOR'}</span>
@@ -939,12 +954,12 @@ export function TreeSidebar(props: Props) {
         </div>
       )}
 
-      {sidebarView === 'both' && <div className={styles.viewDivider} />}
+      {!props.monitorDetached && sidebarView === 'both' && <div className={styles.viewDivider} />}
 
-      {/* Manage view */}
-      {(sidebarView === 'manage' || sidebarView === 'both') && (
+      {/* Manage view — always visible when monitor is detached */}
+      {(props.monitorDetached || sidebarView === 'manage' || sidebarView === 'both') && (
         <div className={styles.viewSection}>
-          {sidebarView === 'both' && (
+          {!props.monitorDetached && sidebarView === 'both' && (
             <div className={styles.viewLabel}><span>ALL TASKS</span></div>
           )}
           <div className={styles.treeContainer}>

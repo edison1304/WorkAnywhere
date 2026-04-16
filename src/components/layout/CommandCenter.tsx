@@ -270,42 +270,34 @@ export function CommandCenter({
       <div className={styles.body}>
         {/* Sidebar: only show when connected and has projects */}
         {sshConnected && projects.length > 0 && (
-          !monitorDetached ? (
-            <TreeSidebar
-              projects={projects}
-              phases={allPhases}
-              allTasks={allTasks}
-              activeProjectId={activeProject?.id || null}
-              activePhaseId={activePhase?.id || null}
-              activeTaskId={activeTask?.id || null}
-              sidebarView={sidebarView}
-              onSidebarViewChange={onSidebarViewChange}
-              onSelectProject={onSelectProject}
-              onSelectPhase={onSelectPhase}
-              onSelectTask={onSelectTask}
-              onAcknowledgeTask={onAcknowledgeTask}
-              onPinTask={onPinTask}
-              onDeleteTask={onDeleteTask}
-              onForkTask={onForkTask}
-              onMoveTask={onMoveTask}
-              onReorderTasks={onReorderTasks}
-              onReorderPhases={onReorderPhases}
-              onRequestCreateProject={onRequestCreateProject}
-              onCreatePhase={onCreatePhase}
-              onCreateTask={onCreateTask}
-              onOpenFile={onOpenFile}
-              workspacePath={activeProject?.workspacePath}
-              onDetach={() => onDetach('monitor')}
-            />
-          ) : (
-            <div className={styles.detachedPlaceholder}>
-              <span>M</span>
-              <span>Monitor on<br />second display</span>
-              <button className={styles.reattachBtn} onClick={() => onReattach('monitor')}>
-                ↩ Reattach
-              </button>
-            </div>
-          )
+          <TreeSidebar
+            projects={projects}
+            phases={allPhases}
+            allTasks={allTasks}
+            activeProjectId={activeProject?.id || null}
+            activePhaseId={activePhase?.id || null}
+            activeTaskId={activeTask?.id || null}
+            sidebarView={monitorDetached ? 'manage' : sidebarView}
+            onSidebarViewChange={onSidebarViewChange}
+            onSelectProject={onSelectProject}
+            onSelectPhase={onSelectPhase}
+            onSelectTask={onSelectTask}
+            onAcknowledgeTask={onAcknowledgeTask}
+            onPinTask={onPinTask}
+            onDeleteTask={onDeleteTask}
+            onForkTask={onForkTask}
+            onMoveTask={onMoveTask}
+            onReorderTasks={onReorderTasks}
+            onReorderPhases={onReorderPhases}
+            onRequestCreateProject={onRequestCreateProject}
+            onCreatePhase={onCreatePhase}
+            onCreateTask={onCreateTask}
+            onOpenFile={onOpenFile}
+            workspacePath={activeProject?.workspacePath}
+            monitorDetached={monitorDetached}
+            onDetach={() => onDetach('monitor')}
+            onReattach={() => onReattach('monitor')}
+          />
         )}
 
         {/* Main panel always visible */}
