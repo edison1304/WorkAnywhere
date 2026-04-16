@@ -525,7 +525,6 @@ function FileTree({ rootPath, onOpenFile }: { rootPath: string; onOpenFile?: (pa
               {fi?.icon || '·'}
             </span>
           )}
-          </span>
           {renaming && renaming.path === entry.path ? (
             <input
               className={styles.fileTreeRenameInput}
