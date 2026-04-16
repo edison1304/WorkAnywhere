@@ -405,6 +405,18 @@
 }
 
 /* ─── Manage view ─── */
+.phaseTopDropZone {
+  padding: 6px 10px;
+  margin-bottom: 2px;
+  border: 1px dashed var(--accent);
+  border-radius: 4px;
+  font-size: 10px;
+  color: var(--accent);
+  text-align: center;
+  opacity: 0.6;
+  background: rgba(99, 102, 241, 0.05);
+}
+
 .managePhase {
   margin-bottom: 4px;
 }
@@ -557,7 +569,8 @@
 .fileTreeHeader {
   display: flex;
   align-items: center;
-  padding: 10px 8px 4px;
+  gap: 4px;
+  padding: 8px 8px 4px;
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
@@ -565,7 +578,10 @@
   color: var(--text-muted);
   border-top: 1px solid var(--border-subtle);
   margin-top: 8px;
+  cursor: pointer;
+  user-select: none;
 }
+.fileTreeHeader:hover { color: var(--text-secondary); }
 
 .fileTreeRoot {
   font-size: 12px;

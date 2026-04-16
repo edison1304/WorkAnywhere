@@ -640,6 +640,33 @@ function ManageView({
 
   return (
     <>
+      {/* Top drop zone — allows dragging a phase to the very first position */}
+      {phaseDrag.dragId && (
+        <div
+          className={styles.phaseTopDropZone}
+          onDragOver={e => {
+            if (e.dataTransfer.types.includes('phase-id')) {
+              e.preventDefault()
+              e.dataTransfer.dropEffect = 'move'
+            }
+          }}
+          onDrop={e => {
+            e.preventDefault()
+            const sourceId = e.dataTransfer.getData('phase-id')
+            if (sourceId && projectPhases.length > 0 && sourceId !== projectPhases[0].id) {
+              const ids = projectPhases.map(p => p.id)
+              const fromIdx = ids.indexOf(sourceId)
+              if (fromIdx > 0) {
+                ids.splice(fromIdx, 1)
+                ids.unshift(sourceId)
+                onReorderPhases?.(activeProjectId!, ids)
+              }
+            }
+          }}
+        >
+          Drop here to move to top
+        </div>
+      )}
       {projectPhases.map(phase => {
         const phaseKey = `mng-phase-${phase.id}`
         const isCollapsed = collapsed[phaseKey]
@@ -916,13 +943,19 @@ export function TreeSidebar(props: Props) {
               onCreatePhase={props.onCreatePhase} onCreateTask={props.onCreateTask}
               onReorderTasks={props.onReorderTasks} onReorderPhases={props.onReorderPhases}
             />
-            {/* File explorer */}
+            {/* File explorer — collapsible */}
             {props.workspacePath && (
               <>
-                <div className={styles.fileTreeHeader}>
+                <div
+                  className={styles.fileTreeHeader}
+                  onClick={() => toggle('files-section')}
+                >
+                  <span className={styles.chevron}>{collapsed['files-section'] ? '▸' : '▾'}</span>
                   <span>FILES</span>
                 </div>
-                <FileTree rootPath={props.workspacePath} onOpenFile={props.onOpenFile} />
+                {!collapsed['files-section'] && (
+                  <FileTree rootPath={props.workspacePath} onOpenFile={props.onOpenFile} />
+                )}
               </>
             )}
           </div>
