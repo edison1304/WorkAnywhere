@@ -304,11 +304,60 @@ function InlineAddTask({ onAdd }: { onAdd?: (name: string, purpose: string, prom
   )
 }
 
+// ─── File Context Menu ───
+interface FileContextMenuState {
+  x: number; y: number; path: string; name: string; isDir: boolean
+}
+
+function FileContextMenu({ menu, onClose, onAction }: {
+  menu: FileContextMenuState
+  onClose: () => void
+  onAction: (action: string, path: string, name: string, isDir: boolean) => void
+}) {
+  useEffect(() => {
+    const handler = () => onClose()
+    window.addEventListener('click', handler)
+    window.addEventListener('contextmenu', handler)
+    return () => { window.removeEventListener('click', handler); window.removeEventListener('contextmenu', handler) }
+  }, [onClose])
+
+  return (
+    <div className={styles.contextMenu} style={{ top: menu.y, left: menu.x }}>
+      {!menu.isDir && (
+        <button className={styles.contextMenuItem} onClick={() => onAction('open', menu.path, menu.name, menu.isDir)}>
+          Open
+        </button>
+      )}
+      <button className={styles.contextMenuItem} onClick={() => onAction('copyPath', menu.path, menu.name, menu.isDir)}>
+        Copy Path
+      </button>
+      <button className={styles.contextMenuItem} onClick={() => onAction('copyName', menu.path, menu.name, menu.isDir)}>
+        Copy Name
+      </button>
+      {!menu.isDir && (
+        <button className={styles.contextMenuItem} onClick={() => onAction('download', menu.path, menu.name, menu.isDir)}>
+          Download
+        </button>
+      )}
+      <div className={styles.contextMenuDivider} />
+      <button className={styles.contextMenuItem} onClick={() => onAction('rename', menu.path, menu.name, menu.isDir)}>
+        Rename
+      </button>
+      <button className={`${styles.contextMenuItem} ${styles.contextMenuDanger}`} onClick={() => onAction('delete', menu.path, menu.name, menu.isDir)}>
+        Delete
+      </button>
+    </div>
+  )
+}
+
 // ─── File Tree (workspace browser) ───
 function FileTree({ rootPath, onOpenFile }: { rootPath: string; onOpenFile?: (path: string) => void }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ [rootPath]: true })
   const [entries, setEntries] = useState<Record<string, Array<{ name: string; isDir: boolean; path: string }>>>({})
   const [loading, setLoading] = useState<Record<string, boolean>>({})
+  const [fileMenu, setFileMenu] = useState<FileContextMenuState | null>(null)
+  const [renaming, setRenaming] = useState<{ path: string; name: string } | null>(null)
+  const [renameValue, setRenameValue] = useState('')
 
   const loadDir = useCallback(async (dirPath: string) => {
     if (entries[dirPath] || loading[dirPath]) return
@@ -324,6 +373,19 @@ function FileTree({ rootPath, onOpenFile }: { rootPath: string; onOpenFile?: (pa
     }
   }, [entries, loading])
 
+  const reloadDir = useCallback(async (dirPath: string) => {
+    if (!window.api) return
+    setLoading(prev => ({ ...prev, [dirPath]: true }))
+    const result = await window.api.sshListDir(dirPath)
+    setLoading(prev => ({ ...prev, [dirPath]: false }))
+    if (result.success && result.entries) {
+      setEntries(prev => ({
+        ...prev,
+        [dirPath]: result.entries!.filter(e => !e.name.startsWith('.')),
+      }))
+    }
+  }, [])
+
   useEffect(() => { loadDir(rootPath) }, [rootPath])
 
   const toggleDir = useCallback((dirPath: string) => {
@@ -333,6 +395,53 @@ function FileTree({ rootPath, onOpenFile }: { rootPath: string; onOpenFile?: (pa
       return next
     })
   }, [loadDir])
+
+  const getParentDir = (filePath: string) => filePath.substring(0, filePath.lastIndexOf('/'))
+
+  const handleContextAction = useCallback(async (action: string, path: string, name: string, isDir: boolean) => {
+    setFileMenu(null)
+    if (!window.api) return
+
+    if (action === 'open') {
+      onOpenFile?.(path)
+    } else if (action === 'copyPath') {
+      navigator.clipboard.writeText(path)
+    } else if (action === 'copyName') {
+      navigator.clipboard.writeText(name)
+    } else if (action === 'download') {
+      const result = await window.api.sshReadFile(path)
+      if (result.success && result.content !== undefined) {
+        const blob = result.encoding === 'base64'
+          ? new Blob([Uint8Array.from(atob(result.content), c => c.charCodeAt(0))])
+          : new Blob([result.content], { type: 'text/plain' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url; a.download = name; a.click()
+        URL.revokeObjectURL(url)
+      }
+    } else if (action === 'rename') {
+      setRenaming({ path, name })
+      setRenameValue(name)
+    } else if (action === 'delete') {
+      const msg = isDir ? `Delete folder "${name}" and all contents?` : `Delete "${name}"?`
+      if (confirm(msg)) {
+        const cmd = isDir ? `rm -rf ${JSON.stringify(path)}` : `rm -f ${JSON.stringify(path)}`
+        await window.api.sshExec(cmd)
+        reloadDir(getParentDir(path))
+      }
+    }
+  }, [onOpenFile, reloadDir])
+
+  const handleRenameSubmit = useCallback(async () => {
+    if (!renaming || !renameValue.trim() || !window.api) { setRenaming(null); return }
+    const parentDir = getParentDir(renaming.path)
+    const newPath = `${parentDir}/${renameValue.trim()}`
+    if (newPath !== renaming.path) {
+      await window.api.sshExec(`mv ${JSON.stringify(renaming.path)} ${JSON.stringify(newPath)}`)
+      reloadDir(parentDir)
+    }
+    setRenaming(null)
+  }, [renaming, renameValue, reloadDir])
 
   const getFileIcon = (name: string, isDir: boolean): string => {
     if (isDir) return '▸'
@@ -357,18 +466,45 @@ function FileTree({ rootPath, onOpenFile }: { rootPath: string; onOpenFile?: (pa
             if (entry.isDir) toggleDir(entry.path)
             else onOpenFile?.(entry.path)
           }}
+          onContextMenu={e => {
+            e.preventDefault(); e.stopPropagation()
+            setFileMenu({ x: e.clientX, y: e.clientY, path: entry.path, name: entry.name, isDir: entry.isDir })
+          }}
         >
           <span className={styles.fileTreeIcon}>
             {entry.isDir ? (expanded[entry.path] ? '▾' : '▸') : getFileIcon(entry.name, false)}
           </span>
-          <span className={styles.fileTreeName}>{entry.name}</span>
+          {renaming && renaming.path === entry.path ? (
+            <input
+              className={styles.fileTreeRenameInput}
+              value={renameValue}
+              onChange={e => setRenameValue(e.target.value)}
+              onBlur={handleRenameSubmit}
+              onKeyDown={e => { if (e.key === 'Enter') handleRenameSubmit(); if (e.key === 'Escape') setRenaming(null) }}
+              autoFocus
+              onClick={e => e.stopPropagation()}
+            />
+          ) : (
+            <span className={styles.fileTreeName}>{entry.name}</span>
+          )}
         </div>
         {entry.isDir && expanded[entry.path] && renderEntries(entry.path, depth + 1)}
       </div>
     ))
   }
 
-  return <div className={styles.fileTreeRoot}>{renderEntries(rootPath, 0)}</div>
+  return (
+    <div className={styles.fileTreeRoot}>
+      {renderEntries(rootPath, 0)}
+      {fileMenu && (
+        <FileContextMenu
+          menu={fileMenu}
+          onClose={() => setFileMenu(null)}
+          onAction={handleContextAction}
+        />
+      )}
+    </div>
+  )
 }
 
 // ─── Drag reorder helpers ───

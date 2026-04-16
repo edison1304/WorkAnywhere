@@ -23,6 +23,11 @@
 .contextMenuItem:hover { background: var(--bg-hover); }
 .contextMenuDanger { color: var(--error); }
 .contextMenuDanger:hover { background: rgba(239, 68, 68, 0.1); }
+.contextMenuDivider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 4px 8px;
+}
 
 /* Drop target highlight */
 .phaseDropTarget {
@@ -601,4 +606,16 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   flex: 1;
+}
+
+.fileTreeRenameInput {
+  flex: 1;
+  padding: 1px 4px;
+  background: var(--bg-primary);
+  border: 1px solid var(--accent);
+  border-radius: 2px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
 }
