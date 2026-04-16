@@ -90,7 +90,7 @@ function TaskItemMonitor({ task, isActive, onSelect, onAcknowledge, onPin, onCon
       onClick={onSelect}
       onContextMenu={onContextMenu}
       draggable
-      onDragStart={e => { e.dataTransfer.setData('taskId', task.id); onDragStart?.(e) }}
+      onDragStart={e => { e.dataTransfer.setData('task-id', task.id); onDragStart?.(e) }}
       role="button"
       tabIndex={0}
     >
@@ -395,7 +395,7 @@ function ManageView({
   const phaseDrag = useReorderDrag(
     projectPhases,
     (orderedIds) => onReorderPhases?.(activeProjectId!, orderedIds),
-    'phaseId'
+    'phase-id'
   )
 
   return (
@@ -412,12 +412,12 @@ function ManageView({
             className={`${styles.managePhase} ${dragOverPhase === phase.id ? styles.phaseDropTarget : ''}`}
             onDrop={e => {
               // Check if it's a task cross-phase drop
-              if (e.dataTransfer.types.includes('taskId') && !e.dataTransfer.types.includes('phaseId')) {
+              if (e.dataTransfer.types.includes('task-id') && !e.dataTransfer.types.includes('phase-id')) {
                 onPhaseDrop?.(e, phase.id)
               }
             }}
             onDragOver={e => {
-              if (e.dataTransfer.types.includes('taskId')) e.preventDefault()
+              if (e.dataTransfer.types.includes('task-id')) e.preventDefault()
             }}
           >
             {isPhaseDropIndicator && phaseDrag.dragOverHalf === 'top' && (
@@ -478,7 +478,7 @@ function ManageTaskList({
   const taskDrag = useReorderDrag(
     tasks,
     (orderedIds) => onReorderTasks?.(phaseId, orderedIds),
-    'taskId'
+    'task-id'
   )
 
   return (
@@ -496,14 +496,14 @@ function ManageTaskList({
               onContextMenu={e => onTaskContext?.(e, task.id)}
               draggable
               onDragStart={e => {
-                e.dataTransfer.setData('taskId', task.id)
+                e.dataTransfer.setData('task-id', task.id)
                 e.dataTransfer.effectAllowed = 'move'
                 taskDrag.handleDragStart(e, task.id)
               }}
               onDragOver={e => taskDrag.handleDragOver(e, task.id)}
               onDrop={e => {
                 // Only handle same-phase reorder, not cross-phase
-                if (e.dataTransfer.types.includes('taskId') && !e.dataTransfer.types.includes('phaseId')) {
+                if (e.dataTransfer.types.includes('task-id') && !e.dataTransfer.types.includes('phase-id')) {
                   taskDrag.handleDrop(e)
                 }
               }}
@@ -561,7 +561,7 @@ export function TreeSidebar(props: Props) {
   const handlePhaseDrop = useCallback((e: React.DragEvent, phaseId: string) => {
     e.preventDefault()
     setDragOverPhase(null)
-    const taskId = e.dataTransfer.getData('taskId')
+    const taskId = e.dataTransfer.getData('task-id')
     if (taskId) props.onMoveTask?.(taskId, phaseId)
   }, [props.onMoveTask])
 
