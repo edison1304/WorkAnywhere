@@ -470,22 +470,28 @@ ipcMain.handle('ssh:exec', async (_event, command: string, projectId?: string) =
 async function runClaudeOnProject(projectId: string, prompt: string): Promise<string> {
   const project = dataStore.projectList().find(p => p.id === projectId)
   if (!project) throw new Error('Project not found')
-  console.log(`[runClaude] projectId=${projectId}, workspacePath=${project.workspacePath}`)
+  console.log(`[runClaude] projectId=${projectId}`)
   const conn = await connMgr.getConnection(project)
-  console.log(`[runClaude] connection obtained, isConnected=${conn.isConnected()}`)
   const engine = project.settings?.agentEngine || 'claude'
   const prefix = conn.getShellPrefix(engine)
   const cwd = project.workspacePath
 
-  // Write prompt to a temp file to avoid shell escaping issues with unicode
+  // Base64 encode the prompt to completely avoid shell escaping issues
+  // (Korean text, quotes, parens, JSON braces all become safe alphanumeric chars)
+  const b64 = Buffer.from(prompt, 'utf-8').toString('base64')
   const tmpFile = `/tmp/.wa-prompt-${Date.now()}-${Math.random().toString(36).slice(2)}.txt`
-  const escapedPrompt = prompt.replace(/'/g, "'\\''")
-  await conn.exec(`printf '%s' '${escapedPrompt}' > ${tmpFile}`)
 
-  const claudeCmd = conn.getEngineCmd(engine, ['-p', `"$(cat ${tmpFile})"`, '--output-format', 'text'])
-  const fullCmd = `${prefix}cd ${JSON.stringify(cwd)} && ${claudeCmd}; rm -f ${tmpFile}`
-  const execCmd = `bash -lc ${JSON.stringify(fullCmd)}`
-  console.log(`[runClaude] exec cmd preview: ${execCmd.slice(0, 300)}...`)
+  // Step 1: Write decoded prompt to temp file via base64 (safe over SSH)
+  await conn.exec(`echo '${b64}' | base64 -d > ${tmpFile}`)
+
+  // Step 2: Run claude with the temp file content
+  // Use single-quoted bash -lc so $(cat ...) is evaluated by the inner shell only
+  const claudeBase = conn.getEngineCmd(engine, ['--output-format', 'text'])
+  const innerScript = `${prefix}cd ${JSON.stringify(cwd)} && ${claudeBase} -p "$(cat ${tmpFile})"; rm -f ${tmpFile}`
+  const escapedScript = innerScript.replace(/'/g, "'\\''")
+  const execCmd = `bash -lc '${escapedScript}'`
+
+  console.log(`[runClaude] exec cmd: ${execCmd.slice(0, 200)}...`)
   const result = await conn.exec(execCmd)
   console.log(`[runClaude] result length=${result.length}, preview: "${result.slice(0, 200)}"`)
   return result
