@@ -25,6 +25,8 @@ interface Props {
   onDeleteTask?: (id: string) => void
   onForkTask?: (id: string) => void
   onMoveTask?: (taskId: string, targetPhaseId: string) => void
+  onReorderTasks?: (phaseId: string, orderedIds: string[]) => void
+  onReorderPhases?: (projectId: string, orderedIds: string[]) => void
   onDetach: (panelId: string) => void
   onReattach: (panelId: string) => void
   onRunAgent: (taskId: string) => void
@@ -58,7 +60,7 @@ export function CommandCenter({
   sidebarView, detachedPanels,
   sshConnected, sshConnecting, sshError, claudeVersion, connectionStatus,
   onSidebarViewChange,
-  onSelectProject, onSelectPhase, onSelectTask, onAcknowledgeTask, onPinTask, onDeleteTask, onForkTask, onMoveTask,
+  onSelectProject, onSelectPhase, onSelectTask, onAcknowledgeTask, onPinTask, onDeleteTask, onForkTask, onMoveTask, onReorderTasks, onReorderPhases,
   onDetach, onReattach, onRunAgent, onStopAgent, onResumeAgent, onMarkCompleted, onSummarize, onRestartFresh, onSendMessage, onSSHConnect, onLocalConnect, onRemoteConnect, onOpenSSH, onDisconnectSSH,
   onCreateProject, onCreatePhase, onCreateTask, onImportProject,
   onPhaseSummarize, onProjectSummarize
@@ -105,10 +107,10 @@ export function CommandCenter({
 
   return (
     <div className={styles.root}>
-      {/* Header bar */}
+      {/* Unified header — compact, dark, VS Code style */}
       <div className={styles.titlebar}>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span className={styles.titleText}>Workanywhere</span>
+        <div className={styles.titleLeft}>
+          <span className={styles.titleText}>W</span>
           {activeProject && (
             <span className={styles.breadcrumb}>
               <span className={styles.breadcrumbItem}>{activeProject.name}</span>
@@ -127,18 +129,26 @@ export function CommandCenter({
             </span>
           )}
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {/* Detached indicators */}
-          {monitorDetached && (
-            <button className={styles.detachIndicator} onClick={() => onReattach('monitor')} title="Reattach Monitor">
-              📡 ↩
-            </button>
-          )}
-          {railDetached && (
-            <button className={styles.detachIndicator} onClick={() => onReattach('statusrail')} title="Reattach Status Rail">
-              📊 ↩
-            </button>
-          )}
+
+        {/* Pipeline summary inline */}
+        {(activeProject?.summary || activePhase?.summary) && (
+          <div className={styles.pipelineInline}>
+            {activeProject?.summary && (
+              <span className={styles.pipelineChip}>
+                <span className={styles.pipelineChipLabel}>P</span>
+                {activeProject.summary.pipeline}
+              </span>
+            )}
+            {activePhase?.summary && (
+              <span className={styles.pipelineChip}>
+                <span className={styles.pipelineChipLabel}>Ph</span>
+                {activePhase.summary.pipeline}
+              </span>
+            )}
+          </div>
+        )}
+
+        <div className={styles.titleRight}>
           <input
             ref={fileInputRef}
             type="file"
@@ -146,29 +156,40 @@ export function CommandCenter({
             style={{ display: 'none' }}
             onChange={handleImport}
           />
+          {/* Detached indicators */}
+          {monitorDetached && (
+            <button className={styles.headerBtn} onClick={() => onReattach('monitor')} title="Reattach Monitor">
+              Mon ↩
+            </button>
+          )}
+          {railDetached && (
+            <button className={styles.headerBtn} onClick={() => onReattach('statusrail')} title="Reattach Status Rail">
+              Rail ↩
+            </button>
+          )}
           {activePhase && (
-            <button className={styles.headerBtn} onClick={() => onPhaseSummarize?.(activePhase.id)} title="Summarize phase pipeline">
-              Phase Summary
+            <button className={styles.headerBtn} onClick={() => onPhaseSummarize?.(activePhase.id)} title="Summarize phase">
+              Phase
             </button>
           )}
           {activeProject && (
-            <button className={styles.headerBtn} onClick={() => onProjectSummarize?.(activeProject.id)} title="Summarize project pipeline">
-              Project Summary
+            <button className={styles.headerBtn} onClick={() => onProjectSummarize?.(activeProject.id)} title="Summarize project">
+              Project
             </button>
           )}
           {activeProject && (
-            <button className={styles.headerBtn} onClick={handleExport} title="Export session descriptor">
+            <button className={styles.headerBtn} onClick={handleExport} title="Export session">
               Export
             </button>
           )}
-          <button className={styles.headerBtn} onClick={() => fileInputRef.current?.click()} title="Import session descriptor">
+          <button className={styles.headerBtn} onClick={() => fileInputRef.current?.click()} title="Import session">
             Import
           </button>
           {sshConnected ? (
             <button
               className={`${styles.connectionBadge} ${connectionStatus === 'lost' || connectionStatus === 'reconnecting' ? styles.reconnecting : styles.connected}`}
               onClick={onDisconnectSSH}
-              title={claudeVersion ? `Claude ${claudeVersion} — Click to disconnect all` : 'Click to disconnect all'}
+              title={claudeVersion ? `Claude ${claudeVersion} — Click to disconnect` : 'Click to disconnect'}
             >
               {connectionStatus === 'lost' || connectionStatus === 'reconnecting'
                 ? '◌ Reconnecting...'
@@ -178,19 +199,11 @@ export function CommandCenter({
               }
             </button>
           ) : (
-            <button
-              className={styles.connectionBadge}
-              onClick={onOpenSSH}
-              title="Connect via SSH"
-            >
-              ○ Connect SSH
+            <button className={styles.connectionBadge} onClick={onOpenSSH} title="Connect via SSH">
+              ○ Connect
             </button>
           )}
-          <button
-            className={styles.headerBtn}
-            onClick={() => setShowShortcuts(s => !s)}
-            title="Keyboard shortcuts"
-          >
+          <button className={styles.headerBtn} onClick={() => setShowShortcuts(s => !s)} title="Keyboard shortcuts">
             ?
           </button>
         </div>
@@ -216,30 +229,12 @@ export function CommandCenter({
         </div>
       )}
 
-      {/* Pipeline bar — project/phase summary */}
-      {(activeProject?.summary || activePhase?.summary) && (
-        <div className={styles.pipelineBar}>
-          {activeProject?.summary && (
-            <div className={styles.pipelineRow}>
-              <span className={styles.pipelineLabel}>Project</span>
-              <span className={styles.pipelineFlow}>{activeProject.summary.pipeline}</span>
-              <span className={styles.pipelineStatus}>{activeProject.summary.overallProgress}</span>
-            </div>
-          )}
-          {activePhase?.summary && (
-            <div className={styles.pipelineRow}>
-              <span className={styles.pipelineLabel}>Phase</span>
-              <span className={styles.pipelineFlow}>{activePhase.summary.pipeline}</span>
-              <span className={styles.pipelineStatus}>{activePhase.summary.currentState}</span>
-            </div>
-          )}
-          {(activePhase?.summary?.issues?.length ?? 0) > 0 && (
-            <div className={styles.pipelineIssues}>
-              {activePhase!.summary!.issues.map((issue, i) => (
-                <span key={i} className={styles.pipelineIssue}>{issue}</span>
-              ))}
-            </div>
-          )}
+      {/* Pipeline issues bar — only when there are issues */}
+      {(activePhase?.summary?.issues?.length ?? 0) > 0 && (
+        <div className={styles.pipelineIssuesBar}>
+          {activePhase!.summary!.issues.map((issue, i) => (
+            <span key={i} className={styles.pipelineIssue}>{issue}</span>
+          ))}
         </div>
       )}
 
@@ -264,6 +259,8 @@ export function CommandCenter({
             onDeleteTask={onDeleteTask}
             onForkTask={onForkTask}
             onMoveTask={onMoveTask}
+            onReorderTasks={onReorderTasks}
+            onReorderPhases={onReorderPhases}
             onCreateProject={onCreateProject}
             onCreatePhase={onCreatePhase}
             onCreateTask={onCreateTask}
@@ -271,7 +268,7 @@ export function CommandCenter({
           />
         ) : (
           <div className={styles.detachedPlaceholder}>
-            <span>📡</span>
+            <span>M</span>
             <span>Monitor on<br />second display</span>
             <button className={styles.reattachBtn} onClick={() => onReattach('monitor')}>
               ↩ Reattach
@@ -317,7 +314,7 @@ export function CommandCenter({
           />
         ) : (
           <div className={styles.detachedPlaceholder}>
-            <span>📊</span>
+            <span>R</span>
             <span>Status Rail on<br />second display</span>
             <button className={styles.reattachBtn} onClick={() => onReattach('statusrail')}>
               ↩ Reattach

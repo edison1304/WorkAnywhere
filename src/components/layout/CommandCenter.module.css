@@ -5,21 +5,40 @@
   background: var(--bg-primary);
 }
 
+/* ─── Unified titlebar — dark, compact, single row ─── */
 .titlebar {
   height: var(--titlebar-height);
   display: flex;
   align-items: center;
-  padding: 0 16px;
-  background: var(--bg-secondary);
+  padding: 0 12px;
+  background: var(--bg-primary);
   border-bottom: 1px solid var(--border-subtle);
   user-select: none;
+  -webkit-app-region: drag;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.titleLeft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
 }
 
 .titleText {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-right: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  flex-shrink: 0;
 }
 
 .breadcrumb {
@@ -31,62 +50,113 @@
 .breadcrumbItem {
   font-size: 12px;
   color: var(--text-secondary);
-  padding: 2px 8px;
-  background: var(--bg-tertiary);
-  border-radius: 4px;
 }
 
 .breadcrumbSep {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-muted);
+}
+
+/* Pipeline summary — inline in titlebar */
+.pipelineInline {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  overflow: hidden;
+  justify-content: center;
+  -webkit-app-region: no-drag;
+}
+
+.pipelineChip {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pipelineChipLabel {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.titleRight {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
 }
 
 .headerBtn {
   font-size: 11px;
   color: var(--text-muted);
-  padding: 2px 8px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
+  padding: 2px 6px;
+  border: none;
+  border-radius: 3px;
   background: transparent;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.1s;
+  white-space: nowrap;
 }
 .headerBtn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .connectionBadge {
   font-size: 11px;
   color: var(--text-muted);
-  padding: 2px 8px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
+  padding: 2px 6px;
+  border: none;
+  border-radius: 3px;
   font-weight: 500;
   background: transparent;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.1s;
+  white-space: nowrap;
 }
-
 .connectionBadge:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
-
 .connectionBadge.connected {
   color: var(--success);
-  border-color: var(--success);
 }
-
 .connectionBadge.reconnecting {
   color: var(--warning);
-  border-color: var(--warning);
   animation: pulse-reconnect 1.5s infinite;
 }
 
 @keyframes pulse-reconnect {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
+}
+
+/* Pipeline issues — thin bar, only when issues exist */
+.pipelineIssuesBar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 3px 16px;
+  background: rgba(239, 68, 68, 0.05);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.pipelineIssue {
+  font-size: 10px;
+  color: var(--error);
+  padding: 1px 6px;
+  background: rgba(239, 68, 68, 0.1);
+  border-radius: 3px;
 }
 
 /* Shortcuts overlay */
@@ -136,81 +206,10 @@
   text-align: center;
 }
 
-/* Pipeline bar */
-.pipelineBar {
-  padding: 6px 16px;
-  background: var(--bg-tertiary);
-  border-bottom: 1px solid var(--border-subtle);
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.pipelineRow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-}
-
-.pipelineLabel {
-  font-weight: 600;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  width: 50px;
-  flex-shrink: 0;
-}
-
-.pipelineFlow {
-  color: var(--accent);
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.pipelineStatus {
-  color: var(--text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  margin-left: auto;
-}
-
-.pipelineIssues {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding-left: 58px;
-}
-
-.pipelineIssue {
-  font-size: 10px;
-  color: var(--error);
-  padding: 1px 6px;
-  background: rgba(239, 68, 68, 0.1);
-  border-radius: 3px;
-}
-
 .body {
   flex: 1;
   display: flex;
   overflow: hidden;
-}
-
-/* Detach indicators in titlebar */
-.detachIndicator {
-  padding: 2px 8px;
-  border: 1px solid var(--border);
-  background: var(--bg-tertiary);
-  color: var(--text-muted);
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 11px;
-  transition: all 0.15s;
-}
-.detachIndicator:hover {
-  border-color: var(--accent);
-  color: var(--accent);
 }
 
 /* Placeholder when panel is detached */

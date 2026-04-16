@@ -27,7 +27,9 @@ function createWindow(): void {
     minWidth: 1000,
     minHeight: 700,
     title: 'Workanywhere',
-    ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const } : { frame: true }),
+    frame: false,
+    titleBarStyle: 'hidden' as const,
+    ...(process.platform === 'win32' ? { titleBarOverlay: { color: '#0f0f0f', symbolColor: '#666', height: 34 } } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
@@ -859,6 +861,16 @@ ipcMain.handle('task:update', async (_event, id: string, patch: Partial<import('
 
 ipcMain.handle('task:delete', async (_event, id: string) => {
   dataStore.taskDelete(id)
+})
+
+ipcMain.handle('task:reorder', async (_event, phaseId: string, orderedIds: string[]) => {
+  dataStore.taskReorder(phaseId, orderedIds)
+  return { success: true }
+})
+
+ipcMain.handle('phase:reorder', async (_event, projectId: string, orderedIds: string[]) => {
+  dataStore.phaseReorder(projectId, orderedIds)
+  return { success: true }
 })
 
 ipcMain.handle('task:run', async (_event, taskId: string) => {

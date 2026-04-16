@@ -89,6 +89,7 @@ export interface Task {
   projectId: string
   name: string
   purpose: string             // 이 태스크의 본래 목적/목표
+  order: number              // 같은 phase 내 정렬 순서
   status: TaskStatus
   sessionId?: string
   prompt: string
@@ -251,6 +252,10 @@ export interface IpcApi {
   taskSummarize(taskId: string): Promise<{ success: boolean; summary?: TaskSummary; error?: string }>
   phaseSummarize(phaseId: string): Promise<{ success: boolean; summary?: PhaseSummary; error?: string }>
   projectSummarize(projectId: string): Promise<{ success: boolean; summary?: ProjectSummary; error?: string }>
+
+  // Reorder
+  taskReorder(phaseId: string, orderedIds: string[]): Promise<{ success: boolean }>
+  phaseReorder(projectId: string, orderedIds: string[]): Promise<{ success: boolean }>
 
   // Session Descriptor
   descriptorExport(projectId: string): Promise<{ success: boolean; descriptor?: SessionDescriptor; error?: string }>

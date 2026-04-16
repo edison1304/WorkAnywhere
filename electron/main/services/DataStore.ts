@@ -26,11 +26,17 @@ export class DataStore {
           this.projects = raw.projects || []
           this.phases = raw.phases || []
           // Reset active tasks to idle on startup (agent processes don't survive restart)
-          this.tasks = (raw.tasks || []).map(t =>
-            t.status === 'running' || t.status === 'queued' || t.status === 'waiting'
-              ? { ...t, status: 'idle' as const }
-              : t
-          )
+          // Also backfill order field for tasks that don't have one
+          const tasksByPhase: Record<string, number> = {}
+          this.tasks = (raw.tasks || []).map(t => {
+            const status = t.status === 'running' || t.status === 'queued' || t.status === 'waiting'
+              ? 'idle' as const : t.status
+            if (t.order == null) {
+              tasksByPhase[t.phaseId] = (tasksByPhase[t.phaseId] || 0) + 1
+              return { ...t, status, order: tasksByPhase[t.phaseId] }
+            }
+            return status !== t.status ? { ...t, status } : t
+          })
         }
       } catch {
         // corrupt file — start fresh
@@ -148,12 +154,14 @@ export class DataStore {
   taskCreate(phaseId: string, name: string, purpose: string, prompt: string): Task {
     const phase = this.phases.find(ph => ph.id === phaseId)
     const now = new Date().toISOString()
+    const order = this.tasks.filter(t => t.phaseId === phaseId).length + 1
     const task: Task = {
       id: crypto.randomUUID(),
       phaseId,
       projectId: phase?.projectId || '',
       name,
       purpose,
+      order,
       status: 'idle',
       prompt,
       logs: [],
@@ -206,6 +214,30 @@ export class DataStore {
       task.updatedAt = new Date().toISOString()
       this.persist()
     }
+  }
+
+  // ─── Reorder ───
+
+  taskReorder(phaseId: string, orderedIds: string[]): void {
+    orderedIds.forEach((id, i) => {
+      const task = this.tasks.find(t => t.id === id)
+      if (task && task.phaseId === phaseId) {
+        task.order = i + 1
+        task.updatedAt = new Date().toISOString()
+      }
+    })
+    this.persist()
+  }
+
+  phaseReorder(projectId: string, orderedIds: string[]): void {
+    orderedIds.forEach((id, i) => {
+      const phase = this.phases.find(ph => ph.id === id)
+      if (phase && phase.projectId === projectId) {
+        phase.order = i + 1
+        phase.updatedAt = new Date().toISOString()
+      }
+    })
+    this.persist()
   }
 
   // ─── Bulk operations (for legacy compatibility) ───

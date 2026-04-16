@@ -31,6 +31,49 @@
   background: rgba(99, 102, 241, 0.05);
 }
 
+/* Drag handle */
+.dragHandle {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0;
+  cursor: grab;
+  flex-shrink: 0;
+  width: 12px;
+  text-align: center;
+  transition: opacity 0.15s;
+  user-select: none;
+}
+
+.managePhaseHeader:hover .dragHandle,
+.manageTaskItem:hover .dragHandle {
+  opacity: 0.6;
+}
+.dragHandle:hover { opacity: 1 !important; }
+
+/* Dragging state */
+.dragging {
+  opacity: 0.4;
+}
+
+/* Drop indicator line */
+.dropIndicator {
+  height: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+  margin: 0 8px;
+  position: relative;
+}
+.dropIndicator::before {
+  content: '';
+  position: absolute;
+  left: -3px;
+  top: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
 /* Inline add forms */
 .addBtn {
   width: 100%;
@@ -252,7 +295,19 @@
   padding: 6px 8px;
 }
 
-.nodeIcon { font-size: 14px; flex-shrink: 0; }
+.nodeIcon {
+  font-size: 9px;
+  font-weight: 700;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+  color: var(--text-muted);
+}
 
 .nodeName {
   overflow: hidden;
@@ -432,9 +487,9 @@
 
 /* ─── Pin button ─── */
 .pinBtn {
-  font-size: 10px;
-  width: 20px;
-  height: 20px;
+  font-size: 6px;
+  width: 14px;
+  height: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -443,13 +498,13 @@
   cursor: pointer;
   flex-shrink: 0;
   opacity: 0;
-  filter: grayscale(1);
-  transition: opacity 0.15s, filter 0.15s;
+  color: var(--text-muted);
+  transition: opacity 0.15s, color 0.15s;
 }
 
-.taskLevel:hover .pinBtn { opacity: 0.6; }
-.pinBtn:hover { opacity: 1 !important; filter: grayscale(0); }
-.pinBtn.pinned { opacity: 1; filter: grayscale(0); }
+.taskLevel:hover .pinBtn { opacity: 0.5; }
+.pinBtn:hover { opacity: 1 !important; color: var(--warning); }
+.pinBtn.pinned { opacity: 1; color: var(--warning); }
 
 /* ─── Layout toggle ─── */
 .layoutToggle {

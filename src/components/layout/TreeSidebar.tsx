@@ -23,6 +23,8 @@ interface Props {
   onDeleteTask?: (id: string) => void
   onForkTask?: (id: string) => void
   onMoveTask?: (taskId: string, targetPhaseId: string) => void
+  onReorderTasks?: (phaseId: string, orderedIds: string[]) => void
+  onReorderPhases?: (projectId: string, orderedIds: string[]) => void
   onCreateProject?: (name: string, path: string) => void
   onCreatePhase?: (name: string, desc: string) => void
   onCreateTask?: (name: string, purpose: string, prompt: string) => void
@@ -100,7 +102,7 @@ function TaskItemMonitor({ task, isActive, onSelect, onAcknowledge, onPin, onCon
         title={task.pinned ? 'Unpin' : 'Pin to monitor'}
         role="button"
       >
-        📌
+        ●
       </span>
       {task.status === 'completed' && !task.acknowledgedAt && (
         <span
@@ -134,7 +136,7 @@ function MonitorUnified({
   return (
     <>
       {projects.map(project => {
-        const projectPhases = phases.filter(ph => ph.projectId === project.id)
+        const projectPhases = phases.filter(ph => ph.projectId === project.id).sort((a, b) => a.order - b.order)
         const projectKey = `mon-proj-${project.id}`
         const isCollapsed = collapsed[projectKey]
         const visibleTasks = allTasks.filter(t => t.projectId === project.id).filter(isVisibleInMonitor)
@@ -147,7 +149,7 @@ function MonitorUnified({
               onClick={() => { onSelectProject(project.id); toggle(projectKey) }}
             >
               <span className={styles.chevron}>{isCollapsed ? '▸' : '▾'}</span>
-              <span className={styles.nodeIcon}>{project.connection.type === 'ssh' ? '🖥' : '💻'}</span>
+              <span className={styles.nodeIcon}>{project.connection.type === 'ssh' ? 'S' : project.connection.type === 'remote' ? 'R' : 'L'}</span>
               <span className={styles.nodeName}>{project.name}</span>
               <span className={styles.activeBadge}>{visibleTasks.length}</span>
             </button>
@@ -155,7 +157,7 @@ function MonitorUnified({
             {!isCollapsed && projectPhases.map(phase => {
               const phaseKey = `mon-phase-${phase.id}`
               const phaseCollapsed = collapsed[phaseKey]
-              const phaseTasks = allTasks.filter(t => t.phaseId === phase.id).filter(isVisibleInMonitor)
+              const phaseTasks = allTasks.filter(t => t.phaseId === phase.id).filter(isVisibleInMonitor).sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
               if (phaseTasks.length === 0) return null
 
               return (
@@ -211,7 +213,7 @@ function MonitorSplit({
       {active.length > 0 && (
         <div className={styles.splitSection}>
           <div className={styles.splitHeader} data-type="active">
-            <span>⚡ In Progress</span>
+            <span>In Progress</span>
             <span className={styles.splitCount}>{active.length}</span>
           </div>
           {active.map(task => (
@@ -228,7 +230,7 @@ function MonitorSplit({
       {done.length > 0 && (
         <div className={styles.splitSection}>
           <div className={styles.splitHeader} data-type="done">
-            <span>✓ Completed / Failed</span>
+            <span>Completed / Failed</span>
             <span className={styles.splitCount}>{done.length}</span>
           </div>
           {done.map(task => (
@@ -245,7 +247,7 @@ function MonitorSplit({
       {pinned.length > 0 && (
         <div className={styles.splitSection}>
           <div className={styles.splitHeader} data-type="pinned">
-            <span>📌 Pinned</span>
+            <span>Pinned</span>
             <span className={styles.splitCount}>{pinned.length}</span>
           </div>
           {pinned.map(task => (
@@ -317,11 +319,63 @@ function InlineAddProject({ onAdd }: { onAdd?: (name: string, path: string) => v
   )
 }
 
+// ─── Drag reorder helpers ───
+function useReorderDrag<T extends { id: string }>(
+  items: T[],
+  onReorder: (orderedIds: string[]) => void,
+  dragType: string,
+) {
+  const [dragOverId, setDragOverId] = useState<string | null>(null)
+  const [dragOverHalf, setDragOverHalf] = useState<'top' | 'bottom'>('bottom')
+  const [dragId, setDragId] = useState<string | null>(null)
+
+  const handleDragStart = useCallback((e: React.DragEvent, id: string) => {
+    e.dataTransfer.setData(dragType, id)
+    e.dataTransfer.effectAllowed = 'move'
+    setDragId(id)
+  }, [dragType])
+
+  const handleDragOver = useCallback((e: React.DragEvent, id: string) => {
+    if (!e.dataTransfer.types.includes(dragType)) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const half = e.clientY < rect.top + rect.height / 2 ? 'top' : 'bottom'
+    setDragOverId(id)
+    setDragOverHalf(half)
+  }, [dragType])
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    const sourceId = e.dataTransfer.getData(dragType)
+    if (!sourceId || !dragOverId || sourceId === dragOverId) {
+      setDragOverId(null); setDragId(null); return
+    }
+    const ids = items.map(i => i.id)
+    const fromIdx = ids.indexOf(sourceId)
+    const toIdx = ids.indexOf(dragOverId)
+    if (fromIdx === -1 || toIdx === -1) { setDragOverId(null); setDragId(null); return }
+    ids.splice(fromIdx, 1)
+    const insertIdx = dragOverHalf === 'top' ? ids.indexOf(dragOverId) : ids.indexOf(dragOverId) + 1
+    ids.splice(insertIdx, 0, sourceId)
+    onReorder(ids)
+    setDragOverId(null)
+    setDragId(null)
+  }, [items, dragOverId, dragOverHalf, dragType, onReorder])
+
+  const handleDragEnd = useCallback(() => {
+    setDragOverId(null)
+    setDragId(null)
+  }, [])
+
+  return { dragId, dragOverId, dragOverHalf, handleDragStart, handleDragOver, handleDrop, handleDragEnd }
+}
+
 // ─── Manage view ───
 function ManageView({
   phases, allTasks, activeProjectId, activePhaseId, activeTaskId,
   collapsed, toggle, onSelectPhase, onSelectTask, onTaskContext, onPhaseDrop, dragOverPhase,
-  onCreatePhase, onCreateTask
+  onCreatePhase, onCreateTask, onReorderTasks, onReorderPhases
 }: {
   phases: Phase[]; allTasks: Task[]
   activeProjectId: string | null; activePhaseId: string | null; activeTaskId: string | null
@@ -332,61 +386,143 @@ function ManageView({
   dragOverPhase?: string | null
   onCreatePhase?: (name: string, desc: string) => void
   onCreateTask?: (name: string, purpose: string, prompt: string) => void
+  onReorderTasks?: (phaseId: string, orderedIds: string[]) => void
+  onReorderPhases?: (projectId: string, orderedIds: string[]) => void
 }) {
-  const projectPhases = phases.filter(ph => ph.projectId === activeProjectId)
+  const projectPhases = phases.filter(ph => ph.projectId === activeProjectId).sort((a, b) => a.order - b.order)
   if (!activeProjectId) return <div className={styles.emptyHint}>Select a project</div>
+
+  const phaseDrag = useReorderDrag(
+    projectPhases,
+    (orderedIds) => onReorderPhases?.(activeProjectId!, orderedIds),
+    'phaseId'
+  )
 
   return (
     <>
       {projectPhases.map(phase => {
         const phaseKey = `mng-phase-${phase.id}`
         const isCollapsed = collapsed[phaseKey]
-        const phaseTasks = allTasks.filter(t => t.phaseId === phase.id)
+        const phaseTasks = allTasks.filter(t => t.phaseId === phase.id).sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+        const isPhaseDropIndicator = phaseDrag.dragOverId === phase.id && phaseDrag.dragId !== phase.id
 
         return (
           <div
             key={phase.id}
             className={`${styles.managePhase} ${dragOverPhase === phase.id ? styles.phaseDropTarget : ''}`}
-            onDragOver={e => e.preventDefault()}
-            onDragEnter={() => {}}
-            onDrop={e => onPhaseDrop?.(e, phase.id)}
+            onDrop={e => {
+              // Check if it's a task cross-phase drop
+              if (e.dataTransfer.types.includes('taskId') && !e.dataTransfer.types.includes('phaseId')) {
+                onPhaseDrop?.(e, phase.id)
+              }
+            }}
+            onDragOver={e => {
+              if (e.dataTransfer.types.includes('taskId')) e.preventDefault()
+            }}
           >
-            <button
-              className={`${styles.managePhaseHeader} ${phase.id === activePhaseId ? styles.active : ''}`}
+            {isPhaseDropIndicator && phaseDrag.dragOverHalf === 'top' && (
+              <div className={styles.dropIndicator} />
+            )}
+            <div
+              className={`${styles.managePhaseHeader} ${phase.id === activePhaseId ? styles.active : ''} ${phaseDrag.dragId === phase.id ? styles.dragging : ''}`}
               onClick={() => { onSelectPhase(phase.id); toggle(phaseKey) }}
+              draggable
+              onDragStart={e => phaseDrag.handleDragStart(e, phase.id)}
+              onDragOver={e => phaseDrag.handleDragOver(e, phase.id)}
+              onDrop={phaseDrag.handleDrop}
+              onDragEnd={phaseDrag.handleDragEnd}
             >
+              <span className={styles.dragHandle}>⠿</span>
               <span className={styles.chevron}>{isCollapsed ? '▸' : '▾'}</span>
               <span className={styles.phaseStatus} data-status={phase.status}>
                 {phase.status === 'active' ? '▶' : phase.status === 'paused' ? '⏸' : '✓'}
               </span>
               <span className={styles.nodeName}>{phase.name}</span>
               <span className={styles.taskCountBadge}>{phaseTasks.length}</span>
-            </button>
+            </div>
+            {isPhaseDropIndicator && phaseDrag.dragOverHalf === 'bottom' && (
+              <div className={styles.dropIndicator} />
+            )}
             {!isCollapsed && (
-              <div className={styles.manageTaskList}>
-                {phaseTasks.map(task => (
-                  <div
-                    key={task.id}
-                    className={`${styles.manageTaskItem} ${task.id === activeTaskId ? styles.active : ''}`}
-                    onClick={() => onSelectTask(task.id)}
-                    onContextMenu={e => onTaskContext?.(e, task.id)}
-                    draggable
-                    onDragStart={e => e.dataTransfer.setData('taskId', task.id)}
-                    role="button"
-                  >
-                    <StatusDot status={task.status} size={7} />
-                    <span className={styles.taskName}>{task.name}</span>
-                    <span className={styles.manageTaskStatus}>{task.status}</span>
-                  </div>
-                ))}
-                <InlineAddTask onAdd={(name, purpose, prompt) => { onSelectPhase(phase.id); onCreateTask?.(name, purpose, prompt) }} />
-              </div>
+              <ManageTaskList
+                tasks={phaseTasks}
+                phaseId={phase.id}
+                activeTaskId={activeTaskId}
+                onSelectPhase={onSelectPhase}
+                onSelectTask={onSelectTask}
+                onTaskContext={onTaskContext}
+                onCreateTask={onCreateTask}
+                onReorderTasks={onReorderTasks}
+                onPhaseDrop={onPhaseDrop}
+              />
             )}
           </div>
         )
       })}
       <InlineAddPhase onAdd={onCreatePhase} />
     </>
+  )
+}
+
+// ─── Task list within a phase (with drag reorder) ───
+function ManageTaskList({
+  tasks, phaseId, activeTaskId, onSelectPhase, onSelectTask, onTaskContext, onCreateTask, onReorderTasks, onPhaseDrop
+}: {
+  tasks: Task[]; phaseId: string; activeTaskId: string | null
+  onSelectPhase: (id: string) => void; onSelectTask: (id: string | null) => void
+  onTaskContext?: (e: React.MouseEvent, taskId: string) => void
+  onCreateTask?: (name: string, purpose: string, prompt: string) => void
+  onReorderTasks?: (phaseId: string, orderedIds: string[]) => void
+  onPhaseDrop?: (e: React.DragEvent, phaseId: string) => void
+}) {
+  const taskDrag = useReorderDrag(
+    tasks,
+    (orderedIds) => onReorderTasks?.(phaseId, orderedIds),
+    'taskId'
+  )
+
+  return (
+    <div className={styles.manageTaskList}>
+      {tasks.map(task => {
+        const isDropIndicator = taskDrag.dragOverId === task.id && taskDrag.dragId !== task.id
+        return (
+          <div key={task.id}>
+            {isDropIndicator && taskDrag.dragOverHalf === 'top' && (
+              <div className={styles.dropIndicator} />
+            )}
+            <div
+              className={`${styles.manageTaskItem} ${task.id === activeTaskId ? styles.active : ''} ${taskDrag.dragId === task.id ? styles.dragging : ''}`}
+              onClick={() => onSelectTask(task.id)}
+              onContextMenu={e => onTaskContext?.(e, task.id)}
+              draggable
+              onDragStart={e => {
+                e.dataTransfer.setData('taskId', task.id)
+                e.dataTransfer.effectAllowed = 'move'
+                taskDrag.handleDragStart(e, task.id)
+              }}
+              onDragOver={e => taskDrag.handleDragOver(e, task.id)}
+              onDrop={e => {
+                // Only handle same-phase reorder, not cross-phase
+                if (e.dataTransfer.types.includes('taskId') && !e.dataTransfer.types.includes('phaseId')) {
+                  taskDrag.handleDrop(e)
+                }
+              }}
+              onDragEnd={taskDrag.handleDragEnd}
+              role="button"
+            >
+              <span className={styles.dragHandle}>⠿</span>
+              <StatusDot status={task.status} size={7} />
+              <span className={styles.taskName}>{task.name}</span>
+              <span className={styles.manageTaskStatus}>{task.status}</span>
+            </div>
+            {isDropIndicator && taskDrag.dragOverHalf === 'bottom' && (
+              <div className={styles.dropIndicator} />
+            )}
+          </div>
+        )
+      })}
+      <InlineAddTask onAdd={(name, purpose, prompt) => { onSelectPhase(phaseId); onCreateTask?.(name, purpose, prompt) }} />
+    </div>
   )
 }
 
@@ -471,13 +607,13 @@ export function TreeSidebar(props: Props) {
             className={`${styles.viewTab} ${sidebarView === 'monitor' || sidebarView === 'both' ? styles.viewTabActive : ''}`}
             onClick={() => onSidebarViewChange(sidebarView === 'both' ? 'manage' : sidebarView === 'monitor' ? 'both' : 'monitor')}
           >
-            📡 Monitor
+            Monitor
           </button>
           <button
             className={`${styles.viewTab} ${sidebarView === 'manage' || sidebarView === 'both' ? styles.viewTabActive : ''}`}
             onClick={() => onSidebarViewChange(sidebarView === 'both' ? 'monitor' : sidebarView === 'manage' ? 'both' : 'manage')}
           >
-            📋 Manage
+            Manage
           </button>
           {props.onDetach && (
             <button className={styles.detachBtn} onClick={props.onDetach} title="Pop out to second monitor">↗</button>
@@ -489,7 +625,7 @@ export function TreeSidebar(props: Props) {
       {(sidebarView === 'monitor' || sidebarView === 'both') && (
         <div className={styles.viewSection}>
           <div className={styles.viewLabel}>
-            <span>📡 {sidebarView === 'both' ? 'Monitoring' : 'Monitor'}</span>
+            <span>{sidebarView === 'both' ? 'MONITORING' : 'MONITOR'}</span>
             {/* Layout toggle */}
             <button
               className={styles.layoutToggle}
@@ -527,7 +663,7 @@ export function TreeSidebar(props: Props) {
       {(sidebarView === 'manage' || sidebarView === 'both') && (
         <div className={styles.viewSection}>
           {sidebarView === 'both' && (
-            <div className={styles.viewLabel}><span>📋 All Tasks</span></div>
+            <div className={styles.viewLabel}><span>ALL TASKS</span></div>
           )}
           <div className={styles.treeContainer}>
             <ManageViewSafe
@@ -538,6 +674,7 @@ export function TreeSidebar(props: Props) {
               onSelectPhase={props.onSelectPhase} onSelectTask={props.onSelectTask}
               onTaskContext={handleTaskContext} onPhaseDrop={handlePhaseDrop} dragOverPhase={dragOverPhase}
               onCreatePhase={props.onCreatePhase} onCreateTask={props.onCreateTask}
+              onReorderTasks={props.onReorderTasks} onReorderPhases={props.onReorderPhases}
             />
           </div>
         </div>

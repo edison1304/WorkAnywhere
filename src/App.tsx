@@ -570,6 +570,32 @@ export default function App() {
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, phaseId: targetPhaseId } : t))
   }, [tasks])
 
+  const handleReorderTasks = useCallback(async (phaseId: string, orderedIds: string[]) => {
+    if (!window.api) return
+    // Optimistic update
+    setTasks(prev => prev.map(t => {
+      const idx = orderedIds.indexOf(t.id)
+      if (idx !== -1 && t.phaseId === phaseId) {
+        return { ...t, order: idx + 1 }
+      }
+      return t
+    }))
+    await window.api.taskReorder(phaseId, orderedIds)
+  }, [])
+
+  const handleReorderPhases = useCallback(async (projectId: string, orderedIds: string[]) => {
+    if (!window.api) return
+    // Optimistic update
+    setPhases(prev => prev.map(ph => {
+      const idx = orderedIds.indexOf(ph.id)
+      if (idx !== -1 && ph.projectId === projectId) {
+        return { ...ph, order: idx + 1 }
+      }
+      return ph
+    }))
+    await window.api.phaseReorder(projectId, orderedIds)
+  }, [])
+
   const handlePinTask = useCallback(async (taskId: string) => {
     const task = tasks.find(t => t.id === taskId)
     const pinned = !task?.pinned
@@ -674,6 +700,8 @@ export default function App() {
         onDeleteTask={handleDeleteTask}
         onForkTask={handleForkTask}
         onMoveTask={handleMoveTask}
+        onReorderTasks={handleReorderTasks}
+        onReorderPhases={handleReorderPhases}
         onDetach={handleDetach}
         onReattach={handleReattach}
         onRunAgent={handleRunAgent}
