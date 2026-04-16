@@ -559,64 +559,67 @@ function FileTree({ rootPath, onOpenFile }: { rootPath: string; onOpenFile?: (pa
 }
 
 // ─── Drag reorder helpers ───
+// Uses refs for all mutable state to avoid React re-render interference with native DnD
 function useReorderDrag<T extends { id: string }>(
   items: T[],
   onReorder: (orderedIds: string[]) => void,
   dragType: string,
 ) {
+  // Visual state — only updated via requestAnimationFrame to not interrupt drag
   const [dragOverId, setDragOverId] = useState<string | null>(null)
   const [dragOverHalf, setDragOverHalf] = useState<'top' | 'bottom'>('bottom')
   const [dragId, setDragId] = useState<string | null>(null)
 
-  // Use refs to avoid stale closures in drag callbacks
+  // All refs to avoid stale closures
   const itemsRef = useRef(items)
-  const dragOverIdRef = useRef(dragOverId)
-  const dragOverHalfRef = useRef(dragOverHalf)
+  const overRef = useRef<{ id: string; half: 'top' | 'bottom' } | null>(null)
   const onReorderRef = useRef(onReorder)
   itemsRef.current = items
-  dragOverIdRef.current = dragOverId
-  dragOverHalfRef.current = dragOverHalf
   onReorderRef.current = onReorder
 
   const handleDragStart = useCallback((e: React.DragEvent, id: string) => {
     e.dataTransfer.setData(dragType, id)
     e.dataTransfer.effectAllowed = 'move'
-    setDragId(id)
+    // Delay state update so React doesn't re-render during drag capture
+    requestAnimationFrame(() => setDragId(id))
   }, [dragType])
 
   const handleDragOver = useCallback((e: React.DragEvent, id: string) => {
-    if (!e.dataTransfer.types.includes(dragType)) return
+    // Must preventDefault to allow drop
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
     const half = e.clientY < rect.top + rect.height / 2 ? 'top' : 'bottom'
+    overRef.current = { id, half }
     setDragOverId(id)
     setDragOverHalf(half)
-  }, [dragType])
+  }, [])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     const sourceId = e.dataTransfer.getData(dragType)
-    const overId = dragOverIdRef.current
-    const overHalf = dragOverHalfRef.current
-    if (!sourceId || !overId || sourceId === overId) {
-      setDragOverId(null); setDragId(null); return
+    const over = overRef.current
+    if (!sourceId || !over || sourceId === over.id) {
+      setDragOverId(null); setDragId(null); overRef.current = null; return
     }
     const ids = itemsRef.current.map(i => i.id)
     const fromIdx = ids.indexOf(sourceId)
-    const toIdx = ids.indexOf(overId)
-    if (fromIdx === -1 || toIdx === -1) { setDragOverId(null); setDragId(null); return }
+    if (fromIdx === -1) { setDragOverId(null); setDragId(null); overRef.current = null; return }
     ids.splice(fromIdx, 1)
-    const insertIdx = overHalf === 'top' ? ids.indexOf(overId) : ids.indexOf(overId) + 1
+    const targetIdx = ids.indexOf(over.id)
+    if (targetIdx === -1) { setDragOverId(null); setDragId(null); overRef.current = null; return }
+    const insertIdx = over.half === 'top' ? targetIdx : targetIdx + 1
     ids.splice(insertIdx, 0, sourceId)
     onReorderRef.current(ids)
     setDragOverId(null)
     setDragId(null)
+    overRef.current = null
   }, [dragType])
 
   const handleDragEnd = useCallback(() => {
     setDragOverId(null)
     setDragId(null)
+    overRef.current = null
   }, [])
 
   return { dragId, dragOverId, dragOverHalf, handleDragStart, handleDragOver, handleDrop, handleDragEnd }
