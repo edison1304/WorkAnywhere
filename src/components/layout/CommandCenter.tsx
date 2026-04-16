@@ -113,46 +113,54 @@ export function CommandCenter({
     <div className={styles.root}>
       <input ref={fileInputRef} type="file" accept=".json" style={{ display: 'none' }} onChange={handleImport} />
 
-      {/* Titlebar — VS Code style */}
+      {/* Titlebar */}
       <div className={styles.titlebar}>
-        {/* Menu button */}
+        {/* Logo */}
+        <span className={styles.logo}>W</span>
+
+        {/* Session menu */}
         <div className={styles.menuWrapper}>
-          <button className={styles.menuBtn} onClick={() => setMenuOpen(v => !v)}>≡</button>
+          <button className={`${styles.menuTrigger} ${menuOpen ? styles.menuTriggerActive : ''}`} onClick={() => setMenuOpen(v => !v)}>
+            Session
+          </button>
           {menuOpen && (
             <>
               <div className={styles.menuBackdrop} onClick={() => setMenuOpen(false)} />
               <div className={styles.menu}>
-                <div className={styles.menuSection}>Summarize</div>
                 <button className={styles.menuItem} disabled={!activePhase} onClick={() => { onPhaseSummarize?.(activePhase!.id); setMenuOpen(false) }}>
                   <span>Phase Summary</span>
-                  <span className={styles.menuHint}>Analyze current phase pipeline</span>
+                  <span className={styles.menuHint}>Ctrl+Shift+S</span>
                 </button>
                 <button className={styles.menuItem} disabled={!activeProject} onClick={() => { onProjectSummarize?.(activeProject!.id); setMenuOpen(false) }}>
                   <span>Project Summary</span>
-                  <span className={styles.menuHint}>Analyze overall project progress</span>
                 </button>
 
                 <div className={styles.menuDivider} />
-                <div className={styles.menuSection}>Session</div>
                 <button className={styles.menuItem} disabled={!activeProject} onClick={() => { handleExport(); setMenuOpen(false) }}>
                   <span>Export Session</span>
-                  <span className={styles.menuHint}>Save project state as JSON</span>
                 </button>
                 <button className={styles.menuItem} onClick={() => { fileInputRef.current?.click(); setMenuOpen(false) }}>
                   <span>Import Session</span>
-                  <span className={styles.menuHint}>Restore from exported JSON</span>
                 </button>
 
                 <div className={styles.menuDivider} />
                 <button className={styles.menuItem} onClick={() => { setShowShortcuts(true); setMenuOpen(false) }}>
                   <span>Keyboard Shortcuts</span>
-                  <span className={styles.menuKey}>?</span>
+                  <span className={styles.menuHint}>?</span>
                 </button>
+
+                {sshConnected && (
+                  <>
+                    <div className={styles.menuDivider} />
+                    <button className={styles.menuItem} onClick={() => { onDisconnectSSH(); setMenuOpen(false) }}>
+                      <span>Disconnect</span>
+                    </button>
+                  </>
+                )}
 
                 {(monitorDetached || railDetached) && (
                   <>
                     <div className={styles.menuDivider} />
-                    <div className={styles.menuSection}>Windows</div>
                     {monitorDetached && (
                       <button className={styles.menuItem} onClick={() => { onReattach('monitor'); setMenuOpen(false) }}>
                         <span>Reattach Monitor</span>
@@ -173,6 +181,7 @@ export function CommandCenter({
         {/* Breadcrumb */}
         {activeProject && (
           <span className={styles.breadcrumb}>
+            <span className={styles.breadcrumbSep}>—</span>
             <span className={styles.breadcrumbItem}>{activeProject.name}</span>
             {activePhase && (
               <>
