@@ -475,9 +475,15 @@ async function runClaudeOnProject(projectId: string, prompt: string): Promise<st
   console.log(`[runClaude] connection obtained, isConnected=${conn.isConnected()}`)
   const engine = project.settings?.agentEngine || 'claude'
   const prefix = conn.getShellPrefix(engine)
-  const claudeCmd = conn.getEngineCmd(engine, ['-p', JSON.stringify(prompt), '--output-format', 'text'])
   const cwd = project.workspacePath
-  const fullCmd = `${prefix}cd ${JSON.stringify(cwd)} && ${claudeCmd}`
+
+  // Write prompt to a temp file to avoid shell escaping issues with unicode
+  const tmpFile = `/tmp/.wa-prompt-${Date.now()}-${Math.random().toString(36).slice(2)}.txt`
+  const escapedPrompt = prompt.replace(/'/g, "'\\''")
+  await conn.exec(`printf '%s' '${escapedPrompt}' > ${tmpFile}`)
+
+  const claudeCmd = conn.getEngineCmd(engine, ['-p', `"$(cat ${tmpFile})"`, '--output-format', 'text'])
+  const fullCmd = `${prefix}cd ${JSON.stringify(cwd)} && ${claudeCmd}; rm -f ${tmpFile}`
   const execCmd = `bash -lc ${JSON.stringify(fullCmd)}`
   console.log(`[runClaude] exec cmd preview: ${execCmd.slice(0, 300)}...`)
   const result = await conn.exec(execCmd)
