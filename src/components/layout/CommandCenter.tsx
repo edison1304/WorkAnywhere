@@ -133,6 +133,20 @@ export function CommandCenter({
           )}
         </div>
 
+        {/* Pipeline summary — fills middle of titlebar */}
+        <div className={styles.titleCenter}>
+          {activeProject?.summary && (
+            <span className={styles.pipelineChip} title={activeProject.summary.overallProgress}>
+              {activeProject.summary.pipeline}
+            </span>
+          )}
+          {activePhase?.summary && (
+            <span className={styles.pipelineChip} title={activePhase.summary.currentState}>
+              {activePhase.summary.pipeline}
+            </span>
+          )}
+        </div>
+
         <div className={styles.titleRight}>
           <input
             ref={fileInputRef}
@@ -211,26 +225,6 @@ export function CommandCenter({
               <div><kbd>Ctrl+Enter</kbd> Send message (in chat)</div>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Pipeline bar — project/phase summary */}
-      {(activeProject?.summary || activePhase?.summary) && (
-        <div className={styles.pipelineBar}>
-          {activeProject?.summary && (
-            <div className={styles.pipelineRow}>
-              <span className={styles.pipelineLabel}>Project</span>
-              <span className={styles.pipelineFlow}>{activeProject.summary.pipeline}</span>
-              <span className={styles.pipelineStatus}>{activeProject.summary.overallProgress}</span>
-            </div>
-          )}
-          {activePhase?.summary && (
-            <div className={styles.pipelineRow}>
-              <span className={styles.pipelineLabel}>Phase</span>
-              <span className={styles.pipelineFlow}>{activePhase.summary.pipeline}</span>
-              <span className={styles.pipelineStatus}>{activePhase.summary.currentState}</span>
-            </div>
-          )}
         </div>
       )}
 
