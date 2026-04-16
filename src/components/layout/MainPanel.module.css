@@ -622,6 +622,34 @@
   margin-bottom: 4px;
 }
 
+.createProjectHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.createProjectHeader .sshFormTitle {
+  text-align: left;
+  margin-bottom: 0;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.cancelBtn {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 3px 8px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.1s;
+}
+.cancelBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
 .sshRow {
   display: flex;
   gap: 8px;

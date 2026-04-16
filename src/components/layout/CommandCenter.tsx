@@ -41,7 +41,10 @@ interface Props {
   onRemoteConnect?: (remoteLink: string) => void
   onOpenSSH: () => void
   onDisconnectSSH: () => void
-  onCreateProject: (name: string, path: string) => void
+  onCreateProject: (name: string, path: string, engine?: string) => void
+  onRequestCreateProject: () => void
+  showCreateProject?: boolean
+  onCancelCreateProject?: () => void
   onCreatePhase: (name: string, description: string) => void
   onCreateTask: (name: string, purpose: string, prompt: string) => void
   onImportProject?: (projectId: string) => void
@@ -62,7 +65,7 @@ export function CommandCenter({
   onSidebarViewChange,
   onSelectProject, onSelectPhase, onSelectTask, onAcknowledgeTask, onPinTask, onDeleteTask, onForkTask, onMoveTask, onReorderTasks, onReorderPhases,
   onDetach, onReattach, onRunAgent, onStopAgent, onResumeAgent, onMarkCompleted, onSummarize, onRestartFresh, onSendMessage, onSSHConnect, onLocalConnect, onRemoteConnect, onOpenSSH, onDisconnectSSH,
-  onCreateProject, onCreatePhase, onCreateTask, onImportProject,
+  onCreateProject, onRequestCreateProject, showCreateProject, onCancelCreateProject, onCreatePhase, onCreateTask, onImportProject,
   onPhaseSummarize, onProjectSummarize
 }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -261,7 +264,7 @@ export function CommandCenter({
             onMoveTask={onMoveTask}
             onReorderTasks={onReorderTasks}
             onReorderPhases={onReorderPhases}
-            onCreateProject={onCreateProject}
+            onRequestCreateProject={onRequestCreateProject}
             onCreatePhase={onCreatePhase}
             onCreateTask={onCreateTask}
             onDetach={() => onDetach('monitor')}
@@ -301,6 +304,8 @@ export function CommandCenter({
           hasPhases={phases.filter(p => p.projectId === activeProject?.id).length > 0}
           activeProjectName={activeProject?.name}
           workspacePath={activeProject?.workspacePath}
+          showCreateProject={showCreateProject}
+          onCancelCreateProject={onCancelCreateProject}
         />
 
         {/* Status rail: show or placeholder */}

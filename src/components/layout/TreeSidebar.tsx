@@ -25,7 +25,7 @@ interface Props {
   onMoveTask?: (taskId: string, targetPhaseId: string) => void
   onReorderTasks?: (phaseId: string, orderedIds: string[]) => void
   onReorderPhases?: (projectId: string, orderedIds: string[]) => void
-  onCreateProject?: (name: string, path: string) => void
+  onRequestCreateProject?: () => void
   onCreatePhase?: (name: string, desc: string) => void
   onCreateTask?: (name: string, purpose: string, prompt: string) => void
   onDetach?: () => void
@@ -296,23 +296,6 @@ function InlineAddTask({ onAdd }: { onAdd?: (name: string, purpose: string, prom
       <input className={styles.inlineInput} value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Prompt" />
       <div style={{ display: 'flex', gap: 4 }}>
         <button type="submit" className={styles.inlineSubmit} disabled={!name.trim() || !prompt.trim()}>Add</button>
-        <button type="button" className={styles.inlineCancel} onClick={() => setOpen(false)}>x</button>
-      </div>
-    </form>
-  )
-}
-
-function InlineAddProject({ onAdd }: { onAdd?: (name: string, path: string) => void }) {
-  const [open, setOpen] = useState(false)
-  const [name, setName] = useState('')
-  const [path, setPath] = useState('')
-  if (!open) return <button className={styles.addBtn} onClick={() => setOpen(true)}>+ New Project</button>
-  return (
-    <form className={styles.inlineForm} onSubmit={e => { e.preventDefault(); if (name.trim() && path.trim()) { onAdd?.(name, path); setName(''); setPath(''); setOpen(false) } }}>
-      <input className={styles.inlineInput} value={name} onChange={e => setName(e.target.value)} placeholder="Project name" autoFocus />
-      <input className={styles.inlineInput} value={path} onChange={e => setPath(e.target.value)} placeholder="Workspace path" />
-      <div style={{ display: 'flex', gap: 4 }}>
-        <button type="submit" className={styles.inlineSubmit} disabled={!name.trim() || !path.trim()}>Add</button>
         <button type="button" className={styles.inlineCancel} onClick={() => setOpen(false)}>x</button>
       </div>
     </form>
@@ -682,7 +665,7 @@ export function TreeSidebar(props: Props) {
 
       {/* New Project button */}
       <div className={styles.sidebarFooter}>
-        <InlineAddProject onAdd={props.onCreateProject} />
+        <button className={styles.addBtn} onClick={props.onRequestCreateProject}>+ New Project</button>
       </div>
     </div>
   )

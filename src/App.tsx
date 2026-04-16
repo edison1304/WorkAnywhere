@@ -19,6 +19,7 @@ export default function App() {
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null)
   const [sidebarView, setSidebarView] = useState<SidebarView>('monitor')
   const [detachedPanels, setDetachedPanels] = useState<Set<string>>(new Set())
+  const [showCreateProject, setShowCreateProject] = useState(false)
   const [dataLoaded, setDataLoaded] = useState(false)
 
   // Load saved data on startup via DataStore
@@ -233,6 +234,7 @@ export default function App() {
     setActiveProjectId(project.id)
     setActivePhaseId(null)
     setActiveTaskId(null)
+    setShowCreateProject(false)
   }, [])
 
   const handleCreatePhase = useCallback(async (name: string, description: string) => {
@@ -717,6 +719,9 @@ export default function App() {
         onOpenSSH={() => setSshDialogOpen(true)}
         onDisconnectSSH={handleSSHDisconnect}
         onCreateProject={handleCreateProject}
+        onRequestCreateProject={() => setShowCreateProject(true)}
+        showCreateProject={showCreateProject}
+        onCancelCreateProject={() => setShowCreateProject(false)}
         onCreatePhase={handleCreatePhase}
         onCreateTask={handleCreateTask}
         onImportProject={handleImportProject}

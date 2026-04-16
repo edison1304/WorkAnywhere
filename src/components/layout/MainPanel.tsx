@@ -72,20 +72,23 @@ interface Props {
   onLocalConnect?: () => void
   onRemoteConnect?: (remoteLink: string) => void
   onOpenSSH?: () => void
-  onCreateProject?: (name: string, path: string) => void
+  onCreateProject?: (name: string, path: string, engine?: string) => void
   onCreatePhase?: (name: string, description: string) => void
   onCreateTask?: (name: string, purpose: string, prompt: string) => void
   hasProjects?: boolean
   hasPhases?: boolean
   activeProjectName?: string
   workspacePath?: string
+  showCreateProject?: boolean
+  onCancelCreateProject?: () => void
 }
 
 export function MainPanel({
   activeTask, activePhase, sshConnected, sshConnecting, sshError, workspacePath,
   onRunAgent, onStopAgent, onResumeAgent, onMarkCompleted, onSummarize, onRestartFresh, onSendMessage, onSSHConnect, onLocalConnect, onRemoteConnect, onOpenSSH,
   onCreateProject, onCreatePhase, onCreateTask,
-  hasProjects, hasPhases, activeProjectName
+  hasProjects, hasPhases, activeProjectName,
+  showCreateProject, onCancelCreateProject
 }: Props) {
   const [activeTab, setActiveTab] = useState<'log' | 'terminal' | 'artifacts'>('terminal')
 
@@ -97,15 +100,22 @@ export function MainPanel({
   const [dragOver, setDragOver] = useState(false)
   const [uploadStatus, setUploadStatus] = useState<string | null>(null)
 
-  // No task selected → show welcome / SSH connect / create flow
-  if (!activeTask) {
+  // Show create project form when requested (from sidebar button or initial flow)
+  if (showCreateProject || !activeTask) {
+    // If explicitly creating project, show project form regardless of other state
+    const showProjectForm = showCreateProject || (sshConnected && !hasProjects)
+
     return (
       <div className={styles.panel}>
         <div className={styles.empty}>
-          <div className={styles.emptyIcon}>W</div>
-          <h2 className={styles.emptyTitle}>Workanywhere</h2>
+          {!showCreateProject && (
+            <>
+              <div className={styles.emptyIcon}>W</div>
+              <h2 className={styles.emptyTitle}>Workanywhere</h2>
+            </>
+          )}
 
-          {!sshConnected ? (
+          {!sshConnected && !showCreateProject ? (
             <>
               <SSHInlineConnect
                 onConnect={onSSHConnect}
@@ -126,8 +136,14 @@ export function MainPanel({
                 />
               </div>
             </>
-          ) : !hasProjects ? (
-            <CreateProjectForm onSubmit={onCreateProject} />
+          ) : showProjectForm ? (
+            <CreateProjectForm
+              onSubmit={(name, path, engine) => {
+                onCreateProject?.(name, path, engine)
+                onCancelCreateProject?.()
+              }}
+              onCancel={showCreateProject ? onCancelCreateProject : undefined}
+            />
           ) : !hasPhases ? (
             <CreatePhaseForm projectName={activeProjectName} onSubmit={onCreatePhase} />
           ) : (
@@ -907,7 +923,10 @@ function SSHInlineConnect({ onConnect, connecting, error }: {
 }
 
 // ─── Create Project Form ───
-function CreateProjectForm({ onSubmit }: { onSubmit?: (name: string, path: string, engine?: string) => void }) {
+function CreateProjectForm({ onSubmit, onCancel }: {
+  onSubmit?: (name: string, path: string, engine?: string) => void
+  onCancel?: () => void
+}) {
   const [name, setName] = useState('')
   const [path, setPath] = useState('')
   const [engine, setEngine] = useState<'claude' | 'opencode'>('claude')
@@ -918,7 +937,6 @@ function CreateProjectForm({ onSubmit }: { onSubmit?: (name: string, path: strin
       <FolderBrowser
         onSelect={(selectedPath) => {
           setPath(selectedPath)
-          // Auto-fill project name from folder name
           if (!name) {
             const folderName = selectedPath.split('/').pop() || ''
             setName(folderName)
@@ -932,15 +950,18 @@ function CreateProjectForm({ onSubmit }: { onSubmit?: (name: string, path: strin
 
   return (
     <form onSubmit={e => { e.preventDefault(); onSubmit?.(name, path, engine) }} className={styles.sshForm}>
-      <p className={styles.sshFormTitle}>
-        <span style={{ color: 'var(--success)' }}>● Connected</span>
-        {' — '}Create a project
-      </p>
+      <div className={styles.createProjectHeader}>
+        <p className={styles.sshFormTitle}>New Project</p>
+        {onCancel && (
+          <button type="button" className={styles.cancelBtn} onClick={onCancel}>Cancel</button>
+        )}
+      </div>
       <input
         className={styles.sshInput}
         value={name}
         onChange={e => setName(e.target.value)}
-        placeholder="Project name (e.g. ACE-2 개발)"
+        placeholder="Project name"
+        autoFocus
         required
       />
       <div className={styles.sshRow}>
@@ -955,7 +976,6 @@ function CreateProjectForm({ onSubmit }: { onSubmit?: (name: string, path: strin
           Browse
         </button>
       </div>
-      {/* Agent engine selection */}
       <div className={styles.engineRow}>
         <button
           type="button"
