@@ -131,15 +131,6 @@
   position: relative;
 }
 
-/* Indentation guides — VS Code uses inset box-shadow */
-.indentGuide {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  pointer-events: none;
-  box-shadow: 1px 0 0 0 #404040 inset;
-}
 
 /* ─── Markdown Viewer ─── */
 .markdownViewer {
