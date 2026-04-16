@@ -304,6 +304,60 @@ function InlineAddTask({ onAdd }: { onAdd?: (name: string, purpose: string, prom
   )
 }
 
+// ─── Seti UI file icon colors (from VS Code default theme) ───
+const SETI: Record<string, { icon: string; color: string }> = {
+  // Blue #519aba — Python, TS, C, Go, CSS, Markdown, Dart, Dockerfile
+  py: { icon: 'Py', color: '#519aba' }, ts: { icon: 'TS', color: '#519aba' }, tsx: { icon: 'TS', color: '#519aba' },
+  c: { icon: 'C', color: '#519aba' }, go: { icon: 'Go', color: '#519aba' }, css: { icon: '#', color: '#519aba' },
+  less: { icon: '#', color: '#519aba' }, md: { icon: 'M', color: '#519aba' }, mdx: { icon: 'M', color: '#519aba' },
+  dart: { icon: 'D', color: '#519aba' }, cs: { icon: 'C#', color: '#519aba' }, elm: { icon: 'E', color: '#519aba' },
+  lua: { icon: 'Lu', color: '#519aba' }, pl: { icon: 'Pl', color: '#519aba' }, r: { icon: 'R', color: '#519aba' },
+  dockerfile: { icon: 'D', color: '#519aba' }, cpp: { icon: 'C+', color: '#519aba' },
+  // Yellow #cbcb41 — JavaScript, JSON
+  js: { icon: 'JS', color: '#cbcb41' }, jsx: { icon: 'JS', color: '#cbcb41' }, mjs: { icon: 'JS', color: '#cbcb41' },
+  json: { icon: '{ }', color: '#cbcb41' }, jsonc: { icon: '{ }', color: '#cbcb41' },
+  // Green #8dc149 — Shell, Vue, CSV
+  sh: { icon: '$', color: '#8dc149' }, bash: { icon: '$', color: '#8dc149' }, zsh: { icon: '$', color: '#8dc149' },
+  vue: { icon: 'V', color: '#8dc149' }, csv: { icon: ',', color: '#8dc149' }, lock: { icon: 'L', color: '#8dc149' },
+  // Red #cc3e44 — Ruby, Java, Svelte, PDF
+  java: { icon: 'Ja', color: '#cc3e44' }, rb: { icon: 'Rb', color: '#cc3e44' }, svelte: { icon: 'S', color: '#cc3e44' },
+  pdf: { icon: 'Pdf', color: '#cc3e44' }, scala: { icon: 'Sc', color: '#cc3e44' },
+  // Purple #a074c4 — PHP, Haskell, images, headers, YAML
+  php: { icon: 'Php', color: '#a074c4' }, h: { icon: 'H', color: '#a074c4' }, hpp: { icon: 'H+', color: '#a074c4' },
+  hs: { icon: 'Hs', color: '#a074c4' }, ex: { icon: 'Ex', color: '#a074c4' }, yml: { icon: 'Y', color: '#a074c4' },
+  yaml: { icon: 'Y', color: '#a074c4' }, tf: { icon: 'Tf', color: '#a074c4' },
+  png: { icon: 'Img', color: '#a074c4' }, jpg: { icon: 'Img', color: '#a074c4' }, jpeg: { icon: 'Img', color: '#a074c4' },
+  gif: { icon: 'Img', color: '#a074c4' }, webp: { icon: 'Img', color: '#a074c4' }, svg: { icon: 'Svg', color: '#a074c4' },
+  ico: { icon: 'Ico', color: '#a074c4' },
+  // Orange #e37933 — HTML, Swift, Kotlin, XML, Makefile
+  html: { icon: '<>', color: '#e37933' }, htm: { icon: '<>', color: '#e37933' }, xml: { icon: '<>', color: '#e37933' },
+  swift: { icon: 'Sw', color: '#e37933' }, kt: { icon: 'Kt', color: '#e37933' }, zig: { icon: 'Z', color: '#e37933' },
+  // Pink #f55385 — Sass, SQL, GraphQL, Docker Compose
+  scss: { icon: 'S', color: '#f55385' }, sass: { icon: 'S', color: '#f55385' }, sql: { icon: 'Sq', color: '#f55385' },
+  graphql: { icon: 'Gq', color: '#f55385' }, gql: { icon: 'Gq', color: '#f55385' },
+  // Grey #6d8086 — Rust, TOML, config, env, zip
+  rs: { icon: 'Rs', color: '#6d8086' }, toml: { icon: 'T', color: '#6d8086' }, cfg: { icon: 'Cf', color: '#6d8086' },
+  conf: { icon: 'Cf', color: '#6d8086' }, ini: { icon: 'Cf', color: '#6d8086' }, env: { icon: 'E', color: '#6d8086' },
+  log: { icon: 'Lo', color: '#6d8086' }, zip: { icon: 'Zp', color: '#6d8086' }, gz: { icon: 'Zp', color: '#6d8086' },
+  tar: { icon: 'Zp', color: '#6d8086' },
+  // Ignore #41535b
+  gitignore: { icon: 'G', color: '#41535b' }, gitattributes: { icon: 'G', color: '#41535b' },
+  // Default
+  txt: { icon: 'Tx', color: '#d4d7d6' }, rst: { icon: 'Rs', color: '#d4d7d6' },
+}
+
+function getFileInfo(name: string): { icon: string; color: string } {
+  const lower = name.toLowerCase()
+  // Special filenames
+  if (lower === 'dockerfile' || lower.startsWith('dockerfile.')) return SETI.dockerfile
+  if (lower === 'makefile') return { icon: 'Mk', color: '#e37933' }
+  if (lower === '.gitignore') return SETI.gitignore
+  if (lower === '.env' || lower.startsWith('.env.')) return SETI.env
+  // Extension-based
+  const ext = name.includes('.') ? name.split('.').pop()!.toLowerCase() : ''
+  return SETI[ext] || { icon: '·', color: '#d4d7d6' }
+}
+
 // ─── File Context Menu ───
 interface FileContextMenuState {
   x: number; y: number; path: string; name: string; isDir: boolean
@@ -443,21 +497,12 @@ function FileTree({ rootPath, onOpenFile }: { rootPath: string; onOpenFile?: (pa
     setRenaming(null)
   }, [renaming, renameValue, reloadDir])
 
-  const getFileIcon = (name: string, isDir: boolean): string => {
-    if (isDir) return '▸'
-    const ext = name.split('.').pop()?.toLowerCase() || ''
-    if (['py', 'ts', 'tsx', 'js', 'jsx', 'c', 'cpp', 'h', 'rs', 'go', 'java'].includes(ext)) return '>'
-    if (['md', 'txt', 'rst'].includes(ext)) return '≡'
-    if (['json', 'yaml', 'yml', 'toml'].includes(ext)) return '{'
-    if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext)) return '◻'
-    if (ext === 'pdf') return '▪'
-    return '·'
-  }
-
   const renderEntries = (dirPath: string, depth: number) => {
     const items = entries[dirPath]
     if (!items) return loading[dirPath] ? <div className={styles.fileTreeLoading}>...</div> : null
-    return items.map(entry => (
+    return items.map(entry => {
+      const fi = entry.isDir ? null : getFileInfo(entry.name)
+      return (
       <div key={entry.path}>
         <div
           className={`${styles.fileTreeItem} ${entry.isDir ? styles.fileTreeDir : styles.fileTreeFile}`}
@@ -471,8 +516,15 @@ function FileTree({ rootPath, onOpenFile }: { rootPath: string; onOpenFile?: (pa
             setFileMenu({ x: e.clientX, y: e.clientY, path: entry.path, name: entry.name, isDir: entry.isDir })
           }}
         >
-          <span className={styles.fileTreeIcon}>
-            {entry.isDir ? (expanded[entry.path] ? '▾' : '▸') : getFileIcon(entry.name, false)}
+          {entry.isDir ? (
+            <span className={styles.fileTreeIcon} style={{ color: '#c09553' }}>
+              {expanded[entry.path] ? '▾' : '▸'}
+            </span>
+          ) : (
+            <span className={styles.fileTreeIcon} style={{ color: fi?.color || '#d4d7d6' }}>
+              {fi?.icon || '·'}
+            </span>
+          )}
           </span>
           {renaming && renaming.path === entry.path ? (
             <input
@@ -490,7 +542,7 @@ function FileTree({ rootPath, onOpenFile }: { rootPath: string; onOpenFile?: (pa
         </div>
         {entry.isDir && expanded[entry.path] && renderEntries(entry.path, depth + 1)}
       </div>
-    ))
+      )})
   }
 
   return (
