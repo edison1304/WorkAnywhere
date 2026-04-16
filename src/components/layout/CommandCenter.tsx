@@ -70,6 +70,7 @@ export function CommandCenter({
 }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [showShortcuts, setShowShortcuts] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
 
   const handleExport = useCallback(async () => {
     if (!activeProject || !window.api) return
@@ -110,30 +111,85 @@ export function CommandCenter({
 
   return (
     <div className={styles.root}>
-      {/* Unified header — compact, dark, VS Code style */}
+      <input ref={fileInputRef} type="file" accept=".json" style={{ display: 'none' }} onChange={handleImport} />
+
+      {/* Titlebar — VS Code style */}
       <div className={styles.titlebar}>
-        <div className={styles.titleLeft}>
-          <span className={styles.titleText}>W</span>
-          {activeProject && (
-            <span className={styles.breadcrumb}>
-              <span className={styles.breadcrumbItem}>{activeProject.name}</span>
-              {activePhase && (
-                <>
-                  <span className={styles.breadcrumbSep}>/</span>
-                  <span className={styles.breadcrumbItem}>{activePhase.name}</span>
-                </>
-              )}
-              {activeTask && (
-                <>
-                  <span className={styles.breadcrumbSep}>/</span>
-                  <span className={styles.breadcrumbItem}>{activeTask.name}</span>
-                </>
-              )}
-            </span>
+        {/* Menu button */}
+        <div className={styles.menuWrapper}>
+          <button className={styles.menuBtn} onClick={() => setMenuOpen(v => !v)}>≡</button>
+          {menuOpen && (
+            <>
+              <div className={styles.menuBackdrop} onClick={() => setMenuOpen(false)} />
+              <div className={styles.menu}>
+                <div className={styles.menuSection}>Summarize</div>
+                <button className={styles.menuItem} disabled={!activePhase} onClick={() => { onPhaseSummarize?.(activePhase!.id); setMenuOpen(false) }}>
+                  <span>Phase Summary</span>
+                  <span className={styles.menuHint}>Analyze current phase pipeline</span>
+                </button>
+                <button className={styles.menuItem} disabled={!activeProject} onClick={() => { onProjectSummarize?.(activeProject!.id); setMenuOpen(false) }}>
+                  <span>Project Summary</span>
+                  <span className={styles.menuHint}>Analyze overall project progress</span>
+                </button>
+
+                <div className={styles.menuDivider} />
+                <div className={styles.menuSection}>Session</div>
+                <button className={styles.menuItem} disabled={!activeProject} onClick={() => { handleExport(); setMenuOpen(false) }}>
+                  <span>Export Session</span>
+                  <span className={styles.menuHint}>Save project state as JSON</span>
+                </button>
+                <button className={styles.menuItem} onClick={() => { fileInputRef.current?.click(); setMenuOpen(false) }}>
+                  <span>Import Session</span>
+                  <span className={styles.menuHint}>Restore from exported JSON</span>
+                </button>
+
+                <div className={styles.menuDivider} />
+                <button className={styles.menuItem} onClick={() => { setShowShortcuts(true); setMenuOpen(false) }}>
+                  <span>Keyboard Shortcuts</span>
+                  <span className={styles.menuKey}>?</span>
+                </button>
+
+                {(monitorDetached || railDetached) && (
+                  <>
+                    <div className={styles.menuDivider} />
+                    <div className={styles.menuSection}>Windows</div>
+                    {monitorDetached && (
+                      <button className={styles.menuItem} onClick={() => { onReattach('monitor'); setMenuOpen(false) }}>
+                        <span>Reattach Monitor</span>
+                      </button>
+                    )}
+                    {railDetached && (
+                      <button className={styles.menuItem} onClick={() => { onReattach('statusrail'); setMenuOpen(false) }}>
+                        <span>Reattach Status Rail</span>
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            </>
           )}
         </div>
 
-        {/* Pipeline summary — fills middle of titlebar */}
+        {/* Breadcrumb */}
+        {activeProject && (
+          <span className={styles.breadcrumb}>
+            <span className={styles.breadcrumbItem}>{activeProject.name}</span>
+            {activePhase && (
+              <>
+                <span className={styles.breadcrumbSep}>/</span>
+                <span className={styles.breadcrumbItem}>{activePhase.name}</span>
+              </>
+            )}
+            {activeTask && (
+              <>
+                <span className={styles.breadcrumbSep}>/</span>
+                <span className={styles.breadcrumbItem}>{activeTask.name}</span>
+              </>
+            )}
+          </span>
+        )}
+
+        {/* Pipeline summary — center */}
         <div className={styles.titleCenter}>
           {activeProject?.summary && (
             <span className={styles.pipelineChip} title={activeProject.summary.overallProgress}>
@@ -147,43 +203,8 @@ export function CommandCenter({
           )}
         </div>
 
+        {/* Connection status — only essential info on the right */}
         <div className={styles.titleRight}>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".json"
-            style={{ display: 'none' }}
-            onChange={handleImport}
-          />
-          {/* Detached indicators */}
-          {monitorDetached && (
-            <button className={styles.headerBtn} onClick={() => onReattach('monitor')} title="Reattach Monitor">
-              Mon ↩
-            </button>
-          )}
-          {railDetached && (
-            <button className={styles.headerBtn} onClick={() => onReattach('statusrail')} title="Reattach Status Rail">
-              Rail ↩
-            </button>
-          )}
-          {activePhase && (
-            <button className={styles.headerBtn} onClick={() => onPhaseSummarize?.(activePhase.id)} title="Summarize phase">
-              Phase
-            </button>
-          )}
-          {activeProject && (
-            <button className={styles.headerBtn} onClick={() => onProjectSummarize?.(activeProject.id)} title="Summarize project">
-              Project
-            </button>
-          )}
-          {activeProject && (
-            <button className={styles.headerBtn} onClick={handleExport} title="Export session">
-              Export
-            </button>
-          )}
-          <button className={styles.headerBtn} onClick={() => fileInputRef.current?.click()} title="Import session">
-            Import
-          </button>
           {sshConnected ? (
             <button
               className={`${styles.connectionBadge} ${connectionStatus === 'lost' || connectionStatus === 'reconnecting' ? styles.reconnecting : styles.connected}`}
@@ -198,13 +219,10 @@ export function CommandCenter({
               }
             </button>
           ) : (
-            <button className={styles.connectionBadge} onClick={onOpenSSH} title="Connect via SSH">
+            <button className={styles.connectionBadge} onClick={onOpenSSH}>
               ○ Connect
             </button>
           )}
-          <button className={styles.headerBtn} onClick={() => setShowShortcuts(s => !s)} title="Keyboard shortcuts">
-            ?
-          </button>
         </div>
       </div>
 
