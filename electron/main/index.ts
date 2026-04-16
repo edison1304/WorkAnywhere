@@ -960,6 +960,41 @@ ipcMain.handle('data:save', async (_event, data: import('../../../shared/types')
   }
 })
 
+// ─── Server-side data sync ───
+// Save workspace data to server's ~/.workanywhere/data.json
+ipcMain.handle('data:save-to-server', async () => {
+  try {
+    const conn = getAnyConn()
+    if (!conn) return { success: false, error: 'Not connected' }
+    const data = dataStore.getAll()
+    const json = JSON.stringify(data)
+    const b64 = Buffer.from(json, 'utf-8').toString('base64')
+    await conn.exec(`mkdir -p ~/.workanywhere && echo '${b64}' | base64 -d > ~/.workanywhere/data.json`)
+    return { success: true }
+  } catch (err) {
+    return { success: false, error: String(err) }
+  }
+})
+
+// Load workspace data from server's ~/.workanywhere/data.json
+ipcMain.handle('data:load-from-server', async () => {
+  try {
+    const conn = getAnyConn()
+    if (!conn) return { success: false, error: 'Not connected' }
+    const raw = await conn.exec('cat ~/.workanywhere/data.json 2>/dev/null || echo ""')
+    const trimmed = raw.trim()
+    if (!trimmed) return { success: true, data: null }
+    const data: import('../../../shared/types').SavedData = JSON.parse(trimmed)
+    // Also update local DataStore
+    if (data.projects?.length || data.phases?.length || data.tasks?.length) {
+      dataStore.replaceAll(data)
+    }
+    return { success: true, data }
+  } catch (err) {
+    return { success: false, error: String(err) }
+  }
+})
+
 ipcMain.handle('config:load', async () => {
   const configPath = getConfigPath()
   try {

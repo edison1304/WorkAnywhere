@@ -266,40 +266,42 @@ export function CommandCenter({
 
       {/* Main layout */}
       <div className={styles.body}>
-        {/* Sidebar: show or show placeholder if detached */}
-        {!monitorDetached ? (
-          <TreeSidebar
-            projects={projects}
-            phases={allPhases}
-            allTasks={allTasks}
-            activeProjectId={activeProject?.id || null}
-            activePhaseId={activePhase?.id || null}
-            activeTaskId={activeTask?.id || null}
-            sidebarView={sidebarView}
-            onSidebarViewChange={onSidebarViewChange}
-            onSelectProject={onSelectProject}
-            onSelectPhase={onSelectPhase}
-            onSelectTask={onSelectTask}
-            onAcknowledgeTask={onAcknowledgeTask}
-            onPinTask={onPinTask}
-            onDeleteTask={onDeleteTask}
-            onForkTask={onForkTask}
-            onMoveTask={onMoveTask}
-            onReorderTasks={onReorderTasks}
-            onReorderPhases={onReorderPhases}
-            onRequestCreateProject={onRequestCreateProject}
-            onCreatePhase={onCreatePhase}
-            onCreateTask={onCreateTask}
-            onDetach={() => onDetach('monitor')}
-          />
-        ) : (
-          <div className={styles.detachedPlaceholder}>
-            <span>M</span>
-            <span>Monitor on<br />second display</span>
-            <button className={styles.reattachBtn} onClick={() => onReattach('monitor')}>
-              ↩ Reattach
-            </button>
-          </div>
+        {/* Sidebar: only show when connected and has projects */}
+        {sshConnected && projects.length > 0 && (
+          !monitorDetached ? (
+            <TreeSidebar
+              projects={projects}
+              phases={allPhases}
+              allTasks={allTasks}
+              activeProjectId={activeProject?.id || null}
+              activePhaseId={activePhase?.id || null}
+              activeTaskId={activeTask?.id || null}
+              sidebarView={sidebarView}
+              onSidebarViewChange={onSidebarViewChange}
+              onSelectProject={onSelectProject}
+              onSelectPhase={onSelectPhase}
+              onSelectTask={onSelectTask}
+              onAcknowledgeTask={onAcknowledgeTask}
+              onPinTask={onPinTask}
+              onDeleteTask={onDeleteTask}
+              onForkTask={onForkTask}
+              onMoveTask={onMoveTask}
+              onReorderTasks={onReorderTasks}
+              onReorderPhases={onReorderPhases}
+              onRequestCreateProject={onRequestCreateProject}
+              onCreatePhase={onCreatePhase}
+              onCreateTask={onCreateTask}
+              onDetach={() => onDetach('monitor')}
+            />
+          ) : (
+            <div className={styles.detachedPlaceholder}>
+              <span>M</span>
+              <span>Monitor on<br />second display</span>
+              <button className={styles.reattachBtn} onClick={() => onReattach('monitor')}>
+                ↩ Reattach
+              </button>
+            </div>
+          )
         )}
 
         {/* Main panel always visible */}
@@ -331,23 +333,25 @@ export function CommandCenter({
           onCancelCreateProject={onCancelCreateProject}
         />
 
-        {/* Status rail: show or placeholder */}
-        {!railDetached ? (
-          <StatusRail
-            allTasks={allProjectTasks}
-            phases={phases}
-            activeTaskId={activeTask?.id || null}
-            onSelectTask={onSelectTask}
-            onDetach={() => onDetach('statusrail')}
-          />
-        ) : (
-          <div className={styles.detachedPlaceholder}>
-            <span>R</span>
-            <span>Status Rail on<br />second display</span>
-            <button className={styles.reattachBtn} onClick={() => onReattach('statusrail')}>
-              ↩ Reattach
-            </button>
-          </div>
+        {/* Status rail: only show when connected and has projects */}
+        {sshConnected && projects.length > 0 && (
+          !railDetached ? (
+            <StatusRail
+              allTasks={allProjectTasks}
+              phases={phases}
+              activeTaskId={activeTask?.id || null}
+              onSelectTask={onSelectTask}
+              onDetach={() => onDetach('statusrail')}
+            />
+          ) : (
+            <div className={styles.detachedPlaceholder}>
+              <span>R</span>
+              <span>Status Rail on<br />second display</span>
+              <button className={styles.reattachBtn} onClick={() => onReattach('statusrail')}>
+                ↩ Reattach
+              </button>
+            </div>
+          )
         )}
       </div>
     </div>

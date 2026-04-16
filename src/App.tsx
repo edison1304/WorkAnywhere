@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { CommandCenter } from './components/layout/CommandCenter'
 import { DetachedMonitor } from './components/layout/DetachedMonitor'
 import { DetachedStatusRail } from './components/layout/DetachedStatusRail'
@@ -20,24 +20,41 @@ export default function App() {
   const [sidebarView, setSidebarView] = useState<SidebarView>('monitor')
   const [detachedPanels, setDetachedPanels] = useState<Set<string>>(new Set())
   const [showCreateProject, setShowCreateProject] = useState(false)
-  const [dataLoaded, setDataLoaded] = useState(false)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Load saved data on startup via DataStore
-  useEffect(() => {
-    if (dataLoaded || !window.api) return
-    setDataLoaded(true)
-    window.api.dataLoad().then(result => {
-      if (result.success && result.data) {
-        if (result.data.projects?.length) setProjects(result.data.projects)
-        if (result.data.phases?.length) setPhases(result.data.phases)
-        if (result.data.tasks?.length) setTasks(result.data.tasks)
-        // Auto-select first project
-        if (result.data.projects?.length) {
-          setActiveProjectId(result.data.projects[0].id)
+  // Debounced save to server — called after data changes
+  const syncToServer = useCallback(() => {
+    if (!window.api) return
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      window.api.dataSaveToServer().catch(() => {})
+    }, 2000)
+  }, [])
+
+  // Load data from server after connection established
+  const loadFromServer = useCallback(async () => {
+    if (!window.api) return
+    const result = await window.api.dataLoadFromServer()
+    if (result.success && result.data) {
+      if (result.data.projects?.length) setProjects(result.data.projects)
+      if (result.data.phases?.length) setPhases(result.data.phases)
+      if (result.data.tasks?.length) setTasks(result.data.tasks)
+      if (result.data.projects?.length) {
+        setActiveProjectId(result.data.projects[0].id)
+      }
+    } else {
+      // No server data — try local fallback
+      const local = await window.api.dataLoad()
+      if (local.success && local.data) {
+        if (local.data.projects?.length) setProjects(local.data.projects)
+        if (local.data.phases?.length) setPhases(local.data.phases)
+        if (local.data.tasks?.length) setTasks(local.data.tasks)
+        if (local.data.projects?.length) {
+          setActiveProjectId(local.data.projects[0].id)
         }
       }
-    })
-  }, [dataLoaded])
+    }
+  }, [])
 
   // Connection state
   const [connectionStatus, setConnectionStatus] = useState<string | null>(null) // 'lost' | 'reconnecting' | 'restored' | 'failed' | null
@@ -68,7 +85,8 @@ export default function App() {
         if (!result.claude?.available) {
           setSshError('Connected, but claude CLI not found on server')
         }
-        // Config is saved by the SSH form component
+        // Load workspace data from server
+        loadFromServer()
       } else {
         setSshError(result.error || 'Connection failed')
       }
@@ -88,6 +106,7 @@ export default function App() {
       if (result.success) {
         setSshConnected(true)
         setLastConnectionConfig({ type: 'remote', remote: { link: remoteLink } })
+        loadFromServer()
         if (result.claude?.version) setClaudeVersion(result.claude.version)
       } else {
         setSshError(result.error || 'Remote connection failed')
@@ -108,6 +127,7 @@ export default function App() {
       if (result.success) {
         setSshConnected(true)
         setLastConnectionConfig({ type: 'local' })
+        loadFromServer()
         if (result.claude?.version) setClaudeVersion(result.claude.version)
       } else {
         setSshError(result.error || 'Local connection failed')
@@ -235,7 +255,8 @@ export default function App() {
     setActivePhaseId(null)
     setActiveTaskId(null)
     setShowCreateProject(false)
-  }, [])
+    syncToServer()
+  }, [syncToServer])
 
   const handleCreatePhase = useCallback(async (name: string, description: string) => {
     if (!activeProjectId || !window.api) return
@@ -243,14 +264,16 @@ export default function App() {
     setPhases(prev => [...prev, phase])
     setActivePhaseId(phase.id)
     setActiveTaskId(null)
-  }, [activeProjectId])
+    syncToServer()
+  }, [activeProjectId, syncToServer])
 
   const handleCreateTask = useCallback(async (name: string, purpose: string, prompt: string) => {
     if (!activePhaseId || !window.api) return
     const task = await window.api.taskCreate(activePhaseId, name, purpose, prompt)
     setTasks(prev => [...prev, task])
     setActiveTaskId(task.id)
-  }, [activePhaseId])
+    syncToServer()
+  }, [activePhaseId, syncToServer])
 
   const handleMarkCompleted = useCallback(async (taskId: string) => {
     const task = tasks.find(t => t.id === taskId)
@@ -258,6 +281,7 @@ export default function App() {
       t.id === taskId ? { ...t, status: 'completed' as const } : t
     ))
     window.api?.taskUpdate(taskId, { status: 'completed' })
+    syncToServer()
 
     // Auto-generate phase summary when last task in phase is completed
     if (task) {
@@ -271,11 +295,12 @@ export default function App() {
             setPhases(prev => prev.map(ph =>
               ph.id === task.phaseId ? { ...ph, summary: result.summary } : ph
             ))
+            syncToServer()
           }
         })
       }
     }
-  }, [tasks])
+  }, [tasks, syncToServer])
 
   const handleSummarize = useCallback(async (taskId: string) => {
     if (!window.api) return
@@ -490,6 +515,10 @@ export default function App() {
           ...(status === 'completed' || status === 'failed' ? { completedAt: new Date().toISOString() } : {})
         } : t
       ))
+      // Sync to server on task completion/failure
+      if (status === 'completed' || status === 'failed' || status === 'review') {
+        syncToServer()
+      }
     })
 
     const unsubLog = window.api.onTaskLog(({ taskId, log }) => {
@@ -553,7 +582,8 @@ export default function App() {
     await window.api.taskDelete(taskId)
     setTasks(prev => prev.filter(t => t.id !== taskId))
     if (activeTaskId === taskId) setActiveTaskId(null)
-  }, [tasks, activeTaskId])
+    syncToServer()
+  }, [tasks, activeTaskId, syncToServer])
 
   const handleForkTask = useCallback(async (taskId: string) => {
     if (!window.api) return
@@ -562,7 +592,8 @@ export default function App() {
     const newTask = await window.api.taskCreate(task.phaseId, `${task.name} (fork)`, task.purpose || '', task.prompt)
     setTasks(prev => [...prev, newTask])
     setActiveTaskId(newTask.id)
-  }, [tasks])
+    syncToServer()
+  }, [tasks, syncToServer])
 
   const handleMoveTask = useCallback(async (taskId: string, targetPhaseId: string) => {
     if (!window.api) return
@@ -570,7 +601,8 @@ export default function App() {
     if (!task || task.phaseId === targetPhaseId) return
     await window.api.taskUpdate(taskId, { phaseId: targetPhaseId } as any)
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, phaseId: targetPhaseId } : t))
-  }, [tasks])
+    syncToServer()
+  }, [tasks, syncToServer])
 
   const handleReorderTasks = useCallback(async (phaseId: string, orderedIds: string[]) => {
     if (!window.api) return
@@ -583,7 +615,8 @@ export default function App() {
       return t
     }))
     await window.api.taskReorder(phaseId, orderedIds)
-  }, [])
+    syncToServer()
+  }, [syncToServer])
 
   const handleReorderPhases = useCallback(async (projectId: string, orderedIds: string[]) => {
     if (!window.api) return
@@ -596,7 +629,8 @@ export default function App() {
       return ph
     }))
     await window.api.phaseReorder(projectId, orderedIds)
-  }, [])
+    syncToServer()
+  }, [syncToServer])
 
   const handlePinTask = useCallback(async (taskId: string) => {
     const task = tasks.find(t => t.id === taskId)

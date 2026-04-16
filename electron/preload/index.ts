@@ -127,6 +127,8 @@ const api: IpcApi = {
   // Data persistence (projects/phases/tasks)
   dataLoad: () => ipcRenderer.invoke('data:load'),
   dataSave: (data) => ipcRenderer.invoke('data:save', data),
+  dataSaveToServer: () => ipcRenderer.invoke('data:save-to-server'),
+  dataLoadFromServer: () => ipcRenderer.invoke('data:load-from-server'),
 
   // File read/upload
   sshReadFile: (filePath) => ipcRenderer.invoke('ssh:read-file', filePath),

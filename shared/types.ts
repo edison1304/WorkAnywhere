@@ -238,6 +238,8 @@ export interface IpcApi {
   // Data persistence
   dataLoad(): Promise<{ success: boolean; data: SavedData | null }>
   dataSave(data: SavedData): Promise<{ success: boolean }>
+  dataSaveToServer(): Promise<{ success: boolean; error?: string }>
+  dataLoadFromServer(): Promise<{ success: boolean; data: SavedData | null; error?: string }>
 
   // Remote file read
   sshReadFile(filePath: string): Promise<{ success: boolean; content?: string; encoding?: 'utf8' | 'base64'; size?: number; error?: string }>
