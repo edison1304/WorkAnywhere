@@ -20,6 +20,7 @@ export default function App() {
   const [sidebarView, setSidebarView] = useState<SidebarView>('monitor')
   const [detachedPanels, setDetachedPanels] = useState<Set<string>>(new Set())
   const [showCreateProject, setShowCreateProject] = useState(false)
+  const [openFilePath, setOpenFilePath] = useState<string | null>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Debounced save to server — called after data changes
@@ -730,7 +731,7 @@ export default function App() {
           setActivePhaseId(id)
           setActiveTaskId(null)
         }}
-        onSelectTask={setActiveTaskId}
+        onSelectTask={(id) => { setActiveTaskId(id); if (id) setOpenFilePath(null) }}
         onAcknowledgeTask={handleAcknowledgeTask}
         onPinTask={handlePinTask}
         onDeleteTask={handleDeleteTask}
@@ -759,6 +760,8 @@ export default function App() {
         onCreatePhase={handleCreatePhase}
         onCreateTask={handleCreateTask}
         onImportProject={handleImportProject}
+        onOpenFile={(path) => { setOpenFilePath(path); setActiveTaskId(null) }}
+        openFilePath={openFilePath}
         onPhaseSummarize={handlePhaseSummarize}
         onProjectSummarize={handleProjectSummarize}
       />

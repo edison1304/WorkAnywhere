@@ -81,6 +81,8 @@ interface Props {
   workspacePath?: string
   showCreateProject?: boolean
   onCancelCreateProject?: () => void
+  openFilePath?: string | null
+  onOpenFile?: (filePath: string) => void
 }
 
 export function MainPanel({
@@ -88,7 +90,8 @@ export function MainPanel({
   onRunAgent, onStopAgent, onResumeAgent, onMarkCompleted, onSummarize, onRestartFresh, onSendMessage, onSSHConnect, onLocalConnect, onRemoteConnect, onOpenSSH,
   onCreateProject, onCreatePhase, onCreateTask,
   hasProjects, hasPhases, activeProjectName,
-  showCreateProject, onCancelCreateProject
+  showCreateProject, onCancelCreateProject,
+  openFilePath, onOpenFile
 }: Props) {
   const [activeTab, setActiveTab] = useState<'log' | 'terminal' | 'artifacts'>('terminal')
 
@@ -99,6 +102,35 @@ export function MainPanel({
   )
   const [dragOver, setDragOver] = useState(false)
   const [uploadStatus, setUploadStatus] = useState<string | null>(null)
+
+  // File viewer — when a file is opened from the file tree
+  if (openFilePath && !showCreateProject) {
+    const fileName = openFilePath.split('/').pop() || openFilePath
+    const ext = fileName.split('.').pop()?.toLowerCase() || ''
+    const artifactType = (() => {
+      if (['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg', 'ico'].includes(ext)) return 'image'
+      if (ext === 'pdf') return 'pdf'
+      if (['md', 'markdown'].includes(ext)) return 'markdown'
+      if (['json'].includes(ext)) return 'json'
+      if (['yaml', 'yml'].includes(ext)) return 'yaml'
+      if (['txt', 'log', 'csv'].includes(ext)) return 'text'
+      return 'code'
+    })() as import('../../shared/types').ArtifactType
+    return (
+      <div className={styles.panel}>
+        <div className={styles.fileViewerHeader}>
+          <span className={styles.fileViewerPath}>{openFilePath}</span>
+        </div>
+        <div className={styles.fileViewerBody}>
+          <ArtifactViewer
+            key={openFilePath}
+            artifact={{ id: 'file-view', taskId: '', filePath: openFilePath, type: artifactType, action: 'created', detectedAt: '' }}
+            workspacePath=""
+          />
+        </div>
+      </div>
+    )
+  }
 
   // Show create project form when requested (from sidebar button or initial flow)
   if (showCreateProject || !activeTask) {

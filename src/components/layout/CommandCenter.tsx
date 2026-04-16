@@ -48,6 +48,8 @@ interface Props {
   onCreatePhase: (name: string, description: string) => void
   onCreateTask: (name: string, purpose: string, prompt: string) => void
   onImportProject?: (projectId: string) => void
+  onOpenFile?: (filePath: string) => void
+  openFilePath?: string | null
   onPhaseSummarize?: (phaseId: string) => void
   onProjectSummarize?: (projectId: string) => void
   sshConnected: boolean
@@ -65,7 +67,7 @@ export function CommandCenter({
   onSidebarViewChange,
   onSelectProject, onSelectPhase, onSelectTask, onAcknowledgeTask, onPinTask, onDeleteTask, onForkTask, onMoveTask, onReorderTasks, onReorderPhases,
   onDetach, onReattach, onRunAgent, onStopAgent, onResumeAgent, onMarkCompleted, onSummarize, onRestartFresh, onSendMessage, onSSHConnect, onLocalConnect, onRemoteConnect, onOpenSSH, onDisconnectSSH,
-  onCreateProject, onRequestCreateProject, showCreateProject, onCancelCreateProject, onCreatePhase, onCreateTask, onImportProject,
+  onCreateProject, onRequestCreateProject, showCreateProject, onCancelCreateProject, onCreatePhase, onCreateTask, onImportProject, onOpenFile, openFilePath,
   onPhaseSummarize, onProjectSummarize
 }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -291,6 +293,8 @@ export function CommandCenter({
               onRequestCreateProject={onRequestCreateProject}
               onCreatePhase={onCreatePhase}
               onCreateTask={onCreateTask}
+              onOpenFile={onOpenFile}
+              workspacePath={activeProject?.workspacePath}
               onDetach={() => onDetach('monitor')}
             />
           ) : (
@@ -331,6 +335,8 @@ export function CommandCenter({
           workspacePath={activeProject?.workspacePath}
           showCreateProject={showCreateProject}
           onCancelCreateProject={onCancelCreateProject}
+          openFilePath={openFilePath}
+          onOpenFile={onOpenFile}
         />
 
         {/* Status rail: only show when connected and has projects */}

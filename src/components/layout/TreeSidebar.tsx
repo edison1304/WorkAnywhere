@@ -28,6 +28,8 @@ interface Props {
   onRequestCreateProject?: () => void
   onCreatePhase?: (name: string, desc: string) => void
   onCreateTask?: (name: string, purpose: string, prompt: string) => void
+  onOpenFile?: (filePath: string) => void
+  workspacePath?: string
   onDetach?: () => void
 }
 
@@ -300,6 +302,73 @@ function InlineAddTask({ onAdd }: { onAdd?: (name: string, purpose: string, prom
       </div>
     </form>
   )
+}
+
+// ─── File Tree (workspace browser) ───
+function FileTree({ rootPath, onOpenFile }: { rootPath: string; onOpenFile?: (path: string) => void }) {
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({ [rootPath]: true })
+  const [entries, setEntries] = useState<Record<string, Array<{ name: string; isDir: boolean; path: string }>>>({})
+  const [loading, setLoading] = useState<Record<string, boolean>>({})
+
+  const loadDir = useCallback(async (dirPath: string) => {
+    if (entries[dirPath] || loading[dirPath]) return
+    if (!window.api) return
+    setLoading(prev => ({ ...prev, [dirPath]: true }))
+    const result = await window.api.sshListDir(dirPath)
+    setLoading(prev => ({ ...prev, [dirPath]: false }))
+    if (result.success && result.entries) {
+      setEntries(prev => ({
+        ...prev,
+        [dirPath]: result.entries!.filter(e => !e.name.startsWith('.')),
+      }))
+    }
+  }, [entries, loading])
+
+  useEffect(() => { loadDir(rootPath) }, [rootPath])
+
+  const toggleDir = useCallback((dirPath: string) => {
+    setExpanded(prev => {
+      const next = { ...prev, [dirPath]: !prev[dirPath] }
+      if (next[dirPath]) loadDir(dirPath)
+      return next
+    })
+  }, [loadDir])
+
+  const getFileIcon = (name: string, isDir: boolean): string => {
+    if (isDir) return '▸'
+    const ext = name.split('.').pop()?.toLowerCase() || ''
+    if (['py', 'ts', 'tsx', 'js', 'jsx', 'c', 'cpp', 'h', 'rs', 'go', 'java'].includes(ext)) return '>'
+    if (['md', 'txt', 'rst'].includes(ext)) return '≡'
+    if (['json', 'yaml', 'yml', 'toml'].includes(ext)) return '{'
+    if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext)) return '◻'
+    if (ext === 'pdf') return '▪'
+    return '·'
+  }
+
+  const renderEntries = (dirPath: string, depth: number) => {
+    const items = entries[dirPath]
+    if (!items) return loading[dirPath] ? <div className={styles.fileTreeLoading}>...</div> : null
+    return items.map(entry => (
+      <div key={entry.path}>
+        <div
+          className={`${styles.fileTreeItem} ${entry.isDir ? styles.fileTreeDir : styles.fileTreeFile}`}
+          style={{ paddingLeft: 8 + depth * 14 }}
+          onClick={() => {
+            if (entry.isDir) toggleDir(entry.path)
+            else onOpenFile?.(entry.path)
+          }}
+        >
+          <span className={styles.fileTreeIcon}>
+            {entry.isDir ? (expanded[entry.path] ? '▾' : '▸') : getFileIcon(entry.name, false)}
+          </span>
+          <span className={styles.fileTreeName}>{entry.name}</span>
+        </div>
+        {entry.isDir && expanded[entry.path] && renderEntries(entry.path, depth + 1)}
+      </div>
+    ))
+  }
+
+  return <div className={styles.fileTreeRoot}>{renderEntries(rootPath, 0)}</div>
 }
 
 // ─── Drag reorder helpers ───
@@ -659,6 +728,15 @@ export function TreeSidebar(props: Props) {
               onCreatePhase={props.onCreatePhase} onCreateTask={props.onCreateTask}
               onReorderTasks={props.onReorderTasks} onReorderPhases={props.onReorderPhases}
             />
+            {/* File explorer */}
+            {props.workspacePath && (
+              <>
+                <div className={styles.fileTreeHeader}>
+                  <span>FILES</span>
+                </div>
+                <FileTree rootPath={props.workspacePath} onOpenFile={props.onOpenFile} />
+              </>
+            )}
           </div>
         </div>
       )}

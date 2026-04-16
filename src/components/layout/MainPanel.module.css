@@ -13,6 +13,28 @@
   outline-offset: -2px;
 }
 
+/* File viewer (opened from file tree) */
+.fileViewerHeader {
+  display: flex;
+  align-items: center;
+  padding: 6px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+.fileViewerPath {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-family: 'JetBrains Mono', monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fileViewerBody {
+  flex: 1;
+  overflow: hidden;
+}
+
 .dropOverlay {
   position: absolute;
   inset: 0;
