@@ -73,6 +73,7 @@ export function CommandCenter({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   const handleExport = useCallback(async () => {
     if (!activeProject || !window.api) return
@@ -234,8 +235,62 @@ export function CommandCenter({
               ○ Connect
             </button>
           )}
+          <button
+            className={`${styles.settingsBtn} ${settingsOpen ? styles.settingsBtnActive : ''}`}
+            onClick={() => setSettingsOpen(v => !v)}
+            title="Settings"
+          >
+            ⚙
+          </button>
         </div>
       </div>
+
+      {/* Settings panel */}
+      {settingsOpen && (
+        <div className={styles.shortcutsOverlay} onClick={() => setSettingsOpen(false)}>
+          <div className={styles.settingsPanel} onClick={e => e.stopPropagation()}>
+            <div className={styles.settingsHeader}>
+              <span className={styles.settingsTitle}>Settings</span>
+              <button className={styles.settingsClose} onClick={() => setSettingsOpen(false)}>×</button>
+            </div>
+            <div className={styles.settingsBody}>
+              <div className={styles.settingsSection}>General</div>
+              <div className={styles.settingsItem}>
+                <span className={styles.settingsLabel}>Theme</span>
+                <span className={styles.settingsValue}>Dark (default)</span>
+              </div>
+              <div className={styles.settingsItem}>
+                <span className={styles.settingsLabel}>Font Size</span>
+                <span className={styles.settingsValue}>14px</span>
+              </div>
+              <div className={styles.settingsItem}>
+                <span className={styles.settingsLabel}>Sidebar Width</span>
+                <span className={styles.settingsValue}>260px</span>
+              </div>
+
+              <div className={styles.settingsSection}>Agent</div>
+              <div className={styles.settingsItem}>
+                <span className={styles.settingsLabel}>Default Engine</span>
+                <span className={styles.settingsValue}>Claude Code</span>
+              </div>
+              <div className={styles.settingsItem}>
+                <span className={styles.settingsLabel}>Auto Summarize</span>
+                <span className={styles.settingsValue}>On phase complete</span>
+              </div>
+
+              <div className={styles.settingsSection}>Data</div>
+              <div className={styles.settingsItem}>
+                <span className={styles.settingsLabel}>Server Sync</span>
+                <span className={styles.settingsValue}>~/.workanywhere/data.json</span>
+              </div>
+
+              <div className={styles.settingsHint}>
+                Settings are not yet configurable. Coming soon.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Shortcuts overlay */}
       {showShortcuts && (

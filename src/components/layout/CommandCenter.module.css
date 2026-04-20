@@ -199,6 +199,100 @@
 .connectionBadge.connected {
   color: var(--success);
 }
+
+/* Settings button */
+.settingsBtn {
+  font-size: 14px;
+  width: 28px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 3px;
+  transition: all 0.15s;
+  -webkit-app-region: no-drag;
+}
+.settingsBtn:hover,
+.settingsBtnActive {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* Settings panel */
+.settingsPanel {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 380px;
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.settingsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.settingsTitle {
+  font-size: 14px;
+  font-weight: 600;
+}
+.settingsClose {
+  font-size: 18px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+.settingsClose:hover { background: var(--bg-hover); color: var(--text-primary); }
+.settingsBody {
+  padding: 12px 20px 20px;
+  overflow-y: auto;
+}
+.settingsSection {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  margin-top: 16px;
+  margin-bottom: 6px;
+}
+.settingsSection:first-child { margin-top: 0; }
+.settingsItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 12px;
+}
+.settingsLabel { color: var(--text-secondary); }
+.settingsValue {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.settingsHint {
+  margin-top: 20px;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+}
 .connectionBadge.reconnecting {
   color: var(--warning);
   animation: pulse-reconnect 1.5s infinite;
