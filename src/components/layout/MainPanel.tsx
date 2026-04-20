@@ -22,9 +22,9 @@ function calcDrift(task: Task): DriftInfo {
   const logCount = logs.length
   const toolCalls = logs.filter(l => l.type === 'tool_call').length
 
-  // Estimate tokens: ~4 chars per token
+  // Estimate tokens: ~3.5 chars per token (conservative for mixed code/prose)
   const totalChars = logs.reduce((sum, l) => sum + l.content.length, 0)
-  const estimatedTokensK = Math.round(totalChars / 4 / 1000)
+  const estimatedTokensK = Math.round(totalChars / 3.5 / 1000)
 
   // Elapsed time since first log
   const firstLog = logs[0]
@@ -32,9 +32,12 @@ function calcDrift(task: Task): DriftInfo {
   const elapsedMin = Math.round(elapsedMs / 60000)
 
   // Score components (0~100 each, take max)
-  const timeScore = Math.min(100, (elapsedMin / 60) * 100)        // 60min = 100
-  const toolScore = Math.min(100, (toolCalls / 150) * 100)         // 150 calls = 100
-  const tokenScore = Math.min(100, (estimatedTokensK / 400) * 100) // 400K tokens = 100
+  // Thresholds tuned for real-world context degradation:
+  //   Warning ~40%: quality starts declining, user should be aware
+  //   Critical ~70%: significant degradation, restart recommended
+  const timeScore = Math.min(100, (elapsedMin / 45) * 100)        // 45min = 100 (warning ~18m, critical ~31m)
+  const toolScore = Math.min(100, (toolCalls / 100) * 100)         // 100 calls = 100 (warning ~40, critical ~70)
+  const tokenScore = Math.min(100, (estimatedTokensK / 200) * 100) // 200K tokens = 100 (warning ~80K, critical ~140K)
   const score = Math.round(Math.max(timeScore, toolScore, tokenScore))
 
   let level: DriftInfo['level'] = 'ok'
@@ -276,7 +279,7 @@ export function MainPanel({
                 data-level={drift.level}
                 title={`Session drift: ${drift.score}% — ${drift.reason}\n${drift.toolCalls} tool calls, ~${drift.estimatedTokensK}K tokens, ${drift.elapsedMin}min`}
               >
-                {drift.level === 'critical' ? 'DRIFT' : 'DRIFT'}
+                {drift.level === 'critical' ? 'RESTART' : 'DRIFT'}
                 <span className={styles.driftScore}>{drift.score}%</span>
               </span>
             )}

@@ -365,25 +365,49 @@ export default function App() {
       t.id === taskId ? { ...t, status: 'completed' as const } : t
     ))
 
-    // 2. Try to summarize (with 15s timeout, skip if fails)
+    // 2. Try to summarize (with 20s timeout, skip if fails)
     let summaryText = ''
     try {
       const sumPromise = window.api.taskSummarize(taskId)
-      const timeoutPromise = new Promise<null>(resolve => setTimeout(() => resolve(null), 15000))
+      const timeoutPromise = new Promise<null>(resolve => setTimeout(() => resolve(null), 20000))
       const sumResult = await Promise.race([sumPromise, timeoutPromise])
       if (sumResult && 'success' in sumResult && sumResult.success && sumResult.summary) {
-        summaryText = `Previous session summary:\n- Progress: ${sumResult.summary.progress}\n- Completed: ${sumResult.summary.completedSteps.join('; ')}\n- Issues: ${sumResult.summary.issues.join('; ')}\n\n`
+        const s = sumResult.summary
+        summaryText = [
+          'Previous session summary:',
+          `- Progress: ${s.progress}`,
+          s.completedSteps.length ? `- Completed: ${s.completedSteps.join('; ')}` : '',
+          s.issues.length ? `- Issues encountered: ${s.issues.join('; ')}` : '',
+          s.nextSteps.length ? `- Planned next: ${s.nextSteps.join('; ')}` : '',
+          '',
+        ].filter(Boolean).join('\n')
       }
     } catch { /* skip summary */ }
 
-    // 3. Create new task and run
+    // 3. Use existing summary if available and auto-summarize failed
+    if (!summaryText && task.summary) {
+      const s = task.summary
+      summaryText = [
+        'Previous session summary (cached):',
+        `- Progress: ${s.progress}`,
+        s.completedSteps.length ? `- Completed: ${s.completedSteps.join('; ')}` : '',
+        s.issues.length ? `- Issues: ${s.issues.join('; ')}` : '',
+        '',
+      ].filter(Boolean).join('\n')
+    }
+
+    // 4. Create new task and run
     const newName = `${task.name} (continued)`
-    const newPrompt = `${summaryText}Continue the following task from where the previous session left off:\n\n${task.prompt}`
+    const contextPrefix = summaryText
+      ? `${summaryText}\nContinue from where the previous session left off.\n\n`
+      : 'The previous session was restarted due to context drift. Continue the task:\n\n'
+    const newPrompt = `${contextPrefix}Original task:\n${task.prompt}`
     const newTask = await window.api.taskCreate(task.phaseId, newName, task.purpose || '', newPrompt)
     setTasks(prev => [...prev, newTask])
     setActiveTaskId(newTask.id)
+    syncToServer()
     setTimeout(() => handleRunAgent(newTask.id), 300)
-  }, [tasks, handleRunAgent])
+  }, [tasks, handleRunAgent, syncToServer])
 
   const handleImportProject = useCallback(async (projectId: string) => {
     // Reload all data from DataStore after import

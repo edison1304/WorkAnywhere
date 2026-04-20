@@ -549,9 +549,12 @@ Respond with ONLY a JSON object (no markdown, no backticks):
     console.log(`[Summarize] rawOutput length=${rawOutput.length}, preview: "${rawOutput.slice(0, 200)}"`)
 
     const jsonMatch = rawOutput.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) return { success: false, error: 'Failed to parse summary' }
+    if (!jsonMatch) return { success: false, error: 'Failed to parse summary — no JSON in output' }
 
-    const parsed = JSON.parse(jsonMatch[0])
+    let parsed: any
+    try { parsed = JSON.parse(jsonMatch[0]) }
+    catch { return { success: false, error: 'Failed to parse summary — invalid JSON' } }
+
     const summary: import('../../../shared/types').TaskSummary = {
       currentStep: String(parsed.currentStep || ''),
       completedSteps: Array.isArray(parsed.completedSteps) ? parsed.completedSteps.map(String) : [],
@@ -615,9 +618,12 @@ Respond with ONLY a JSON object (no markdown, no backticks):
 
     const rawOutput = await runClaudeOnProject(project.id, prompt)
     const jsonMatch = rawOutput.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) return { success: false, error: 'Failed to parse phase summary' }
+    if (!jsonMatch) return { success: false, error: 'Failed to parse phase summary — no JSON' }
 
-    const parsed = JSON.parse(jsonMatch[0])
+    let parsed: any
+    try { parsed = JSON.parse(jsonMatch[0]) }
+    catch { return { success: false, error: 'Failed to parse phase summary — invalid JSON' } }
+
     const summary: import('../../../shared/types').PhaseSummary = {
       pipeline: String(parsed.pipeline || ''),
       currentState: String(parsed.currentState || ''),
@@ -671,9 +677,12 @@ Respond with ONLY a JSON object (no markdown, no backticks):
 
     const rawOutput = await runClaudeOnProject(projectId, prompt)
     const jsonMatch = rawOutput.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) return { success: false, error: 'Failed to parse project summary' }
+    if (!jsonMatch) return { success: false, error: 'Failed to parse project summary — no JSON' }
 
-    const parsed = JSON.parse(jsonMatch[0])
+    let parsed: any
+    try { parsed = JSON.parse(jsonMatch[0]) }
+    catch { return { success: false, error: 'Failed to parse project summary — invalid JSON' } }
+
     const summary: import('../../../shared/types').ProjectSummary = {
       pipeline: String(parsed.pipeline || ''),
       currentPhase: String(parsed.currentPhase || ''),
