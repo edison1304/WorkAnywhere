@@ -22,19 +22,23 @@ function calcDrift(task: Task): DriftInfo {
   const logCount = logs.length
   const toolCalls = logs.filter(l => l.type === 'tool_call').length
 
-  // Estimate tokens: ~3.5 chars per token (conservative for mixed code/prose)
+  // Estimate CONTEXT tokens from log output.
+  // Log chars → tokens: ~3 chars/token (conservative; Korean uses ~1.5 chars/token)
+  // Actual context ≈ 2~3x logged output (includes system prompt, tool schemas,
+  // all conversation history, tool inputs — not just the output we see)
   const totalChars = logs.reduce((sum, l) => sum + l.content.length, 0)
-  const estimatedTokensK = Math.round(totalChars / 3.5 / 1000)
+  const logTokensK = Math.round(totalChars / 3 / 1000)
+  const estimatedTokensK = logTokensK * 2.5  // approximate full context multiplier
 
   const firstLog = logs[0]
   const elapsedMs = firstLog ? Date.now() - new Date(firstLog.timestamp).getTime() : 0
   const elapsedMin = Math.round(elapsedMs / 60000)
 
-  // Drift = token accumulation only.
-  // Time is irrelevant (agent may be idle). Tool calls correlate with tokens anyway.
-  // 200K tokens = 100% (context window limit territory)
-  // Warning at 40% (~80K) — quality starts declining
-  // Critical at 70% (~140K) — significant degradation, restart recommended
+  // Claude context window is ~200K tokens.
+  // Quality degrades well before the limit (~60% usage).
+  // Score based on estimated full context usage:
+  //   Warning at 40% (~80K actual context)
+  //   Critical at 70% (~140K actual context)
   const score = Math.round(Math.min(100, (estimatedTokensK / 200) * 100))
 
   let level: DriftInfo['level'] = 'ok'
@@ -270,7 +274,7 @@ export function MainPanel({
               <span
                 className={styles.driftBadge}
                 data-level={drift.level}
-                title={`Context usage: ${drift.score}% — ~${drift.estimatedTokensK}K tokens\n${drift.toolCalls} tool calls, ${drift.elapsedMin}min elapsed`}
+                title={`Context usage: ${drift.score}% — ~${Math.round(drift.estimatedTokensK)}K estimated tokens\n(logged output × 2.5 multiplier for full context)\n${drift.toolCalls} tool calls, ${drift.elapsedMin}min elapsed`}
               >
                 {drift.level === 'critical' ? 'RESTART' : 'DRIFT'}
                 <span className={styles.driftScore}>{drift.score}%</span>
@@ -290,7 +294,7 @@ export function MainPanel({
                 style={{ width: `${Math.min(100, drift.score)}%` }}
               />
               <span className={styles.driftGaugeLabel}>
-                ~{drift.estimatedTokensK}K / 200K tokens
+                ~{Math.round(drift.estimatedTokensK)}K / 200K context
               </span>
             </div>
           )}
