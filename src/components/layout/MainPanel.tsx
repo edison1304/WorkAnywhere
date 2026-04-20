@@ -26,33 +26,26 @@ function calcDrift(task: Task): DriftInfo {
   const totalChars = logs.reduce((sum, l) => sum + l.content.length, 0)
   const estimatedTokensK = Math.round(totalChars / 3.5 / 1000)
 
-  // Elapsed time since first log
   const firstLog = logs[0]
   const elapsedMs = firstLog ? Date.now() - new Date(firstLog.timestamp).getTime() : 0
   const elapsedMin = Math.round(elapsedMs / 60000)
 
-  // Score components (0~100 each, take max)
-  // Thresholds tuned for real-world context degradation:
-  //   Warning ~40%: quality starts declining, user should be aware
-  //   Critical ~70%: significant degradation, restart recommended
-  const timeScore = Math.min(100, (elapsedMin / 45) * 100)        // 45min = 100 (warning ~18m, critical ~31m)
-  const toolScore = Math.min(100, (toolCalls / 100) * 100)         // 100 calls = 100 (warning ~40, critical ~70)
-  const tokenScore = Math.min(100, (estimatedTokensK / 200) * 100) // 200K tokens = 100 (warning ~80K, critical ~140K)
-  const score = Math.round(Math.max(timeScore, toolScore, tokenScore))
+  // Drift = token accumulation only.
+  // Time is irrelevant (agent may be idle). Tool calls correlate with tokens anyway.
+  // 200K tokens = 100% (context window limit territory)
+  // Warning at 40% (~80K) — quality starts declining
+  // Critical at 70% (~140K) — significant degradation, restart recommended
+  const score = Math.round(Math.min(100, (estimatedTokensK / 200) * 100))
 
   let level: DriftInfo['level'] = 'ok'
   let reason = ''
 
   if (score >= 70) {
     level = 'critical'
-    if (tokenScore >= 70) reason = `~${estimatedTokensK}K tokens`
-    else if (toolScore >= 70) reason = `${toolCalls} tool calls`
-    else reason = `${elapsedMin}min elapsed`
+    reason = `~${estimatedTokensK}K tokens used`
   } else if (score >= 40) {
     level = 'warning'
-    if (tokenScore >= 40) reason = `~${estimatedTokensK}K tokens`
-    else if (toolScore >= 40) reason = `${toolCalls} tool calls`
-    else reason = `${elapsedMin}min elapsed`
+    reason = `~${estimatedTokensK}K tokens used`
   }
 
   return { level, score, reason, elapsedMin, logCount, toolCalls, estimatedTokensK }
@@ -277,7 +270,7 @@ export function MainPanel({
               <span
                 className={styles.driftBadge}
                 data-level={drift.level}
-                title={`Session drift: ${drift.score}% — ${drift.reason}\n${drift.toolCalls} tool calls, ~${drift.estimatedTokensK}K tokens, ${drift.elapsedMin}min`}
+                title={`Context usage: ${drift.score}% — ~${drift.estimatedTokensK}K tokens\n${drift.toolCalls} tool calls, ${drift.elapsedMin}min elapsed`}
               >
                 {drift.level === 'critical' ? 'RESTART' : 'DRIFT'}
                 <span className={styles.driftScore}>{drift.score}%</span>
@@ -297,7 +290,7 @@ export function MainPanel({
                 style={{ width: `${Math.min(100, drift.score)}%` }}
               />
               <span className={styles.driftGaugeLabel}>
-                {drift.toolCalls} calls / ~{drift.estimatedTokensK}K tok / {drift.elapsedMin}m
+                ~{drift.estimatedTokensK}K / 200K tokens
               </span>
             </div>
           )}
