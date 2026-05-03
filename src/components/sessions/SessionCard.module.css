@@ -1,39 +1,39 @@
 .card {
   position: relative;
   text-align: left;
-  background: #1f1f1f;
-  border: 1px solid #2a2a2a;
-  border-radius: 8px;
-  padding: 14px 14px 10px;
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md) var(--space-md) var(--space-sm);
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-xs);
   min-height: 110px;
   transition: border-color 0.12s, background 0.12s, transform 0.06s;
   font-family: inherit;
   color: inherit;
 }
 .card:hover {
-  border-color: #3a3a3a;
-  background: #232323;
+  border-color: var(--hairline-strong);
+  background: var(--surface-2);
 }
 .card:active { transform: translateY(1px); }
 
-/* Left edge accent — different per tone */
+/* Left edge accent — different per tone. Lavender pulse only for active. */
 .card::before {
   content: '';
   position: absolute;
-  left: 0; top: 8px; bottom: 8px;
+  left: 0; top: var(--space-xs); bottom: var(--space-xs);
   width: 3px;
   border-radius: 2px;
   background: transparent;
   transition: background 0.15s;
 }
-.tone_active::before  { background: var(--accent, #6c8af0); animation: pulse 1.6s ease-in-out infinite; }
-.tone_attention::before { background: var(--warning, #d8a050); }
-.tone_done::before    { background: var(--success, #5a9a5a); }
-.tone_idle::before    { background: #3a3a3a; }
+.tone_active::before    { background: var(--primary); animation: pulse 1.6s ease-in-out infinite; }
+.tone_attention::before { background: var(--warning); }
+.tone_done::before      { background: var(--success); }
+.tone_idle::before      { background: var(--hairline); }
 
 @keyframes pulse {
   0%, 100% { opacity: 1; }
@@ -43,24 +43,25 @@
 .header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-xs);
   min-width: 0;
 }
 .name {
   flex: 1;
   font-size: 13px;
   font-weight: 500;
-  color: #e8e8e8;
+  letter-spacing: -0.05px;
+  color: var(--ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .phaseTag {
-  font-size: 10px;
+  font-size: 11px;
   padding: 2px 6px;
-  background: #2c2c2c;
-  border-radius: 3px;
-  color: #888;
+  background: var(--surface-2);
+  border-radius: var(--radius-pill);
+  color: var(--ink-subtle);
   font-weight: 400;
   flex-shrink: 0;
   max-width: 90px;
@@ -71,8 +72,8 @@
 
 .action {
   font-size: 12px;
-  color: #aaa;
-  line-height: 1.35;
+  color: var(--ink-subtle);
+  line-height: 1.4;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   line-clamp: 2;
@@ -80,9 +81,9 @@
   overflow: hidden;
   word-break: break-word;
 }
-.tone_active .action     { color: #cfe; }
-.tone_attention .action  { color: #f4d090; }
-.tone_done .action       { color: #88a888; }
+.tone_active .action     { color: var(--ink-muted); }
+.tone_attention .action  { color: var(--warning); }
+.tone_done .action       { color: var(--ink-tertiary); }
 
 .footer {
   display: flex;
@@ -92,26 +93,27 @@
 }
 .time {
   font-size: 11px;
-  color: #666;
+  color: var(--ink-tertiary);
   font-variant-numeric: tabular-nums;
 }
-.actions { display: flex; gap: 4px; }
+.actions { display: flex; gap: var(--space-xxs); }
 
 .miniBtn {
   background: transparent;
-  border: 1px solid #3a3a3a;
-  border-radius: 4px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
   width: 24px;
   height: 22px;
   font-size: 11px;
-  color: #ccc;
+  color: var(--ink-muted);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: border-color 0.12s, color 0.12s, background 0.12s;
 }
 .miniBtn:hover {
-  border-color: #5a8a5a;
-  color: #9cc97c;
-  background: #1f2a1f;
+  border-color: var(--primary-focus);
+  color: var(--primary-hover);
+  background: var(--surface-2);
 }
