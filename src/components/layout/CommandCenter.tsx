@@ -417,10 +417,14 @@ export function CommandCenter({
           onCancelCreateProject={onCancelCreateProject}
           openFilePath={openFilePath}
           onOpenFile={onOpenFile}
+          allProjectTasks={allProjectTasks}
+          projectPhases={phases}
+          onSelectTask={onSelectTask}
+          onApproveTask={onMarkCompleted}
         />
 
-        {/* Status rail: only show when connected and has projects */}
-        {sshConnected && projects.length > 0 && (
+        {/* Status rail: hidden in grid mode (no active task) — info would duplicate */}
+        {sshConnected && projects.length > 0 && activeTask && (
           !railDetached ? (
             <StatusRail
               allTasks={allProjectTasks}

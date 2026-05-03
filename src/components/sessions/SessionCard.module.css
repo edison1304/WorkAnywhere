@@ -1,0 +1,117 @@
+.card {
+  position: relative;
+  text-align: left;
+  background: #1f1f1f;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  padding: 14px 14px 10px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 110px;
+  transition: border-color 0.12s, background 0.12s, transform 0.06s;
+  font-family: inherit;
+  color: inherit;
+}
+.card:hover {
+  border-color: #3a3a3a;
+  background: #232323;
+}
+.card:active { transform: translateY(1px); }
+
+/* Left edge accent — different per tone */
+.card::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 8px; bottom: 8px;
+  width: 3px;
+  border-radius: 2px;
+  background: transparent;
+  transition: background 0.15s;
+}
+.tone_active::before  { background: var(--accent, #6c8af0); animation: pulse 1.6s ease-in-out infinite; }
+.tone_attention::before { background: var(--warning, #d8a050); }
+.tone_done::before    { background: var(--success, #5a9a5a); }
+.tone_idle::before    { background: #3a3a3a; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.name {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  color: #e8e8e8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.phaseTag {
+  font-size: 10px;
+  padding: 2px 6px;
+  background: #2c2c2c;
+  border-radius: 3px;
+  color: #888;
+  font-weight: 400;
+  flex-shrink: 0;
+  max-width: 90px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.action {
+  font-size: 12px;
+  color: #aaa;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+.tone_active .action     { color: #cfe; }
+.tone_attention .action  { color: #f4d090; }
+.tone_done .action       { color: #88a888; }
+
+.footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: auto;
+}
+.time {
+  font-size: 11px;
+  color: #666;
+  font-variant-numeric: tabular-nums;
+}
+.actions { display: flex; gap: 4px; }
+
+.miniBtn {
+  background: transparent;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  width: 24px;
+  height: 22px;
+  font-size: 11px;
+  color: #ccc;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.miniBtn:hover {
+  border-color: #5a8a5a;
+  color: #9cc97c;
+  background: #1f2a1f;
+}

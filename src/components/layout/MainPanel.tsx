@@ -4,6 +4,7 @@ import { SessionTerminal } from '../terminal/SessionTerminal'
 import { ShellTerminal } from '../terminal/ShellTerminal'
 import { FolderBrowser } from '../project/FolderBrowser'
 import { ArtifactViewer } from '../viewer/ArtifactViewer'
+import { SessionGrid } from '../sessions/SessionGrid'
 import styles from './MainPanel.module.css'
 
 // ─── Session Drift Detection ───
@@ -83,6 +84,11 @@ interface Props {
   onCancelCreateProject?: () => void
   openFilePath?: string | null
   onOpenFile?: (filePath: string) => void
+  // ─── Session grid (when no task is selected) ───
+  allProjectTasks?: Task[]
+  projectPhases?: Phase[]
+  onSelectTask?: (taskId: string) => void
+  onApproveTask?: (taskId: string) => void
 }
 
 export function MainPanel({
@@ -91,7 +97,8 @@ export function MainPanel({
   onCreateProject, onCreatePhase, onCreateTask,
   hasProjects, hasPhases, activeProjectName,
   showCreateProject, onCancelCreateProject,
-  openFilePath, onOpenFile
+  openFilePath, onOpenFile,
+  allProjectTasks, projectPhases, onSelectTask, onApproveTask,
 }: Props) {
   const [activeTab, setActiveTab] = useState<'log' | 'terminal' | 'artifacts'>('terminal')
 
@@ -136,6 +143,25 @@ export function MainPanel({
   if (showCreateProject || !activeTask) {
     // If explicitly creating project, show project form regardless of other state
     const showProjectForm = showCreateProject || (sshConnected && !hasProjects)
+
+    // Session grid: connected + has projects + has phases + has tasks + not creating
+    // → show the multi-session dashboard instead of yet-another create form.
+    const hasTasks = (allProjectTasks?.length ?? 0) > 0
+    if (
+      !showCreateProject &&
+      sshConnected && hasProjects && hasPhases && hasTasks &&
+      onSelectTask
+    ) {
+      return (
+        <SessionGrid
+          tasks={allProjectTasks!}
+          phases={projectPhases ?? []}
+          onSelectTask={onSelectTask}
+          onRunAgent={onRunAgent}
+          onApprove={onApproveTask}
+        />
+      )
+    }
 
     return (
       <div className={styles.panel}>
