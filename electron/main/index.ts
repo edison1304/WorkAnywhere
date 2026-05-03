@@ -5,6 +5,7 @@ import { is } from '@electron-toolkit/utils'
 import { AgentService } from './services/AgentService'
 import { ConnectionManager } from './services/ConnectionManager'
 import { DataStore } from './services/DataStore'
+import { compute as computeSchedule } from './services/SchedulingService'
 
 let mainWindow: BrowserWindow | null = null
 const detachedWindows = new Map<string, BrowserWindow>()
@@ -892,6 +893,21 @@ ipcMain.handle('task:reorder', async (_event, phaseId: string, orderedIds: strin
 ipcMain.handle('phase:reorder', async (_event, projectId: string, orderedIds: string[]) => {
   dataStore.phaseReorder(projectId, orderedIds)
   return { success: true }
+})
+
+ipcMain.handle('schedule:compute', async (_event, projectId: string) => {
+  try {
+    const all = dataStore.getAll()
+    const result = await computeSchedule(
+      projectId,
+      all.tasks,
+      all.phases,
+      (prompt) => runClaudeOnProject(projectId, prompt),
+    )
+    return { success: true, result }
+  } catch (err) {
+    return { success: false, error: String(err) }
+  }
 })
 
 ipcMain.handle('task:run', async (_event, taskId: string) => {

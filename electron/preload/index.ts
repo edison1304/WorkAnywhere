@@ -18,6 +18,7 @@ const api: IpcApi = {
   taskDelete: (id) => ipcRenderer.invoke('task:delete', id),
   taskReorder: (phaseId, orderedIds) => ipcRenderer.invoke('task:reorder', phaseId, orderedIds),
   phaseReorder: (projectId, orderedIds) => ipcRenderer.invoke('phase:reorder', projectId, orderedIds),
+  scheduleCompute: (projectId) => ipcRenderer.invoke('schedule:compute', projectId),
   taskRun: (taskId) => ipcRenderer.invoke('task:run', taskId),
   taskSend: (taskId, message) => ipcRenderer.invoke('task:send', taskId, message),
   taskStop: (taskId) => ipcRenderer.invoke('task:stop', taskId),

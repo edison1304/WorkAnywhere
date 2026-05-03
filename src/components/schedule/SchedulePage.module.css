@@ -1,0 +1,169 @@
+.page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg, #1a1a1a);
+  color: var(--fg, #ddd);
+}
+
+.empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  color: #888;
+}
+.emptyTitle { font-size: 18px; font-weight: 500; }
+.emptyHint { font-size: 13px; }
+
+.header {
+  padding: 28px 32px 16px;
+  border-bottom: 1px solid #2a2a2a;
+}
+.title {
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+.subtitle {
+  margin-top: 6px;
+  font-size: 13px;
+  color: #888;
+}
+.fallbackHint {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #b58a4a;
+}
+.error {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #c97070;
+}
+
+.list {
+  flex: 1;
+  overflow-y: auto;
+  list-style: none;
+  margin: 0;
+  padding: 12px 16px 32px;
+  counter-reset: schedule;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 24px 12px 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.row:hover { background: #232323; }
+
+.index {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: #666;
+  text-align: right;
+}
+
+.body { min-width: 0; }
+.name {
+  font-size: 14px;
+  color: #e8e8e8;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.phaseTag {
+  font-size: 10px;
+  padding: 2px 6px;
+  background: #2c2c2c;
+  border-radius: 3px;
+  color: #888;
+  font-weight: 400;
+}
+.summary {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #888;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toggles {
+  display: flex;
+  gap: 4px;
+}
+.toggle {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  width: 26px;
+  height: 26px;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ddd;
+  transition: border-color 0.1s, background 0.1s;
+}
+.toggle:hover {
+  border-color: #444;
+  background: #2c2c2c;
+}
+.toggleInferred {
+  opacity: 0.55;
+}
+.toggleInferred:hover {
+  opacity: 1;
+}
+
+.runBtn {
+  background: transparent;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  width: 28px;
+  height: 28px;
+  color: #ddd;
+  cursor: pointer;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.runBtn:hover {
+  border-color: #5a8a5a;
+  color: #9cc97c;
+}
+
+/* The split divider — visually thin, the philosophical heart of the page */
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 16px 14px;
+  user-select: none;
+}
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, transparent, #3a3a3a, transparent);
+}
+.dividerText {
+  font-size: 11px;
+  color: #777;
+  letter-spacing: 0.04em;
+}

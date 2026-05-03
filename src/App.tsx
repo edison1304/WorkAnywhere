@@ -18,6 +18,7 @@ export default function App() {
   const [activePhaseId, setActivePhaseId] = useState<string | null>(null)
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null)
   const [sidebarView, setSidebarView] = useState<SidebarView>('monitor')
+  const [currentPage, setCurrentPage] = useState<'workspace' | 'schedule'>('workspace')
   const [detachedPanels, setDetachedPanels] = useState<Set<string>>(new Set())
   const [showCreateProject, setShowCreateProject] = useState(false)
   const [openFilePath, setOpenFilePath] = useState<string | null>(null)
@@ -657,6 +658,15 @@ export default function App() {
     syncToServer()
   }, [syncToServer])
 
+  // Generic task update — used by Schedule page toggles (interactionLevel, weightHint)
+  const handleUpdateTask = useCallback(async (taskId: string, patch: Partial<Task>) => {
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...patch } : t))
+    if (window.api) {
+      await window.api.taskUpdate(taskId, patch)
+      syncToServer()
+    }
+  }, [syncToServer])
+
   const handlePinTask = useCallback(async (taskId: string) => {
     const task = tasks.find(t => t.id === taskId)
     const pinned = !task?.pinned
@@ -738,6 +748,9 @@ export default function App() {
         allProjectTasks={allProjectTasks}
         activeTask={activeTask}
         sidebarView={sidebarView}
+        currentPage={currentPage}
+        onChangePage={setCurrentPage}
+        onUpdateTask={handleUpdateTask}
         detachedPanels={detachedPanels}
         sshConnected={sshConnected}
         sshConnecting={sshConnecting}

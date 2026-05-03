@@ -3,7 +3,10 @@ import type { Project, Phase, Task, SessionDescriptor } from '../../../shared/ty
 import { TreeSidebar, type SidebarView } from './TreeSidebar'
 import { StatusRail } from './StatusRail'
 import { MainPanel } from './MainPanel'
+import { SchedulePage } from '../schedule/SchedulePage'
 import styles from './CommandCenter.module.css'
+
+export type PageView = 'workspace' | 'schedule'
 
 interface Props {
   projects: Project[]
@@ -15,6 +18,9 @@ interface Props {
   allProjectTasks: Task[]
   activeTask: Task | null
   sidebarView: SidebarView
+  currentPage: PageView
+  onChangePage: (page: PageView) => void
+  onUpdateTask: (taskId: string, patch: Partial<Task>) => void
   detachedPanels: Set<string>
   onSidebarViewChange: (view: SidebarView) => void
   onSelectProject: (id: string) => void
@@ -62,7 +68,7 @@ interface Props {
 export function CommandCenter({
   projects, activeProject, phases, allPhases, activePhase,
   allTasks, allProjectTasks, activeTask,
-  sidebarView, detachedPanels,
+  sidebarView, currentPage, onChangePage, onUpdateTask, detachedPanels,
   sshConnected, sshConnecting, sshError, claudeVersion, connectionStatus,
   onSidebarViewChange,
   onSelectProject, onSelectPhase, onSelectTask, onAcknowledgeTask, onPinTask, onDeleteTask, onForkTask, onMoveTask, onReorderTasks, onReorderPhases,
@@ -120,6 +126,22 @@ export function CommandCenter({
       <div className={styles.titlebar}>
         {/* Logo */}
         <span className={styles.logo}>W</span>
+
+        {/* Page switcher */}
+        <div className={styles.pageSwitcher}>
+          <button
+            className={`${styles.pageBtn} ${currentPage === 'workspace' ? styles.pageBtnActive : ''}`}
+            onClick={() => onChangePage('workspace')}
+          >
+            Workspace
+          </button>
+          <button
+            className={`${styles.pageBtn} ${currentPage === 'schedule' ? styles.pageBtnActive : ''}`}
+            onClick={() => onChangePage('schedule')}
+          >
+            Schedule
+          </button>
+        </div>
 
         {/* Session menu */}
         <div className={styles.menuWrapper}>
@@ -323,6 +345,17 @@ export function CommandCenter({
 
       {/* Main layout */}
       <div className={styles.body}>
+        {currentPage === 'schedule' ? (
+          <SchedulePage
+            project={activeProject}
+            tasks={allProjectTasks}
+            phases={allPhases.filter(p => p.projectId === activeProject?.id)}
+            onSelectTask={(taskId) => { onSelectTask(taskId); onChangePage('workspace') }}
+            onRunAgent={onRunAgent}
+            onUpdateTask={onUpdateTask}
+          />
+        ) : (
+          <>
         {/* Sidebar: only show when connected and has projects */}
         {sshConnected && projects.length > 0 && (
           <TreeSidebar
@@ -405,6 +438,8 @@ export function CommandCenter({
               </button>
             </div>
           )
+        )}
+          </>
         )}
       </div>
     </div>

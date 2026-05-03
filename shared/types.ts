@@ -98,10 +98,19 @@ export interface Task {
   summary?: TaskSummary       // Claude CLI로 생성된 요약
   acknowledgedAt?: string    // 사용자가 결과를 확인한 시각
   pinned?: boolean           // 핀 고정 — monitor에서 영구 표시
+
+  // ─── Scheduling signals (Schedule 페이지에서 사용) ───
+  // 사용자가 Schedule 페이지 토글로 오버라이드한 값. unset이면 휴리스틱으로 추정.
+  interactionLevel?: InteractionLevel  // 사용자 간섭 정도
+  weightHint?: WeightHint              // 자원/시간 무게
+
   createdAt: string
   updatedAt: string
   completedAt?: string
 }
+
+export type InteractionLevel = 'autonomous' | 'mixed' | 'interactive'
+export type WeightHint = 'light' | 'normal' | 'heavy'
 
 export type TaskStatus =
   | 'idle'        // 에이전트 미호출
@@ -259,6 +268,9 @@ export interface IpcApi {
   taskReorder(phaseId: string, orderedIds: string[]): Promise<{ success: boolean }>
   phaseReorder(projectId: string, orderedIds: string[]): Promise<{ success: boolean }>
 
+  // Schedule (CPU-style nice ordering + LLM split)
+  scheduleCompute(projectId: string): Promise<{ success: boolean; result?: ScheduleResult; error?: string }>
+
   // Session Descriptor
   descriptorExport(projectId: string): Promise<{ success: boolean; descriptor?: SessionDescriptor; error?: string }>
   descriptorImport(descriptor: SessionDescriptor): Promise<{ success: boolean; projectId?: string; error?: string }>
@@ -314,6 +326,23 @@ export interface CreateProjectInput {
   name: string
   workspacePath: string
   connection: ConnectionConfig
+}
+
+// ─── Schedule (CPU-style ordering for Schedule page) ───
+export interface ScheduledTask {
+  taskId: string
+  nice: number                          // lower = run sooner
+  interactionLevel: InteractionLevel    // resolved (override or heuristic)
+  weightHint: WeightHint                // resolved
+  reason?: string                       // short human reason from LLM, optional
+  inferred: { interaction: boolean; weight: boolean }  // true = heuristic, false = user override
+}
+
+export interface ScheduleResult {
+  ordered: ScheduledTask[]              // sorted ascending by nice
+  splitIndex: number                    // ordered[splitIndex..] are user-attention. 0 ≤ idx ≤ ordered.length
+  splitSource: 'llm' | 'fallback'       // where splitIndex came from
+  computedAt: string
 }
 
 // ─── Session Descriptor (export/import) ───
