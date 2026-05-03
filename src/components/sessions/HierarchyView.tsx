@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Task, Phase, Project, TaskStatus } from '../../../shared/types'
+import { HoverPanel } from '../insight/HoverPanel'
+import { InsightPanel } from '../insight/InsightPanel'
+import { ReasonChip } from '../insight/ReasonChip'
+import { taskInsight, phaseInsight, projectInsight } from '../insight/insights'
+import { taskStateReason, phaseReason, issueReason } from '../insight/reasons'
 import styles from './HierarchyView.module.css'
 
 interface Props {
@@ -155,42 +160,56 @@ function TaskBar({ task }: { task: Task }) {
 
 interface TaskRowProps {
   task: Task
+  phaseName?: string
   onClick: () => void
   onRunAgent?: (id: string) => void
   onApprove?: (id: string) => void
 }
 
-function TaskRow({ task, onClick, onRunAgent, onApprove }: TaskRowProps) {
+function TaskRow({ task, phaseName, onClick, onRunAgent, onApprove }: TaskRowProps) {
   const tone = taskTone(task)
   const action = liveAction(task)
   const issue = taskHasIssue(task)
   const showRun = task.status === 'idle' || task.status === 'failed'
   const showApprove = task.status === 'review'
 
+  // F2 reason chips — silent when ambiguous
+  const stateChip = taskStateReason(task)
+  const issueChip = issueReason(task)
+
+  // F1 hover panel content
+  const insight = taskInsight(task)
+
   return (
-    <div className={`${styles.row} ${styles[`rowTone_${tone}`]}`} onClick={onClick}>
-      <span className={`${styles.statusIcon} ${styles[`tone_${tone}`]}`}>
-        {task.status === 'completed' ? '✓'
-          : task.status === 'failed' ? '✗'
-          : task.status === 'running' ? '▶'
-          : task.status === 'waiting' ? '⌛'
-          : task.status === 'review' ? '👁'
-          : task.status === 'queued' ? '⋯'
-          : '○'}
-      </span>
-      <span className={styles.rowName} title={task.name}>{task.name}</span>
-      {issue && <span className={styles.issueDot} title="Has issues">⚠</span>}
-      <TaskBar task={task} />
-      {action && <span className={styles.rowAction} title={action}>▸ {action}</span>}
-      <div className={styles.rowActions} onClick={e => e.stopPropagation()}>
-        {showRun && onRunAgent && (
-          <button className={styles.miniBtn} onClick={() => onRunAgent(task.id)} title="Run">▶</button>
-        )}
-        {showApprove && onApprove && (
-          <button className={styles.miniBtn} onClick={() => onApprove(task.id)} title="Approve">✓</button>
-        )}
+    <HoverPanel
+      panel={<InsightPanel title={task.name} subtitle={phaseName} rows={insight} />}
+    >
+      <div className={`${styles.row} ${styles[`rowTone_${tone}`]}`} onClick={onClick}>
+        <span className={`${styles.statusIcon} ${styles[`tone_${tone}`]}`}>
+          {task.status === 'completed' ? '✓'
+            : task.status === 'failed' ? '✗'
+            : task.status === 'running' ? '▶'
+            : task.status === 'waiting' ? '⌛'
+            : task.status === 'review' ? '👁'
+            : task.status === 'queued' ? '⋯'
+            : '○'}
+        </span>
+        <span className={styles.rowName} title={task.name}>{task.name}</span>
+        {issue
+          ? <ReasonChip reason={issueChip ?? { text: 'issue', tone: 'fail' }} small />
+          : <ReasonChip reason={stateChip} small />}
+        <TaskBar task={task} />
+        {action && <span className={styles.rowAction} title={action}>▸ {action}</span>}
+        <div className={styles.rowActions} onClick={e => e.stopPropagation()}>
+          {showRun && onRunAgent && (
+            <button className={styles.miniBtn} onClick={() => onRunAgent(task.id)} title="Run">▶</button>
+          )}
+          {showApprove && onApprove && (
+            <button className={styles.miniBtn} onClick={() => onApprove(task.id)} title="Approve">✓</button>
+          )}
+        </div>
       </div>
-    </div>
+    </HoverPanel>
   )
 }
 
@@ -211,21 +230,27 @@ function PhaseGroupCard({
   const tone = groupTone(counts)
   const pct = counts.total > 0 ? Math.round((counts.done / counts.total) * 100) : 0
 
+  const reason = phaseReason(phase, tasks)
+  const insight = phaseInsight(phase, tasks)
+
   return (
     <div className={`${styles.phaseCard} ${styles[`tone_${tone}`]}`}>
-      <button className={styles.phaseHeader} onClick={() => setCollapsed(c => !c)}>
-        <span className={styles.collapseChevron}>{collapsed ? '▸' : '▾'}</span>
-        <span className={styles.phaseName}>{phase.name}</span>
-        <span className={styles.phaseRatio}>{counts.done}/{counts.total}</span>
-        <span className={styles.phasePct}>{pct}%</span>
-        <CountChips counts={counts} />
-      </button>
+      <HoverPanel panel={<InsightPanel title={phase.name} subtitle="phase" rows={insight} />}>
+        <button className={styles.phaseHeader} onClick={() => setCollapsed(c => !c)}>
+          <span className={styles.collapseChevron}>{collapsed ? '▸' : '▾'}</span>
+          <span className={styles.phaseName}>{phase.name}</span>
+          <ReasonChip reason={reason} small />
+          <span className={styles.phaseRatio}>{counts.done}/{counts.total}</span>
+          <span className={styles.phasePct}>{pct}%</span>
+          <CountChips counts={counts} />
+        </button>
+      </HoverPanel>
       <StackedBar counts={counts} />
       {!collapsed && (
         <div className={styles.taskList}>
           {sorted.map(t => (
             <TaskRow
-              key={t.id} task={t}
+              key={t.id} task={t} phaseName={phase.name}
               onClick={() => onSelectTask(t.id)}
               onRunAgent={onRunAgent}
               onApprove={onApprove}
@@ -262,15 +287,19 @@ function ProjectGroupCard({
   const tone = groupTone(counts)
   const pct = counts.total > 0 ? Math.round((counts.done / counts.total) * 100) : 0
 
+  const insight = projectInsight(project, projectPhases, projectTasks)
+
   return (
     <div className={`${styles.projectCard} ${styles[`tone_${tone}`]}`}>
-      <button className={styles.projectHeader} onClick={() => setCollapsed(c => !c)}>
-        <span className={styles.collapseChevron}>{collapsed ? '▸' : '▾'}</span>
-        <span className={styles.projectName}>{project.name}</span>
-        <span className={styles.projectRatio}>{counts.done}/{counts.total}</span>
-        <span className={styles.projectPct}>{pct}%</span>
-        <CountChips counts={counts} />
-      </button>
+      <HoverPanel panel={<InsightPanel title={project.name} subtitle="project" rows={insight} />}>
+        <button className={styles.projectHeader} onClick={() => setCollapsed(c => !c)}>
+          <span className={styles.collapseChevron}>{collapsed ? '▸' : '▾'}</span>
+          <span className={styles.projectName}>{project.name}</span>
+          <span className={styles.projectRatio}>{counts.done}/{counts.total}</span>
+          <span className={styles.projectPct}>{pct}%</span>
+          <CountChips counts={counts} />
+        </button>
+      </HoverPanel>
       <StackedBar counts={counts} />
       {!collapsed && (
         <div className={styles.phaseList}>

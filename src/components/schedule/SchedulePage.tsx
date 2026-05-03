@@ -8,6 +8,11 @@ import type {
   WeightHint,
 } from '../../../shared/types'
 import { StatusDot } from '../job/StatusDot'
+import { HoverPanel } from '../insight/HoverPanel'
+import { InsightPanel } from '../insight/InsightPanel'
+import { ReasonChip } from '../insight/ReasonChip'
+import { taskInsight } from '../insight/insights'
+import { scheduleReason } from '../insight/reasons'
 import styles from './SchedulePage.module.css'
 
 interface Props {
@@ -131,6 +136,7 @@ export function SchedulePage({
           const phase = phaseMap.get(task.phaseId)
           const isAfterSplit = i === splitIndex
           const summaryLine = task.summary?.progress || task.purpose || task.prompt.slice(0, 80)
+          const reason = scheduleReason(task, s.nice, s.interactionLevel, s.weightHint)
           return (
             <li key={s.taskId}>
               {isAfterSplit && (
@@ -138,16 +144,20 @@ export function SchedulePage({
                   <span className={styles.dividerText}>여기부터는 직접</span>
                 </div>
               )}
-              <div className={styles.row} onClick={() => onSelectTask(s.taskId)}>
-                <span className={styles.index}>{i + 1}</span>
-                <StatusDot status={task.status} />
-                <div className={styles.body}>
-                  <div className={styles.name}>
-                    {task.name}
-                    {phase && <span className={styles.phaseTag}>{phase.name}</span>}
+              <HoverPanel
+                panel={<InsightPanel title={task.name} subtitle={phase?.name} rows={taskInsight(task)} />}
+              >
+                <div className={styles.row} onClick={() => onSelectTask(s.taskId)}>
+                  <span className={styles.index}>{i + 1}</span>
+                  <StatusDot status={task.status} />
+                  <div className={styles.body}>
+                    <div className={styles.name}>
+                      {task.name}
+                      {phase && <span className={styles.phaseTag}>{phase.name}</span>}
+                      <ReasonChip reason={reason} small />
+                    </div>
+                    <div className={styles.summary}>{summaryLine}</div>
                   </div>
-                  <div className={styles.summary}>{summaryLine}</div>
-                </div>
                 <div className={styles.toggles} onClick={e => e.stopPropagation()}>
                   <button
                     className={`${styles.toggle} ${s.inferred.weight ? styles.toggleInferred : ''}`}
@@ -164,16 +174,17 @@ export function SchedulePage({
                     {INTERACTION_ICON[s.interactionLevel]}
                   </button>
                 </div>
-                {(task.status === 'idle' || task.status === 'failed') && (
-                  <button
-                    className={styles.runBtn}
-                    onClick={e => { e.stopPropagation(); onRunAgent(task.id) }}
-                    title="시작"
-                  >
-                    ▶
-                  </button>
-                )}
-              </div>
+                  {(task.status === 'idle' || task.status === 'failed') && (
+                    <button
+                      className={styles.runBtn}
+                      onClick={e => { e.stopPropagation(); onRunAgent(task.id) }}
+                      title="시작"
+                    >
+                      ▶
+                    </button>
+                  )}
+                </div>
+              </HoverPanel>
             </li>
           )
         })}

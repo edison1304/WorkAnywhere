@@ -1,0 +1,24 @@
+.chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+  color: var(--ink-subtle);
+  white-space: nowrap;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+.small {
+  font-size: 9px;
+  padding: 0 5px;
+}
+
+.tone_active    { color: var(--primary); }
+.tone_attention { color: var(--warning); }
+.tone_fail      { color: var(--error); background: color-mix(in srgb, var(--error) 12%, var(--surface-3)); }
+.tone_done      { color: var(--success); }
+.tone_neutral   { color: var(--ink-subtle); }

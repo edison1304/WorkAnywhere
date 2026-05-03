@@ -143,7 +143,7 @@
 
 .phaseHeader {
   display: grid;
-  grid-template-columns: 14px 1fr auto auto auto;
+  grid-template-columns: 14px 1fr auto auto auto auto;
   align-items: center;
   gap: var(--space-sm);
   width: 100%;
