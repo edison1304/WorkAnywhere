@@ -419,6 +419,8 @@ export function CommandCenter({
           onOpenFile={onOpenFile}
           allProjectTasks={allProjectTasks}
           projectPhases={phases}
+          allProjects={projects}
+          activeProjectId={activeProject?.id ?? null}
           onSelectTask={onSelectTask}
           onApproveTask={onMarkCompleted}
         />
