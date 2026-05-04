@@ -984,35 +984,37 @@ ipcMain.handle('task:run', async (_event, taskId: string) => {
   // Ensure plan files exist + build layered prefix from PLAN/CHECKLIST/NOTES
   // for project → phase → task. Best-effort: failures fall back to bare
   // prompt. Hard time-budget so a slow filesystem never blocks agent start.
+  // Set WORKANYWHERE_NO_PREFIX=1 in env to bypass entirely (debugging).
   let prefixedPrompt = task.prompt
   const phase = dataStore.phaseList(project.id).find(ph => ph.id === task.phaseId)
-  if (phase) {
+  const prefixDisabled = process.env.WORKANYWHERE_NO_PREFIX === '1'
+  if (phase && !prefixDisabled) {
     // Fire-and-forget the file seed — never await it.
     workflow.ensureTask(project, phase, task).catch(() => {})
 
-    // Build prefix with a 4-second budget. If reads are slow on first run
-    // (mkdir + 7 cats over SSH), we'd rather start the agent without the
-    // prefix than make the user stare at a stuck spinner.
     try {
       const PREFIX_TIMEOUT_MS = 4000
       const prefix = await Promise.race<string | null>([
         workflow.buildPrefix(project, phase, task),
         new Promise(resolve => setTimeout(() => resolve(null), PREFIX_TIMEOUT_MS)),
       ])
-      // Cap total prefix size — guards SSH command-line + token budget.
       const MAX_PREFIX = 6000
       if (prefix && prefix.trim()) {
         const trimmed = prefix.length > MAX_PREFIX
           ? prefix.slice(0, MAX_PREFIX) + '\n... (prefix truncated)\n'
           : prefix
-        prefixedPrompt = `${trimmed}\n---\n\n${task.prompt}`
-        console.log(`[task:run] prefix injected, ${prefix.length} chars (capped at ${MAX_PREFIX})`)
+        // Use plain newlines, not markdown ---, to avoid any interpretation
+        // ambiguity in the model's prompt window.
+        prefixedPrompt = `${trimmed}\n\n${task.prompt}`
+        console.log(`[task:run] prefix injected, ${prefix.length} chars`)
       } else if (!prefix) {
-        console.log(`[task:run] prefix build timed out at ${PREFIX_TIMEOUT_MS}ms — running with bare prompt`)
+        console.log(`[task:run] prefix build timed out — running with bare prompt`)
       }
     } catch (e) {
       console.log(`[task:run] prefix build failed: ${e} — running with bare prompt`)
     }
+  } else if (prefixDisabled) {
+    console.log(`[task:run] WORKANYWHERE_NO_PREFIX=1 — running with bare prompt`)
   }
 
   try {

@@ -28,88 +28,28 @@ export class WorkflowFileService {
 
   // ─── Skeletons ────────────────────────────────────────
 
-  private projectPlanSkeleton(p: Project): string {
-    return `# Project Plan — ${p.name}
+  // Skeletons are intentionally empty beyond a header — they exist only as
+  // placeholders the agent / user can fill. We do NOT include placeholder
+  // prose ("(왜 이 프로젝트인가...)") because that text leaks into the
+  // prefix and the model treats it as the actual intent, derailing the
+  // first turn. Authoring guidance lives in CLAUDE.md instead.
+  private projectPlanSkeleton(p: Project): string  { return `# Project Plan — ${p.name}\n` }
+  private projectChecklistSkeleton(p: Project): string { return `# Checklist — ${p.name}\n` }
+  private projectNotesSkeleton(p: Project): string { return `# Notes — ${p.name}\n` }
 
-## Vision
-(왜 이 프로젝트인가, 한 단락)
-
-## Milestones
-- [ ] (큰 단위 5-10개)
-
-## Notes
-(프로젝트 레벨 결정·맥락)
-`
-  }
-
-  private projectChecklistSkeleton(p: Project): string {
-    return `# Checklist — ${p.name}
-
-(이 프로젝트가 끝나려면 무엇이 다 되어야 하는지. phase 단위로 적습니다.)
-
-- [ ] phase 1
-- [ ] phase 2
-`
-  }
-
-  private projectNotesSkeleton(p: Project): string {
-    return `# Notes — ${p.name}
-
-(프로젝트 진행 중 결정·교훈을 누적. \`↳ <decision> — <reason>\` 형식 권장.)
-`
-  }
-
-  private phasePlanSkeleton(ph: Phase): string {
-    return `# Phase Plan — ${ph.name}
-
-## Goal
-(이 phase가 끝나면 무엇이 변하는가, 한 단락)
-
-## Approach
-(어떻게 풀 것인가, 짧게)
-`
-  }
-
-  private phaseChecklistSkeleton(ph: Phase): string {
-    return `# Checklist — ${ph.name}
-
-- [ ] task 1
-- [ ] task 2
-`
-  }
-
-  private phaseNotesSkeleton(ph: Phase): string {
-    return `# Notes — ${ph.name}
-`
-  }
+  private phasePlanSkeleton(ph: Phase): string  { return `# Phase Plan — ${ph.name}\n` }
+  private phaseChecklistSkeleton(ph: Phase): string { return `# Checklist — ${ph.name}\n` }
+  private phaseNotesSkeleton(ph: Phase): string { return `# Notes — ${ph.name}\n` }
 
   private taskPlanSkeleton(t: Task): string {
-    return `# Task Plan — ${t.name}
-
-## Design
-${t.purpose ? `**Purpose:** ${t.purpose}\n\n` : ''}(무엇을, 왜, 어떻게 — 한 단락)
-
-## Approach
-(단계 분해의 근거. 대안과 trade-off가 있다면 짧게.)
-`
+    // Task plan keeps the user-supplied purpose if present (real intent),
+    // nothing else.
+    return t.purpose
+      ? `# Task Plan — ${t.name}\n\n**Purpose:** ${t.purpose}\n`
+      : `# Task Plan — ${t.name}\n`
   }
-
-  private taskChecklistSkeleton(_t: Task): string {
-    return `# Checklist
-
-- [ ] (실행 첫 단계)
-- [ ] (단계마다 완료 시 [x] 처리)
-`
-  }
-
-  private taskNotesSkeleton(_t: Task): string {
-    return `# Notes
-
-(judgment log — \`↳ <decision> — <reason>\`)
-
-(retrospective — 완료 후 한 단락)
-`
-  }
+  private taskChecklistSkeleton(_t: Task): string { return `# Checklist\n` }
+  private taskNotesSkeleton(_t: Task): string { return `# Notes\n` }
 
   // ─── Connection helpers ──────────────────────────────
 
@@ -232,42 +172,53 @@ ${t.purpose ? `**Purpose:** ${t.purpose}\n\n` : ''}(무엇을, 왜, 어떻게 �
     ])
 
     const lines: string[] = []
+
+    // Helper: a file is "meaningful" only when it has content beyond its
+    // single header line. Skeletons (header-only) get skipped — including
+    // them as placeholder context confuses the model on the first turn.
+    const meaningful = (text: string): boolean => {
+      const body = text.split('\n').slice(1).join('\n').trim()
+      return body.length > 0
+    }
+
+    const projHasPlan  = meaningful(projPlan)
+    const projHasCheck = meaningful(projCheck)
+    const phHasPlan    = meaningful(phPlan)
+    const phHasCheck   = meaningful(phCheck)
+    const tHasPlan     = meaningful(tPlan)
+    const tHasCheck    = meaningful(tCheck)
+    const tHasNotes    = meaningful(tNotes)
+
+    const anyContent = projHasPlan || projHasCheck || phHasPlan || phHasCheck
+                      || tHasPlan || tHasCheck || tHasNotes
+    if (!anyContent) return ''  // nothing real to inject — bare prompt
+
     lines.push(`# Workflow context (orchestrator-injected — read once, reference as needed)`)
     lines.push('')
 
-    // Project — short summary only
-    if (projPlan.trim() || projCheck.trim()) {
+    if (projHasPlan || projHasCheck) {
       lines.push(`## Project: ${project.name}`)
-      if (projPlan.trim()) lines.push(this.headSummary(projPlan, 12))
-      if (projCheck.trim()) lines.push(`### Checklist progress`, this.checkProgress(projCheck))
+      if (projHasPlan) lines.push(this.headSummary(projPlan, 12))
+      if (projHasCheck) lines.push(`### Checklist progress`, this.checkProgress(projCheck))
       lines.push('')
     }
 
-    // Phase — short summary
-    if (phPlan.trim() || phCheck.trim()) {
+    if (phHasPlan || phHasCheck) {
       lines.push(`## Phase: ${phase.name}`)
-      if (phPlan.trim()) lines.push(this.headSummary(phPlan, 16))
-      if (phCheck.trim()) lines.push(`### Checklist progress`, this.checkProgress(phCheck))
+      if (phHasPlan) lines.push(this.headSummary(phPlan, 16))
+      if (phHasCheck) lines.push(`### Checklist progress`, this.checkProgress(phCheck))
       lines.push('')
     }
 
-    // Task — full
-    lines.push(`## Task: ${task.name}`)
-    lines.push(`Files: ${planFile(tDir)} · ${checklistFile(tDir)} · ${notesFile(tDir)}`)
-    if (tPlan.trim()) {
-      lines.push(`### Plan`)
-      lines.push(this.truncate(tPlan, 2400))
-    }
-    if (tCheck.trim()) {
-      lines.push(`### Checklist`)
-      lines.push(this.truncate(tCheck, 1600))
-    }
-    if (tNotes.trim()) {
-      lines.push(`### Recent notes`)
-      lines.push(this.tail(tNotes, 1600))
+    if (tHasPlan || tHasCheck || tHasNotes) {
+      lines.push(`## Task: ${task.name}`)
+      lines.push(`Files: ${planFile(tDir)} · ${checklistFile(tDir)} · ${notesFile(tDir)}`)
+      if (tHasPlan)  { lines.push(`### Plan`);          lines.push(this.truncate(tPlan, 2400)) }
+      if (tHasCheck) { lines.push(`### Checklist`);     lines.push(this.truncate(tCheck, 1600)) }
+      if (tHasNotes) { lines.push(`### Recent notes`);  lines.push(this.tail(tNotes, 1600)) }
+      lines.push('')
     }
 
-    lines.push('')
     lines.push(`Update CHECKLIST.md (mark items \`- [x]\`) and append decisions to NOTES.md as you work. Keep design / approach in PLAN.md current.`)
     lines.push('')
 
