@@ -26,17 +26,23 @@ function dayKey(iso: string): string {
 }
 
 export function TimelineView({ project, phase, task, phases, tasks, onSelectTask, onSelectPhase }: Props) {
-  const { events, scopeLabel, scopeName } = useMemo(() => {
+  const { events, scopeLabel, scopeName, headline, compactedFocus } = useMemo(() => {
     if (task) {
-      return { events: buildTaskTimeline(task), scopeLabel: 'Task', scopeName: task.name }
+      return {
+        events: buildTaskTimeline(task),
+        scopeLabel: 'Task',
+        scopeName: task.name,
+        headline: task.compacted?.headline,
+        compactedFocus: task.compacted?.focusInstructions,
+      }
     }
     if (phase) {
-      return { events: buildPhaseTimeline(phase, tasks), scopeLabel: 'Phase', scopeName: phase.name }
+      return { events: buildPhaseTimeline(phase, tasks), scopeLabel: 'Phase', scopeName: phase.name, headline: undefined, compactedFocus: undefined }
     }
     if (project) {
-      return { events: buildProjectTimeline(project, phases, tasks), scopeLabel: 'Project', scopeName: project.name }
+      return { events: buildProjectTimeline(project, phases, tasks), scopeLabel: 'Project', scopeName: project.name, headline: undefined, compactedFocus: undefined }
     }
-    return { events: [] as TimelineEvent[], scopeLabel: '', scopeName: '' }
+    return { events: [] as TimelineEvent[], scopeLabel: '', scopeName: '', headline: undefined, compactedFocus: undefined }
   }, [task, phase, project, phases, tasks])
 
   if (!project) {
@@ -72,6 +78,14 @@ export function TimelineView({ project, phase, task, phases, tasks, onSelectTask
           <span className={styles.scopeName}>{scopeName}</span>
           <span className={styles.scopeMeta}>· {events.length}개 사건</span>
         </div>
+        {headline && (
+          <div className={styles.headlineBlock}>
+            <div className={styles.headlineText}>{headline}</div>
+            {compactedFocus && (
+              <div className={styles.headlineFocus}>포커스: {compactedFocus}</div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className={styles.bodyWrap}>
@@ -133,7 +147,40 @@ export function TimelineView({ project, phase, task, phases, tasks, onSelectTask
                         )}
                       </div>
                       <div className={styles.cardTitle}>{ev.title}</div>
-                      {ev.body && <div className={styles.cardBody}>{ev.body}</div>}
+                      {ev.rich ? (
+                        <div className={styles.richBody}>
+                          {ev.rich.detail && (
+                            <div className={styles.richLine}>{ev.rich.detail}</div>
+                          )}
+                          {ev.rich.reason && (
+                            <div className={styles.richLine}>
+                              <span className={styles.richLabel}>왜</span>
+                              <span>{ev.rich.reason}</span>
+                            </div>
+                          )}
+                          {ev.rich.cause && (
+                            <div className={styles.richLine}>
+                              <span className={styles.richLabel}>원인</span>
+                              <span>{ev.rich.cause}</span>
+                            </div>
+                          )}
+                          {ev.rich.fix && (
+                            <div className={styles.richLine}>
+                              <span className={styles.richLabel}>해결</span>
+                              <span className={ev.rich.fix === '미해결' ? styles.richUnresolved : ''}>{ev.rich.fix}</span>
+                            </div>
+                          )}
+                          {ev.rich.refs?.files && ev.rich.refs.files.length > 0 && (
+                            <div className={styles.richRefs}>
+                              {ev.rich.refs.files.map((f, i) => (
+                                <code key={i} className={styles.refChip}>{f}</code>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        ev.body && <div className={styles.cardBody}>{ev.body}</div>
+                      )}
                     </div>
                   </div>
                 )}

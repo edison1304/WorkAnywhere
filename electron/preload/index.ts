@@ -158,6 +158,9 @@ const api: IpcApi = {
   phaseSummarize: (phaseId) => ipcRenderer.invoke('phase:summarize', phaseId),
   projectSummarize: (projectId) => ipcRenderer.invoke('project:summarize', projectId),
 
+  // Compact (Timeline용)
+  taskCompact: (taskId, focusInstructions) => ipcRenderer.invoke('task:compact', taskId, focusInstructions),
+
   // Session Descriptor
   descriptorExport: (projectId) => ipcRenderer.invoke('descriptor:export', projectId),
   descriptorImport: (descriptor) => ipcRenderer.invoke('descriptor:import', descriptor),

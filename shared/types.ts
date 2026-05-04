@@ -111,6 +111,9 @@ export interface Task {
   // ─── Plan (auto-extracted from agent output, optional) ───
   plan?: Plan
 
+  /** Compacted session — produced when user marks task complete. Drives Timeline. */
+  compacted?: CompactedSession
+
   createdAt: string
   updatedAt: string
   completedAt?: string
@@ -173,6 +176,43 @@ export interface LogEntry {
     tool?: string
     duration?: number
   }
+}
+
+// ─── Compacted Session (timeline-friendly compaction of task.logs) ───
+// Produced by the LLM when user completes a task. Drives the Timeline view:
+// each bucket maps to one of the 3 columns (완료 / 우회 / 에러).
+export interface CompactedSession {
+  compactedAt: string
+  focusInstructions?: string   // user-provided focus, if any
+  headline: string             // one-line "what this task was about"
+  completed: CompletedItem[]   // 🟢 무엇이 완료되었나
+  detours:   DetourItem[]      // 🟡 계획과 달라진 지점 + 이유
+  errors:    ErrorItem[]       // 🔴 무슨 문제 + 왜 + 어떻게 해결
+}
+
+export interface CompletedItem {
+  id: string
+  timestamp?: string
+  title: string
+  detail?: string
+  refs?: { files?: string[]; commits?: string[] }
+}
+
+export interface DetourItem {
+  id: string
+  timestamp?: string
+  title: string
+  reason: string
+  refs?: { files?: string[] }
+}
+
+export interface ErrorItem {
+  id: string
+  timestamp?: string
+  title: string
+  cause: string
+  fix: string                  // "미해결" if unresolved
+  refs?: { files?: string[]; commits?: string[] }
 }
 
 // ─── Task Summary (Claude API 기반 요약) ───
@@ -309,6 +349,9 @@ export interface IpcApi {
   taskSummarize(taskId: string): Promise<{ success: boolean; summary?: TaskSummary; error?: string }>
   phaseSummarize(phaseId: string): Promise<{ success: boolean; summary?: PhaseSummary; error?: string }>
   projectSummarize(projectId: string): Promise<{ success: boolean; summary?: ProjectSummary; error?: string }>
+
+  // Compact (Timeline용 — 완료 시점에 task.logs를 3-bucket으로 정리)
+  taskCompact(taskId: string, focusInstructions?: string): Promise<{ success: boolean; compacted?: CompactedSession; error?: string }>
 
   // Reorder
   taskReorder(phaseId: string, orderedIds: string[]): Promise<{ success: boolean }>

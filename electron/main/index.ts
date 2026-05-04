@@ -622,6 +622,130 @@ Respond with ONLY a JSON object (no markdown, no backticks):
   }
 })
 
+// ─── Task Compact (Timeline용 — 3-bucket 정리) ───
+ipcMain.handle('task:compact', async (_event, taskId: string, focusInstructions?: string) => {
+  const task = dataStore.taskGet(taskId)
+  if (!task) return { success: false, error: 'Task not found' }
+
+  try {
+    // Logs → 압축 입력. 마지막 ~300개, 길이 제한.
+    const logText = task.logs
+      .slice(-300)
+      .map(l => `[${l.timestamp}] [${l.type}] ${l.content}`)
+      .join('\n')
+      .slice(0, 12000)
+
+    const artifactText = task.artifacts.length > 0
+      ? '\nArtifacts touched: ' + task.artifacts.map(a => `${a.action} ${a.filePath}`).join(', ')
+      : ''
+
+    const focusBlock = focusInstructions && focusInstructions.trim()
+      ? `\n\nUser focus instructions (prioritize these when extracting):\n${focusInstructions.trim()}\n`
+      : ''
+
+    const prompt = `You are compacting an agent's working session into a Timeline-ready 3-bucket structure.
+
+Task name: ${task.name}
+Task purpose: ${task.purpose || '(none)'}
+Original prompt: ${task.prompt}
+
+Logs (chronological):
+${logText}
+${artifactText}
+${focusBlock}
+
+Produce ONLY a JSON object (no markdown, no backticks). Keep entries concise (one or two short sentences each). Use Korean if the logs are Korean, otherwise match the log language.
+
+Schema:
+{
+  "headline": "one line summarizing what this task session was about",
+  "completed": [
+    {
+      "title": "short verb-led summary of a completed thing",
+      "detail": "optional one-liner: how/what specifically",
+      "timestamp": "ISO timestamp from logs if identifiable, else omit",
+      "refs": { "files": ["path/if/known"], "commits": ["hash if known"] }
+    }
+  ],
+  "detours": [
+    {
+      "title": "the deviation in one line",
+      "reason": "WHY the agent/user took this detour — required",
+      "timestamp": "ISO if identifiable, else omit",
+      "refs": { "files": ["path/if/known"] }
+    }
+  ],
+  "errors": [
+    {
+      "title": "the problem in one line",
+      "cause": "WHY this happened (root cause) — required",
+      "fix": "HOW it was fixed; if unresolved, write 미해결 — required",
+      "timestamp": "ISO if identifiable, else omit",
+      "refs": { "files": ["path/if/known"], "commits": ["hash if known"] }
+    }
+  ]
+}
+
+Rules:
+- Each bucket can be empty array if nothing applies.
+- Don't invent facts; if logs don't say WHY for a detour or error, write a brief honest note like "이유 명시되지 않음".
+- Don't restate lifecycle (created/started/ended). Focus on substance.
+- Prefer one strong arc over many tiny ones — group related steps.`
+
+    const rawOutput = await runClaudeOnProject(task.projectId, prompt)
+    const jsonMatch = rawOutput.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) return { success: false, error: 'Compact failed — no JSON in output' }
+
+    let parsed: any
+    try { parsed = JSON.parse(jsonMatch[0]) }
+    catch { return { success: false, error: 'Compact failed — invalid JSON' } }
+
+    const now = new Date().toISOString()
+    const mkId = (prefix: string, i: number) => `${task.id}-${prefix}-${Date.now()}-${i}`
+
+    const compacted: import('../../../shared/types').CompactedSession = {
+      compactedAt: now,
+      focusInstructions: focusInstructions?.trim() || undefined,
+      headline: String(parsed.headline || ''),
+      completed: Array.isArray(parsed.completed) ? parsed.completed.map((it: any, i: number) => ({
+        id: mkId('done', i),
+        timestamp: it.timestamp ? String(it.timestamp) : undefined,
+        title: String(it.title || ''),
+        detail: it.detail ? String(it.detail) : undefined,
+        refs: it.refs && typeof it.refs === 'object' ? {
+          files: Array.isArray(it.refs.files) ? it.refs.files.map(String) : undefined,
+          commits: Array.isArray(it.refs.commits) ? it.refs.commits.map(String) : undefined,
+        } : undefined,
+      })) : [],
+      detours: Array.isArray(parsed.detours) ? parsed.detours.map((it: any, i: number) => ({
+        id: mkId('det', i),
+        timestamp: it.timestamp ? String(it.timestamp) : undefined,
+        title: String(it.title || ''),
+        reason: String(it.reason || '이유 명시되지 않음'),
+        refs: it.refs && typeof it.refs === 'object' ? {
+          files: Array.isArray(it.refs.files) ? it.refs.files.map(String) : undefined,
+        } : undefined,
+      })) : [],
+      errors: Array.isArray(parsed.errors) ? parsed.errors.map((it: any, i: number) => ({
+        id: mkId('err', i),
+        timestamp: it.timestamp ? String(it.timestamp) : undefined,
+        title: String(it.title || ''),
+        cause: String(it.cause || '원인 명시되지 않음'),
+        fix: String(it.fix || '미해결'),
+        refs: it.refs && typeof it.refs === 'object' ? {
+          files: Array.isArray(it.refs.files) ? it.refs.files.map(String) : undefined,
+          commits: Array.isArray(it.refs.commits) ? it.refs.commits.map(String) : undefined,
+        } : undefined,
+      })) : [],
+    }
+
+    dataStore.taskUpdate(taskId, { compacted })
+    return { success: true, compacted }
+  } catch (err) {
+    return { success: false, error: String(err) }
+  }
+})
+
 // ─── Phase Summary (compose from task summaries → cheap) ───
 ipcMain.handle('phase:summarize', async (_event, phaseId: string) => {
   let phase: import('../../../shared/types').Phase | null = null

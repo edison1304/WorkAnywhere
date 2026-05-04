@@ -58,6 +58,26 @@
 .scopeName { color: var(--ink); font-weight: 500; }
 .scopeMeta { color: var(--ink-tertiary); font-size: 12px; }
 
+/* Compacted task headline */
+.headlineBlock {
+  margin-top: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+}
+.headlineText {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+.headlineFocus {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--ink-tertiary);
+  letter-spacing: 0.02em;
+}
+
 /* ─── Body wrap holds sticky headers + scrolling rows ─── */
 .bodyWrap {
   flex: 1;
@@ -212,6 +232,57 @@
   line-height: 1.55;
   color: var(--ink-muted);
   word-break: break-word;
+}
+
+/* Rich body — compacted card content (cause/fix/reason/refs) */
+.richBody {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.richLine {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink-muted);
+  word-break: break-word;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.richLabel {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-tertiary);
+  padding: 2px 6px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
+  margin-top: 1px;
+}
+.tone_error .richLabel { color: var(--error); border-color: rgba(239, 68, 68, 0.3); }
+.tone_detour .richLabel { color: var(--warning); border-color: rgba(234, 179, 8, 0.3); }
+.richUnresolved {
+  color: var(--error);
+  font-style: italic;
+}
+.richRefs {
+  margin-top: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.refChip {
+  font-size: 10.5px;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  padding: 2px 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm, 4px);
+  color: var(--ink-subtle);
+  word-break: break-all;
 }
 
 /* ─── Info = full-width milestone band ─── */

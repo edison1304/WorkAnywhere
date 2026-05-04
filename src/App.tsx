@@ -3,8 +3,9 @@ import { CommandCenter } from './components/layout/CommandCenter'
 import { DetachedMonitor } from './components/layout/DetachedMonitor'
 import { DetachedStatusRail } from './components/layout/DetachedStatusRail'
 import { SSHConnectDialog } from './components/project/SSHConnectDialog'
+import { CompactDialog } from './components/timeline/CompactDialog'
 import { ConnectionStatus, type ConnState } from './components/connection/ConnectionStatus'
-import type { Project, Phase, Task, ConnectionConfig, LogEntry, Artifact, TaskSummary } from '../shared/types'
+import type { Project, Phase, Task, ConnectionConfig, LogEntry, Artifact, TaskSummary, CompactedSession } from '../shared/types'
 import type { SidebarView } from './components/layout/TreeSidebar'
 
 export default function App() {
@@ -284,12 +285,17 @@ export default function App() {
     syncToServer()
   }, [activePhaseId, syncToServer])
 
-  const handleMarkCompleted = useCallback(async (taskId: string) => {
+  // Compact-aware completion. If `compacted` provided, attach it to the task.
+  const completeTaskInternal = useCallback((taskId: string, compacted?: CompactedSession) => {
     const task = tasks.find(t => t.id === taskId)
     setTasks(prev => prev.map(t =>
-      t.id === taskId ? { ...t, status: 'completed' as const } : t
+      t.id === taskId
+        ? { ...t, status: 'completed' as const, ...(compacted ? { compacted } : {}) }
+        : t
     ))
-    window.api?.taskUpdate(taskId, { status: 'completed' })
+    const patch: Partial<Task> = { status: 'completed' }
+    if (compacted) patch.compacted = compacted
+    window.api?.taskUpdate(taskId, patch)
     syncToServer()
 
     // Auto-generate phase summary when last task in phase is completed
@@ -310,6 +316,30 @@ export default function App() {
       }
     }
   }, [tasks, syncToServer])
+
+  // Approve button → open CompactDialog (asks for focus, then runs compact + complete)
+  const [compactDialogTaskId, setCompactDialogTaskId] = useState<string | null>(null)
+  const compactDialogTask = compactDialogTaskId ? tasks.find(t => t.id === compactDialogTaskId) || null : null
+
+  const handleMarkCompleted = useCallback(async (taskId: string) => {
+    setCompactDialogTaskId(taskId)
+  }, [])
+
+  const handleCompactAndComplete = useCallback(async (focusInstructions: string) => {
+    if (!compactDialogTaskId || !window.api) return
+    const result = await window.api.taskCompact(compactDialogTaskId, focusInstructions || undefined)
+    if (!result.success) {
+      throw new Error(result.error || 'Compact failed')
+    }
+    completeTaskInternal(compactDialogTaskId, result.compacted)
+    setCompactDialogTaskId(null)
+  }, [compactDialogTaskId, completeTaskInternal])
+
+  const handleSkipAndComplete = useCallback(async () => {
+    if (!compactDialogTaskId) return
+    completeTaskInternal(compactDialogTaskId)
+    setCompactDialogTaskId(null)
+  }, [compactDialogTaskId, completeTaskInternal])
 
   const handleSummarize = useCallback(async (taskId: string) => {
     if (!window.api) return
@@ -885,6 +915,13 @@ export default function App() {
         onClose={() => setSshDialogOpen(false)}
         connecting={sshConnecting}
         error={sshError}
+      />
+      <CompactDialog
+        isOpen={!!compactDialogTask}
+        taskName={compactDialogTask?.name || ''}
+        onClose={() => setCompactDialogTaskId(null)}
+        onCompactAndComplete={handleCompactAndComplete}
+        onSkipAndComplete={handleSkipAndComplete}
       />
       <ConnectionStatus
         state={(() => {
