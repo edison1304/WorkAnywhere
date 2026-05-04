@@ -21,6 +21,8 @@ interface Props {
   onAcknowledgeTask: (id: string) => void
   onPinTask: (id: string) => void
   onDeleteTask?: (id: string) => void
+  onDeletePhase?: (id: string) => void
+  onDeleteProject?: (id: string) => void
   onForkTask?: (id: string) => void
   onMoveTask?: (taskId: string, targetPhaseId: string) => void
   onReorderTasks?: (phaseId: string, orderedIds: string[]) => void
@@ -59,6 +61,30 @@ function TaskContextMenu({ menu, onDelete, onFork, onClose }: {
   )
 }
 
+interface EntityContextMenuState {
+  x: number; y: number; kind: 'project' | 'phase'; id: string; name: string
+}
+
+function EntityContextMenu({ menu, onDelete, onClose }: {
+  menu: EntityContextMenuState
+  onDelete: () => void; onClose: () => void
+}) {
+  useEffect(() => {
+    const handler = () => onClose()
+    window.addEventListener('click', handler)
+    window.addEventListener('contextmenu', handler)
+    return () => { window.removeEventListener('click', handler); window.removeEventListener('contextmenu', handler) }
+  }, [onClose])
+
+  return (
+    <div className={styles.contextMenu} style={{ top: menu.y, left: menu.x }}>
+      <button className={`${styles.contextMenuItem} ${styles.contextMenuDanger}`} onClick={onDelete}>
+        Delete {menu.kind === 'project' ? 'project' : 'phase'} (cascade)
+      </button>
+    </div>
+  )
+}
+
 const ACTIVE_STATUSES = new Set(['running', 'waiting', 'queued'])
 
 function isVisibleInMonitor(task: Task): boolean {
@@ -82,12 +108,14 @@ function isDoneTask(task: Task): boolean {
 }
 
 // ─── Task Item with pin/ack/context menu/drag ───
-function TaskItemMonitor({ task, isActive, onSelect, onAcknowledge, onPin, onContextMenu, onDragStart }: {
+function TaskItemMonitor({ task, isActive, onSelect, onAcknowledge, onPin, onDelete, onContextMenu, onDragStart }: {
   task: Task; isActive: boolean
   onSelect: () => void; onAcknowledge: () => void; onPin: () => void
+  onDelete?: () => void
   onContextMenu?: (e: React.MouseEvent) => void
   onDragStart?: (e: React.DragEvent) => void
 }) {
+  const canDelete = onDelete && task.status !== 'running'
   return (
     <div
       className={`${styles.treeItem} ${styles.taskLevel} ${isActive ? styles.active : ''}`}
@@ -119,6 +147,17 @@ function TaskItemMonitor({ task, isActive, onSelect, onAcknowledge, onPin, onCon
       {task.status === 'failed' && !task.acknowledgedAt && (
         <span className={styles.unreadDot} />
       )}
+      {canDelete && (
+        <span
+          className={styles.removeBtn}
+          onClick={e => {
+            e.stopPropagation()
+            if (confirm(`Delete task "${task.name}"?`)) onDelete!()
+          }}
+          title="Remove task"
+          role="button"
+        >×</span>
+      )}
     </div>
   )
 }
@@ -127,7 +166,8 @@ function TaskItemMonitor({ task, isActive, onSelect, onAcknowledge, onPin, onCon
 function MonitorUnified({
   projects, phases, allTasks, activeProjectId, activePhaseId, activeTaskId,
   collapsed, toggle, onSelectProject, onSelectPhase, onSelectTask, onAcknowledgeTask, onPinTask,
-  onTaskContext
+  onDeleteTask, onDeletePhase, onDeleteProject,
+  onTaskContext, onProjectContext, onPhaseContext
 }: {
   projects: Project[]; phases: Phase[]; allTasks: Task[]
   activeProjectId: string | null; activePhaseId: string | null; activeTaskId: string | null
@@ -135,7 +175,12 @@ function MonitorUnified({
   onSelectProject: (id: string) => void; onSelectPhase: (id: string) => void
   onSelectTask: (id: string | null) => void; onAcknowledgeTask: (id: string) => void
   onPinTask: (id: string) => void
+  onDeleteTask?: (id: string) => void
+  onDeletePhase?: (id: string) => void
+  onDeleteProject?: (id: string) => void
   onTaskContext?: (e: React.MouseEvent, taskId: string) => void
+  onProjectContext?: (e: React.MouseEvent, projectId: string, name: string) => void
+  onPhaseContext?: (e: React.MouseEvent, phaseId: string, name: string) => void
 }) {
   return (
     <>
@@ -145,30 +190,51 @@ function MonitorUnified({
         const isCollapsed = collapsed[projectKey]
         const visibleTasks = allTasks.filter(t => t.projectId === project.id).filter(isVisibleInMonitor)
         if (visibleTasks.length === 0) return null
+        const projectHasRunning = allTasks.some(t => t.projectId === project.id && t.status === 'running')
 
         return (
           <div key={project.id} className={styles.treeNode}>
-            <button
+            <div
               className={`${styles.treeItem} ${styles.projectLevel} ${project.id === activeProjectId ? styles.active : ''}`}
               onClick={() => { onSelectProject(project.id); toggle(projectKey) }}
+              onContextMenu={e => onProjectContext?.(e, project.id, project.name)}
+              role="button"
+              tabIndex={0}
             >
               <span className={styles.chevron}>{isCollapsed ? '▸' : '▾'}</span>
               <span className={styles.nodeIcon}>{project.connection.type === 'ssh' ? 'S' : project.connection.type === 'remote' ? 'R' : 'L'}</span>
               <span className={styles.nodeName}>{project.name}</span>
               <span className={styles.activeBadge}>{visibleTasks.length}</span>
-            </button>
+              {onDeleteProject && !projectHasRunning && (
+                <span
+                  className={styles.removeBtn}
+                  onClick={e => {
+                    e.stopPropagation()
+                    if (confirm(`Delete project "${project.name}" and all its phases and tasks?`)) {
+                      onDeleteProject(project.id)
+                    }
+                  }}
+                  title="Remove project"
+                  role="button"
+                >×</span>
+              )}
+            </div>
 
             {!isCollapsed && projectPhases.map(phase => {
               const phaseKey = `mon-phase-${phase.id}`
               const phaseCollapsed = collapsed[phaseKey]
               const phaseTasks = allTasks.filter(t => t.phaseId === phase.id).filter(isVisibleInMonitor).sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
               if (phaseTasks.length === 0) return null
+              const phaseHasRunning = allTasks.some(t => t.phaseId === phase.id && t.status === 'running')
 
               return (
                 <div key={phase.id} className={styles.indent1}>
-                  <button
+                  <div
                     className={`${styles.treeItem} ${styles.phaseLevel} ${phase.id === activePhaseId ? styles.active : ''}`}
                     onClick={() => { onSelectPhase(phase.id); toggle(phaseKey) }}
+                    onContextMenu={e => onPhaseContext?.(e, phase.id, phase.name)}
+                    role="button"
+                    tabIndex={0}
                   >
                     <span className={styles.chevron}>{phaseCollapsed ? '▸' : '▾'}</span>
                     <span className={styles.phaseStatus} data-status={phase.status}>
@@ -176,7 +242,20 @@ function MonitorUnified({
                     </span>
                     <span className={styles.nodeName}>{phase.name}</span>
                     <span className={styles.taskCountBadge}>{phaseTasks.length}</span>
-                  </button>
+                    {onDeletePhase && !phaseHasRunning && (
+                      <span
+                        className={styles.removeBtn}
+                        onClick={e => {
+                          e.stopPropagation()
+                          if (confirm(`Delete phase "${phase.name}" and all its tasks?`)) {
+                            onDeletePhase(phase.id)
+                          }
+                        }}
+                        title="Remove phase"
+                        role="button"
+                      >×</span>
+                    )}
+                  </div>
 
                   {!phaseCollapsed && phaseTasks.map(task => (
                     <TaskItemMonitor
@@ -184,6 +263,7 @@ function MonitorUnified({
                       onSelect={() => onSelectTask(task.id)}
                       onAcknowledge={() => onAcknowledgeTask(task.id)}
                       onPin={() => onPinTask(task.id)}
+                      onDelete={onDeleteTask ? () => onDeleteTask(task.id) : undefined}
                       onContextMenu={e => onTaskContext?.(e, task.id)}
                     />
                   ))}
@@ -199,11 +279,12 @@ function MonitorUnified({
 
 // ─── Monitor: split view (active / done) ───
 function MonitorSplit({
-  allTasks, activeTaskId, onSelectTask, onAcknowledgeTask, onPinTask, onTaskContext
+  allTasks, activeTaskId, onSelectTask, onAcknowledgeTask, onPinTask, onDeleteTask, onTaskContext
 }: {
   allTasks: Task[]; activeTaskId: string | null
   onSelectTask: (id: string | null) => void
   onAcknowledgeTask: (id: string) => void; onPinTask: (id: string) => void
+  onDeleteTask?: (id: string) => void
   onTaskContext?: (e: React.MouseEvent, taskId: string) => void
 }) {
   const visible = allTasks.filter(isVisibleInMonitor)
@@ -226,6 +307,7 @@ function MonitorSplit({
               onSelect={() => onSelectTask(task.id)}
               onAcknowledge={() => onAcknowledgeTask(task.id)}
               onPin={() => onPinTask(task.id)}
+              onDelete={onDeleteTask ? () => onDeleteTask(task.id) : undefined}
               onContextMenu={e => onTaskContext?.(e, task.id)}
             />
           ))}
@@ -243,6 +325,7 @@ function MonitorSplit({
               onSelect={() => onSelectTask(task.id)}
               onAcknowledge={() => onAcknowledgeTask(task.id)}
               onPin={() => onPinTask(task.id)}
+              onDelete={onDeleteTask ? () => onDeleteTask(task.id) : undefined}
               onContextMenu={e => onTaskContext?.(e, task.id)}
             />
           ))}
@@ -260,6 +343,7 @@ function MonitorSplit({
               onSelect={() => onSelectTask(task.id)}
               onAcknowledge={() => onAcknowledgeTask(task.id)}
               onPin={() => onPinTask(task.id)}
+              onDelete={onDeleteTask ? () => onDeleteTask(task.id) : undefined}
               onContextMenu={e => onTaskContext?.(e, task.id)}
             />
           ))}
@@ -629,24 +713,32 @@ function useReorderDrag<T extends { id: string }>(
 
 // ─── Manage view ───
 function ManageView({
-  phases, allTasks, activeProjectId, activePhaseId, activeTaskId,
-  collapsed, toggle, onSelectPhase, onSelectTask, onTaskContext, onPhaseDrop, dragOverPhase,
-  onCreatePhase, onCreateTask, onReorderTasks, onReorderPhases
+  projects, phases, allTasks, activeProjectId, activePhaseId, activeTaskId,
+  collapsed, toggle, onSelectPhase, onSelectTask, onTaskContext, onPhaseContext, onProjectContext, onPhaseDrop, dragOverPhase,
+  onCreatePhase, onCreateTask, onReorderTasks, onReorderPhases,
+  onDeleteTask, onDeletePhase, onDeleteProject
 }: {
-  phases: Phase[]; allTasks: Task[]
+  projects: Project[]; phases: Phase[]; allTasks: Task[]
   activeProjectId: string | null; activePhaseId: string | null; activeTaskId: string | null
   collapsed: Record<string, boolean>; toggle: (k: string) => void
   onSelectPhase: (id: string) => void; onSelectTask: (id: string | null) => void
   onTaskContext?: (e: React.MouseEvent, taskId: string) => void
+  onPhaseContext?: (e: React.MouseEvent, phaseId: string, name: string) => void
+  onProjectContext?: (e: React.MouseEvent, projectId: string, name: string) => void
   onPhaseDrop?: (e: React.DragEvent, phaseId: string) => void
   dragOverPhase?: string | null
   onCreatePhase?: (name: string, desc: string) => void
   onCreateTask?: (name: string, purpose: string, prompt: string) => void
   onReorderTasks?: (phaseId: string, orderedIds: string[]) => void
   onReorderPhases?: (projectId: string, orderedIds: string[]) => void
+  onDeleteTask?: (id: string) => void
+  onDeletePhase?: (id: string) => void
+  onDeleteProject?: (id: string) => void
 }) {
   const projectPhases = phases.filter(ph => ph.projectId === activeProjectId).sort((a, b) => a.order - b.order)
   if (!activeProjectId) return <div className={styles.emptyHint}>Select a project</div>
+  const activeProject = projects.find(p => p.id === activeProjectId)
+  const projectHasRunning = allTasks.some(t => t.projectId === activeProjectId && t.status === 'running')
 
   const phaseDrag = useReorderDrag(
     projectPhases,
@@ -656,6 +748,30 @@ function ManageView({
 
   return (
     <>
+      {/* Active project header — right-click to delete */}
+      {activeProject && (
+        <div
+          className={`${styles.manageProjectHeader} ${styles.active}`}
+          onContextMenu={e => onProjectContext?.(e, activeProject.id, activeProject.name)}
+          title="우클릭으로 프로젝트 삭제"
+        >
+          <span className={styles.nodeIcon}>{activeProject.connection.type === 'ssh' ? 'S' : activeProject.connection.type === 'remote' ? 'R' : 'L'}</span>
+          <span className={styles.nodeName}>{activeProject.name}</span>
+          {onDeleteProject && !projectHasRunning && (
+            <span
+              className={styles.removeBtn}
+              onClick={e => {
+                e.stopPropagation()
+                if (confirm(`Delete project "${activeProject.name}" and all its phases and tasks?`)) {
+                  onDeleteProject(activeProject.id)
+                }
+              }}
+              title="Remove project"
+              role="button"
+            >×</span>
+          )}
+        </div>
+      )}
       {/* Top drop zone — allows dragging a phase to the very first position */}
       {phaseDrag.dragId && (
         <div
@@ -688,6 +804,7 @@ function ManageView({
         const isCollapsed = collapsed[phaseKey]
         const phaseTasks = allTasks.filter(t => t.phaseId === phase.id).sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
         const isPhaseDropIndicator = phaseDrag.dragOverId === phase.id && phaseDrag.dragId !== phase.id
+        const phaseHasRunning = phaseTasks.some(t => t.status === 'running')
 
         return (
           <div
@@ -709,6 +826,7 @@ function ManageView({
             <div
               className={`${styles.managePhaseHeader} ${phase.id === activePhaseId ? styles.active : ''} ${phaseDrag.dragId === phase.id ? styles.dragging : ''}`}
               onClick={() => { onSelectPhase(phase.id); toggle(phaseKey) }}
+              onContextMenu={e => onPhaseContext?.(e, phase.id, phase.name)}
               draggable
               onDragStart={e => { e.stopPropagation(); phaseDrag.handleDragStart(e, phase.id) }}
               onDragOver={e => { e.stopPropagation(); phaseDrag.handleDragOver(e, phase.id) }}
@@ -722,6 +840,19 @@ function ManageView({
               </span>
               <span className={styles.nodeName}>{phase.name}</span>
               <span className={styles.taskCountBadge}>{phaseTasks.length}</span>
+              {onDeletePhase && !phaseHasRunning && (
+                <span
+                  className={styles.removeBtn}
+                  onClick={e => {
+                    e.stopPropagation()
+                    if (confirm(`Delete phase "${phase.name}" and all its tasks?`)) {
+                      onDeletePhase(phase.id)
+                    }
+                  }}
+                  title="Remove phase"
+                  role="button"
+                >×</span>
+              )}
             </div>
             {isPhaseDropIndicator && phaseDrag.dragOverHalf === 'bottom' && (
               <div className={styles.dropIndicator} />
@@ -737,6 +868,7 @@ function ManageView({
                 onCreateTask={onCreateTask}
                 onReorderTasks={onReorderTasks}
                 onPhaseDrop={onPhaseDrop}
+                onDeleteTask={onDeleteTask}
               />
             )}
           </div>
@@ -749,7 +881,7 @@ function ManageView({
 
 // ─── Task list within a phase (with drag reorder) ───
 function ManageTaskList({
-  tasks, phaseId, activeTaskId, onSelectPhase, onSelectTask, onTaskContext, onCreateTask, onReorderTasks, onPhaseDrop
+  tasks, phaseId, activeTaskId, onSelectPhase, onSelectTask, onTaskContext, onCreateTask, onReorderTasks, onPhaseDrop, onDeleteTask
 }: {
   tasks: Task[]; phaseId: string; activeTaskId: string | null
   onSelectPhase: (id: string) => void; onSelectTask: (id: string | null) => void
@@ -757,6 +889,7 @@ function ManageTaskList({
   onCreateTask?: (name: string, purpose: string, prompt: string) => void
   onReorderTasks?: (phaseId: string, orderedIds: string[]) => void
   onPhaseDrop?: (e: React.DragEvent, phaseId: string) => void
+  onDeleteTask?: (id: string) => void
 }) {
   const taskDrag = useReorderDrag(
     tasks,
@@ -798,6 +931,17 @@ function ManageTaskList({
               <StatusDot status={task.status} size={7} />
               <span className={styles.taskName}>{task.name}</span>
               <span className={styles.manageTaskStatus}>{task.status}</span>
+              {onDeleteTask && task.status !== 'running' && (
+                <span
+                  className={styles.removeBtn}
+                  onClick={e => {
+                    e.stopPropagation()
+                    if (confirm(`Delete task "${task.name}"?`)) onDeleteTask(task.id)
+                  }}
+                  title="Remove task"
+                  role="button"
+                >×</span>
+              )}
             </div>
             {isDropIndicator && taskDrag.dragOverHalf === 'bottom' && (
               <div className={styles.dropIndicator} />
@@ -830,6 +974,7 @@ export function TreeSidebar(props: Props) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [monitorLayout, setMonitorLayout] = useState<MonitorLayout>('unified')
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+  const [entityMenu, setEntityMenu] = useState<EntityContextMenuState | null>(null)
   const [dragOverPhase, setDragOverPhase] = useState<string | null>(null)
 
   const toggle = (key: string) => {
@@ -840,6 +985,18 @@ export function TreeSidebar(props: Props) {
     e.preventDefault()
     e.stopPropagation()
     setContextMenu({ x: e.clientX, y: e.clientY, taskId })
+  }, [])
+
+  const handleProjectContext = useCallback((e: React.MouseEvent, projectId: string, name: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setEntityMenu({ x: e.clientX, y: e.clientY, kind: 'project', id: projectId, name })
+  }, [])
+
+  const handlePhaseContext = useCallback((e: React.MouseEvent, phaseId: string, name: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setEntityMenu({ x: e.clientX, y: e.clientY, kind: 'phase', id: phaseId, name })
   }, [])
 
   const handlePhaseDrop = useCallback((e: React.DragEvent, phaseId: string) => {
@@ -882,6 +1039,22 @@ export function TreeSidebar(props: Props) {
             setContextMenu(null)
           }}
           onClose={() => setContextMenu(null)}
+        />
+      )}
+      {entityMenu && (
+        <EntityContextMenu
+          menu={entityMenu}
+          onDelete={() => {
+            const { kind, id, name } = entityMenu
+            const label = kind === 'project' ? 'project' : 'phase'
+            const msg = `Delete ${label} "${name}" and all its ${kind === 'project' ? 'phases and tasks' : 'tasks'}?`
+            if (confirm(msg)) {
+              if (kind === 'project') props.onDeleteProject?.(id)
+              else props.onDeletePhase?.(id)
+            }
+            setEntityMenu(null)
+          }}
+          onClose={() => setEntityMenu(null)}
         />
       )}
       {/* View toggle + detach */}
@@ -942,12 +1115,17 @@ export function TreeSidebar(props: Props) {
                 onSelectProject={props.onSelectProject} onSelectPhase={props.onSelectPhase}
                 onSelectTask={props.onSelectTask} onAcknowledgeTask={props.onAcknowledgeTask}
                 onPinTask={props.onPinTask} onTaskContext={handleTaskContext}
+                onProjectContext={handleProjectContext} onPhaseContext={handlePhaseContext}
+                onDeleteTask={props.onDeleteTask}
+                onDeletePhase={props.onDeletePhase}
+                onDeleteProject={props.onDeleteProject}
               />
             ) : (
               <MonitorSplit
                 allTasks={props.allTasks} activeTaskId={props.activeTaskId}
                 onSelectTask={props.onSelectTask} onAcknowledgeTask={props.onAcknowledgeTask}
                 onPinTask={props.onPinTask} onTaskContext={handleTaskContext}
+                onDeleteTask={props.onDeleteTask}
               />
             )}
           </div>
@@ -964,14 +1142,20 @@ export function TreeSidebar(props: Props) {
           )}
           <div className={styles.treeContainer}>
             <ManageViewSafe
+              projects={props.projects}
               phases={props.phases} allTasks={props.allTasks}
               activeProjectId={props.activeProjectId} activePhaseId={props.activePhaseId}
               activeTaskId={props.activeTaskId}
               collapsed={collapsed} toggle={toggle}
               onSelectPhase={props.onSelectPhase} onSelectTask={props.onSelectTask}
-              onTaskContext={handleTaskContext} onPhaseDrop={handlePhaseDrop} dragOverPhase={dragOverPhase}
+              onTaskContext={handleTaskContext} onPhaseContext={handlePhaseContext}
+              onProjectContext={handleProjectContext}
+              onPhaseDrop={handlePhaseDrop} dragOverPhase={dragOverPhase}
               onCreatePhase={props.onCreatePhase} onCreateTask={props.onCreateTask}
               onReorderTasks={props.onReorderTasks} onReorderPhases={props.onReorderPhases}
+              onDeleteTask={props.onDeleteTask}
+              onDeletePhase={props.onDeletePhase}
+              onDeleteProject={props.onDeleteProject}
             />
             {/* File explorer — collapsible */}
             {props.workspacePath && (

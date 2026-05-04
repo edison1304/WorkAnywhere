@@ -417,6 +417,22 @@
   background: rgba(99, 102, 241, 0.05);
 }
 
+.manageProjectHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
 .managePhase {
   margin-bottom: 4px;
 }
@@ -522,6 +538,35 @@
 .taskLevel:hover .pinBtn { opacity: 0.5; }
 .pinBtn:hover { opacity: 1 !important; color: var(--warning); }
 .pinBtn.pinned { opacity: 1; color: var(--warning); }
+
+/* ─── Remove (×) button — visible on row hover ─── */
+.removeBtn {
+  font-size: 13px;
+  line-height: 1;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: 0;
+  border-radius: 3px;
+  transition: opacity 0.15s, color 0.15s, background 0.15s;
+  user-select: none;
+}
+.treeItem:hover .removeBtn,
+.managePhaseHeader:hover .removeBtn,
+.manageTaskItem:hover .removeBtn,
+.manageProjectHeader:hover .removeBtn { opacity: 0.55; }
+.removeBtn:hover {
+  opacity: 1 !important;
+  color: var(--error, #ef4444);
+  background: rgba(239, 68, 68, 0.12);
+}
 
 /* ─── Layout toggle ─── */
 .layoutToggle {
