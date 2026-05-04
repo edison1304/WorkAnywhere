@@ -6,6 +6,7 @@ import { FolderBrowser } from '../project/FolderBrowser'
 import { ArtifactViewer } from '../viewer/ArtifactViewer'
 import { HierarchyView } from '../sessions/HierarchyView'
 import { IntentLockHeader } from './IntentLockHeader'
+import { EventCard } from './EventCard'
 import styles from './MainPanel.module.css'
 
 // ─── Session Drift Detection ───
@@ -110,7 +111,7 @@ export function MainPanel({
   pendingPermission, onRespondPermission,
   onUpdateTask,
 }: Props) {
-  const [activeTab, setActiveTab] = useState<'log' | 'terminal' | 'artifacts'>('terminal')
+  const [activeTab, setActiveTab] = useState<'context' | 'log' | 'terminal' | 'artifacts'>('terminal')
 
   // All hooks MUST be before any conditional return (React hooks rule)
   const drift = useMemo(
@@ -448,6 +449,18 @@ export function MainPanel({
       {/* Tabs */}
       <div className={styles.tabBar}>
         <button
+          className={`${styles.tab} ${activeTab === 'context' ? styles.tabActive : ''}`}
+          onClick={() => setActiveTab('context')}
+          title="사건 단위 맥락 요약 (work_anywhere_context_summary_ui.md §12)"
+        >
+          Context
+          {/* Surface a dot when there's something the user should look at:
+              residual risk left unresolved, or a human-input gap. */}
+          {(activeTask.summary?.residualRisk || activeTask.summary?.humanNeeded) && (
+            <span className={styles.tabDot} data-tone="attention" />
+          )}
+        </button>
+        <button
           className={`${styles.tab} ${activeTab === 'log' ? styles.tabActive : ''}`}
           onClick={() => setActiveTab('log')}
         >
@@ -473,6 +486,9 @@ export function MainPanel({
 
       {/* Content */}
       <div className={styles.content}>
+        <div style={{ display: activeTab === 'context' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
+          <EventCard task={activeTask} onSummarize={onSummarize} />
+        </div>
         <div style={{ display: activeTab === 'log' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
           <ChatView
             task={activeTask}

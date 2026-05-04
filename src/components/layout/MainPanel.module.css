@@ -315,6 +315,16 @@
   50% { opacity: 0.6; }
 }
 
+/* Small attention dot — used by Context tab to surface unresolved
+ * residualRisk / humanNeeded without forcing the user to open the tab. */
+.tabDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  display: inline-block;
+}
+.tabDot[data-tone="attention"] { background: var(--warning); }
+
 /* Content */
 .content {
   flex: 1;
