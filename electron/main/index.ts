@@ -6,6 +6,7 @@ import { AgentService } from './services/AgentService'
 import { ConnectionManager } from './services/ConnectionManager'
 import { DataStore } from './services/DataStore'
 import { compute as computeSchedule } from './services/SchedulingService'
+import { WorkflowFileService } from './services/WorkflowFileService'
 
 let mainWindow: BrowserWindow | null = null
 const detachedWindows = new Map<string, BrowserWindow>()
@@ -206,6 +207,9 @@ ipcMain.handle('notify:send', async (_event, options: {
 // ─── Connection + Agent Services ───
 const connMgr = new ConnectionManager()
 let agentService: AgentService | null = null
+const workflow = new WorkflowFileService(connMgr, (pid) =>
+  dataStore.projectList().find(p => p.id === pid) || null,
+)
 
 // Forward ConnectionManager reconnection events to renderer
 connMgr.on('connection:lost', (data) => broadcastToAll('connection:status', { ...data, status: 'lost' }))
@@ -840,7 +844,10 @@ ipcMain.handle('project:list', async () => {
 })
 
 ipcMain.handle('project:create', async (_event, input: import('../../../shared/types').CreateProjectInput) => {
-  return dataStore.projectCreate(input)
+  const project = dataStore.projectCreate(input)
+  // Best-effort plan tree seed; failure here must not block project creation.
+  workflow.ensureProject(project).catch(() => {})
+  return project
 })
 
 ipcMain.handle('project:update', async (_event, id: string, patch: Partial<import('../../../shared/types').Project>) => {
@@ -857,7 +864,10 @@ ipcMain.handle('phase:list', async (_event, projectId: string) => {
 })
 
 ipcMain.handle('phase:create', async (_event, projectId: string, name: string, description?: string) => {
-  return dataStore.phaseCreate(projectId, name, description)
+  const phase = dataStore.phaseCreate(projectId, name, description)
+  const project = dataStore.projectList().find(p => p.id === projectId)
+  if (project) workflow.ensurePhase(project, phase).catch(() => {})
+  return phase
 })
 
 ipcMain.handle('phase:update', async (_event, id: string, patch: Partial<import('../../../shared/types').Phase>) => {
@@ -874,7 +884,12 @@ ipcMain.handle('task:list', async (_event, phaseId: string) => {
 })
 
 ipcMain.handle('task:create', async (_event, phaseId: string, name: string, purpose: string, prompt: string) => {
-  return dataStore.taskCreate(phaseId, name, purpose, prompt)
+  const task = dataStore.taskCreate(phaseId, name, purpose, prompt)
+  const project = dataStore.projectList().find(p => p.id === task.projectId)
+  // phaseList scoped by project; find phase among that project's phases
+  const phase = project ? dataStore.phaseList(project.id).find(ph => ph.id === phaseId) : null
+  if (project && phase) workflow.ensureTask(project, phase, task).catch(() => {})
+  return task
 })
 
 ipcMain.handle('task:update', async (_event, id: string, patch: Partial<import('../../../shared/types').Task>) => {
@@ -935,10 +950,24 @@ ipcMain.handle('task:run', async (_event, taskId: string) => {
   dataStore.taskAddLog(taskId, startLog)
   broadcastToAll('task:log', { taskId, log: startLog })
 
+  // Ensure plan files exist + build layered prefix from PLAN/CHECKLIST/NOTES
+  // for project → phase → task. Best-effort: failures fall back to bare prompt.
+  let prefixedPrompt = task.prompt
+  const phase = dataStore.phaseList(project.id).find(ph => ph.id === task.phaseId)
+  if (phase) {
+    try {
+      await workflow.ensureTask(project, phase, task)
+      const prefix = await workflow.buildPrefix(project, phase, task)
+      if (prefix.trim()) {
+        prefixedPrompt = `${prefix}\n---\n\n${task.prompt}`
+      }
+    } catch { /* soft scaffold */ }
+  }
+
   try {
     await agentService!.startAgent(
       task.projectId, task.phaseId, taskId,
-      project.workspacePath, task.prompt,
+      project.workspacePath, prefixedPrompt,
       project.settings.agentEngine || 'claude'
     )
     return { success: true }
