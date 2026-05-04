@@ -77,19 +77,30 @@ export class AgentService extends EventEmitter {
     // ── Phase 1: stream-json for structured output ──
     try {
       this.emitLog(taskId, 'text', `[Phase 1] Running prompt via stream-json...`)
+      console.log(`[startAgent ${taskId}] spawning stream — prompt=${enrichedPrompt.length} chars, engine=${engine}, cwd=${workspacePath}`)
 
       const stream = await conn.spawnAgentStream(
         engine, workspacePath, enrichedPrompt, `stream-${taskId}`
       )
       agent.streamHandle = stream
+      console.log(`[startAgent ${taskId}] stream spawned, awaiting events`)
+
+      let eventCount = 0
+      let firstEventLogged = false
 
       // Parse structured events → Log entries
       stream.onEvent((event) => {
+        eventCount++
+        if (!firstEventLogged) {
+          console.log(`[stream ${taskId}] FIRST event received — type=${event.type}`)
+          firstEventLogged = true
+        }
         this.handleStreamEvent(taskId, agent, event)
       })
 
       // When stream-json finishes → ready for follow-up messages
       stream.onClose((code) => {
+        console.log(`[stream ${taskId}] closed — exit code=${code}, total events=${eventCount}`)
         agent.streamHandle = null
 
         if (!this.agents.has(taskId)) return // already stopped
