@@ -1,0 +1,224 @@
+.page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--canvas);
+  color: var(--ink);
+}
+
+.empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: var(--space-xs);
+  background: var(--canvas);
+  color: var(--ink-subtle);
+}
+.emptyTitle {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: -0.2px;
+  color: var(--ink-muted);
+}
+.emptyHint { font-size: 13px; color: var(--ink-tertiary); }
+
+.header {
+  padding: var(--space-lg) var(--space-xl) var(--space-md);
+  border-bottom: 1px solid var(--hairline);
+}
+.title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.4px;
+  color: var(--ink);
+}
+.subtitle {
+  margin-top: 6px;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  font-size: 13px;
+  color: var(--ink-subtle);
+}
+.scopeLabel {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-tertiary);
+  padding: 2px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
+}
+.scopeName {
+  color: var(--ink);
+  font-weight: 500;
+}
+.scopeMeta {
+  color: var(--ink-tertiary);
+  font-size: 12px;
+}
+
+/* ─── Body — vertical timeline ─── */
+.body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-xl) 0 var(--space-xxl);
+  position: relative;
+  /* Center the column at ~720px */
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+/* The vertical axis line behind the dots — full body height */
+.axis {
+  position: absolute;
+  left: calc(50% - 360px + 56px); /* 720px column, axis at 56px from its left */
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--hairline);
+  pointer-events: none;
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.dayDivider {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: var(--space-md) 0 var(--space-sm);
+  z-index: 1;
+}
+.dayDivider span {
+  background: var(--canvas);
+  padding: 2px var(--space-sm);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--ink-subtle);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
+}
+
+.rowInner {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  gap: var(--space-md);
+  width: 720px;
+  max-width: calc(100% - var(--space-xl) * 2);
+  margin: 0 auto var(--space-md);
+  align-items: start;
+}
+
+.timeCol {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding-top: 14px;
+}
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--canvas);
+  background: var(--ink-tertiary);
+  box-shadow: 0 0 0 1px var(--hairline);
+  z-index: 2;
+}
+.dot[data-tone="success"]  { background: var(--success); box-shadow: 0 0 0 1px var(--success); }
+.dot[data-tone="detour"]   { background: var(--warning); box-shadow: 0 0 0 1px var(--warning); }
+.dot[data-tone="error"]    { background: var(--error);   box-shadow: 0 0 0 1px var(--error); }
+.dot[data-tone="info"]     { background: var(--ink-tertiary); }
+
+.time {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-tertiary);
+}
+
+/* ─── Card — PPT slide block ─── */
+.card {
+  position: relative;
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md) var(--space-lg);
+  transition: border-color 0.12s, transform 0.08s;
+}
+.card::before {
+  content: '';
+  position: absolute;
+  left: 0; top: var(--space-sm); bottom: var(--space-sm);
+  width: 3px;
+  border-radius: 2px;
+  background: var(--ink-tertiary);
+}
+.tone_success::before { background: var(--success); }
+.tone_detour::before  { background: var(--warning); }
+.tone_error::before   { background: var(--error); }
+.tone_info::before    { background: var(--ink-tertiary); }
+
+.cardClickable { cursor: pointer; }
+.cardClickable:hover {
+  border-color: var(--hairline-strong);
+  background: var(--surface-2);
+}
+.cardClickable:active { transform: translateY(1px); }
+
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-sm);
+  margin-bottom: 6px;
+}
+.category {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-tertiary);
+}
+.tone_success .category { color: var(--success); }
+.tone_detour .category  { color: var(--warning); }
+.tone_error .category   { color: var(--error); }
+
+.entityRef {
+  font-size: 11px;
+  color: var(--ink-tertiary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 50%;
+}
+
+.cardTitle {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: -0.1px;
+  color: var(--ink);
+  line-height: 1.35;
+  word-break: break-word;
+}
+.cardBody {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-muted);
+  word-break: break-word;
+}

@@ -4,9 +4,10 @@ import { TreeSidebar, type SidebarView } from './TreeSidebar'
 import { StatusRail } from './StatusRail'
 import { MainPanel } from './MainPanel'
 import { SchedulePage } from '../schedule/SchedulePage'
+import { TimelineView } from '../timeline/TimelineView'
 import styles from './CommandCenter.module.css'
 
-export type PageView = 'workspace' | 'schedule'
+export type PageView = 'workspace' | 'schedule' | 'timeline'
 
 interface Props {
   projects: Project[]
@@ -29,6 +30,8 @@ interface Props {
   onAcknowledgeTask: (id: string) => void
   onPinTask: (id: string) => void
   onDeleteTask?: (id: string) => void
+  onDeletePhase?: (id: string) => void
+  onDeleteProject?: (id: string) => void
   onForkTask?: (id: string) => void
   onMoveTask?: (taskId: string, targetPhaseId: string) => void
   onReorderTasks?: (phaseId: string, orderedIds: string[]) => void
@@ -71,7 +74,7 @@ export function CommandCenter({
   sidebarView, currentPage, onChangePage, onUpdateTask, detachedPanels,
   sshConnected, sshConnecting, sshError, claudeVersion, connectionStatus,
   onSidebarViewChange,
-  onSelectProject, onSelectPhase, onSelectTask, onAcknowledgeTask, onPinTask, onDeleteTask, onForkTask, onMoveTask, onReorderTasks, onReorderPhases,
+  onSelectProject, onSelectPhase, onSelectTask, onAcknowledgeTask, onPinTask, onDeleteTask, onDeletePhase, onDeleteProject, onForkTask, onMoveTask, onReorderTasks, onReorderPhases,
   onDetach, onReattach, onRunAgent, onStopAgent, onResumeAgent, onMarkCompleted, onSummarize, onRestartFresh, onSendMessage, onSSHConnect, onLocalConnect, onRemoteConnect, onOpenSSH, onDisconnectSSH,
   onCreateProject, onRequestCreateProject, showCreateProject, onCancelCreateProject, onCreatePhase, onCreateTask, onImportProject, onOpenFile, openFilePath,
   onPhaseSummarize, onProjectSummarize
@@ -140,6 +143,12 @@ export function CommandCenter({
             onClick={() => onChangePage('schedule')}
           >
             Schedule
+          </button>
+          <button
+            className={`${styles.pageBtn} ${currentPage === 'timeline' ? styles.pageBtnActive : ''}`}
+            onClick={() => onChangePage('timeline')}
+          >
+            Timeline
           </button>
         </div>
 
@@ -354,6 +363,16 @@ export function CommandCenter({
             onRunAgent={onRunAgent}
             onUpdateTask={onUpdateTask}
           />
+        ) : currentPage === 'timeline' ? (
+          <TimelineView
+            project={activeProject}
+            phase={activePhase}
+            task={activeTask}
+            phases={allPhases.filter(p => p.projectId === activeProject?.id)}
+            tasks={allProjectTasks}
+            onSelectTask={(taskId) => { onSelectTask(taskId); onChangePage('workspace') }}
+            onSelectPhase={(phaseId) => { onSelectPhase(phaseId) }}
+          />
         ) : (
           <>
         {/* Sidebar: only show when connected and has projects */}
@@ -373,6 +392,8 @@ export function CommandCenter({
             onAcknowledgeTask={onAcknowledgeTask}
             onPinTask={onPinTask}
             onDeleteTask={onDeleteTask}
+            onDeletePhase={onDeletePhase}
+            onDeleteProject={onDeleteProject}
             onForkTask={onForkTask}
             onMoveTask={onMoveTask}
             onReorderTasks={onReorderTasks}

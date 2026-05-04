@@ -18,7 +18,7 @@ export default function App() {
   const [activePhaseId, setActivePhaseId] = useState<string | null>(null)
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null)
   const [sidebarView, setSidebarView] = useState<SidebarView>('monitor')
-  const [currentPage, setCurrentPage] = useState<'workspace' | 'schedule'>('workspace')
+  const [currentPage, setCurrentPage] = useState<'workspace' | 'schedule' | 'timeline'>('workspace')
   const [detachedPanels, setDetachedPanels] = useState<Set<string>>(new Set())
   const [showCreateProject, setShowCreateProject] = useState(false)
   const [openFilePath, setOpenFilePath] = useState<string | null>(null)
@@ -617,6 +617,38 @@ export default function App() {
     syncToServer()
   }, [tasks, activeTaskId, syncToServer])
 
+  const handleDeletePhase = useCallback(async (phaseId: string) => {
+    if (!window.api) return
+    // Block delete if any task in this phase is running
+    const phaseTasks = tasks.filter(t => t.phaseId === phaseId)
+    if (phaseTasks.some(t => t.status === 'running')) return
+    await window.api.phaseDelete(phaseId)
+    setTasks(prev => prev.filter(t => t.phaseId !== phaseId))
+    setPhases(prev => prev.filter(ph => ph.id !== phaseId))
+    if (activePhaseId === phaseId) {
+      setActivePhaseId(null)
+      setActiveTaskId(null)
+    }
+    syncToServer()
+  }, [tasks, activePhaseId, syncToServer])
+
+  const handleDeleteProject = useCallback(async (projectId: string) => {
+    if (!window.api) return
+    // Block delete if any task in this project is running
+    const projectTasks = tasks.filter(t => t.projectId === projectId)
+    if (projectTasks.some(t => t.status === 'running')) return
+    await window.api.projectDelete(projectId)
+    setTasks(prev => prev.filter(t => t.projectId !== projectId))
+    setPhases(prev => prev.filter(ph => ph.projectId !== projectId))
+    setProjects(prev => prev.filter(p => p.id !== projectId))
+    if (activeProjectId === projectId) {
+      setActiveProjectId(null)
+      setActivePhaseId(null)
+      setActiveTaskId(null)
+    }
+    syncToServer()
+  }, [tasks, activeProjectId, syncToServer])
+
   const handleForkTask = useCallback(async (taskId: string) => {
     if (!window.api) return
     const task = tasks.find(t => t.id === taskId)
@@ -778,6 +810,8 @@ export default function App() {
         onAcknowledgeTask={handleAcknowledgeTask}
         onPinTask={handlePinTask}
         onDeleteTask={handleDeleteTask}
+        onDeletePhase={handleDeletePhase}
+        onDeleteProject={handleDeleteProject}
         onForkTask={handleForkTask}
         onMoveTask={handleMoveTask}
         onReorderTasks={handleReorderTasks}
