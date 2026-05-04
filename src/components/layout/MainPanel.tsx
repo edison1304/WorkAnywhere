@@ -524,7 +524,8 @@ function ChatView({ task }: { task: Task }) {
     )
   }
 
-  // Group consecutive logs by role
+  // Group consecutive logs into messages. Identity (you / claude) is carried
+  // by alignment + subtle background — no avatars, no sender labels.
   type Msg = { role: 'user' | 'assistant' | 'system' | 'tool'; content: string; time: string; tool?: string }
   const messages: Msg[] = []
 
@@ -559,49 +560,36 @@ function ChatView({ task }: { task: Task }) {
     <div className={styles.chatMessages}>
       {messages.map((msg, i) => {
         if (msg.role === 'system') {
-          return <div key={i} className={styles.chatSystemRow}>{msg.content}</div>
+          return <div key={i} className={styles.chatSystemRow} title={msg.time}>{msg.content}</div>
         }
         if (msg.role === 'tool') {
           return (
-            <div key={i} className={styles.chatToolRow}>
+            <div key={i} className={styles.chatToolRow} title={msg.time}>
+              <span className={styles.chatToolMark}>↳</span>
               <span className={styles.chatToolLabel}>{msg.tool || 'tool'}</span>
-              <span className={styles.chatToolDetail}>{msg.content}</span>
+              <span className={styles.chatToolDetail}>{msg.content.replace(/^[^:]+:\s*/, '')}</span>
+            </div>
+          )
+        }
+        if (msg.role === 'user') {
+          return (
+            <div key={i} className={styles.chatRow} data-role="user" title={msg.time}>
+              <div className={styles.chatUserBubble}>{msg.content}</div>
             </div>
           )
         }
         return (
-          <div key={i} className={styles.chatBlock} data-role={msg.role}>
-            <div className={styles.chatUserRow}>
-              <div className={styles.chatAvatar} data-role={msg.role}>
-                {msg.role === 'user' ? 'Y' : 'C'}
-              </div>
-              <div className={styles.chatMsgBody}>
-                <div className={styles.chatSender}>
-                  {msg.role === 'user' ? 'You' : 'Claude'}
-                  <span className={styles.chatSenderTime}>{msg.time}</span>
-                </div>
-                {msg.role === 'user' ? (
-                  <div className={styles.chatUserText}>{msg.content}</div>
-                ) : (
-                  <div
-                    className={styles.chatAssistantText}
-                    dangerouslySetInnerHTML={{ __html: renderMarkdownInline(msg.content) }}
-                  />
-                )}
-              </div>
-            </div>
+          <div key={i} className={styles.chatRow} data-role="assistant" title={msg.time}>
+            <div
+              className={styles.chatAssistantText}
+              dangerouslySetInnerHTML={{ __html: renderMarkdownInline(msg.content) }}
+            />
           </div>
         )
       })}
       {task.status === 'running' && (
-        <div className={styles.chatBlock} data-role="assistant">
-          <div className={styles.chatUserRow}>
-            <div className={styles.chatAvatar} data-role="assistant">C</div>
-            <div className={styles.chatMsgBody}>
-              <div className={styles.chatSender}>Claude</div>
-              <div className={styles.chatTyping}><span /><span /><span /></div>
-            </div>
-          </div>
+        <div className={styles.chatRow} data-role="assistant">
+          <div className={styles.chatTyping}><span /><span /><span /></div>
         </div>
       )}
       <div ref={bottomRef} />
