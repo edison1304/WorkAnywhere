@@ -204,14 +204,16 @@ export class AgentService extends EventEmitter {
         // Session metadata — session_id already captured above
         break
 
-      case 'assistant':
-        // Assistant text response or tool use
-        if (event.content) {
-          // content can be a string or array of content blocks
-          if (typeof event.content === 'string') {
-            this.emitLog(taskId, 'text', event.content)
-          } else if (Array.isArray(event.content)) {
-            for (const block of event.content as any[]) {
+      case 'assistant': {
+        // Assistant text response or tool use.
+        // claude stream-json wraps content under event.message.content;
+        // older shapes also surface it directly as event.content.
+        const assistantContent = event.content ?? (event as any).message?.content
+        if (assistantContent) {
+          if (typeof assistantContent === 'string') {
+            this.emitLog(taskId, 'text', assistantContent)
+          } else if (Array.isArray(assistantContent)) {
+            for (const block of assistantContent as any[]) {
               if (block.type === 'text' && block.text) {
                 this.emitLog(taskId, 'text', block.text)
               } else if (block.type === 'tool_use') {
@@ -230,6 +232,7 @@ export class AgentService extends EventEmitter {
           }
         }
         break
+      }
 
       case 'tool_use':
         this.emitLog(taskId, 'tool_call', `${event.tool || 'unknown'}`, {
@@ -266,7 +269,7 @@ export class AgentService extends EventEmitter {
           this.emit('task:sessionId', { taskId, sessionId: event.session_id })
         }
         if (event.result) {
-          this.emitLog(taskId, 'text', String(event.result).slice(0, 1000))
+          this.emitLog(taskId, 'text', String(event.result))
         }
         break
 
