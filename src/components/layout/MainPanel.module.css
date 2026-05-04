@@ -368,11 +368,11 @@
   background: var(--surface-2);
   color: var(--ink);
   font-family: var(--font-text);
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 400;
-  letter-spacing: -0.05px;
+  letter-spacing: -0.1px;
   line-height: 1.55;
-  padding: 10px var(--space-md);
+  padding: 12px var(--space-md);
   border-radius: var(--radius-lg);
   border: 1px solid var(--hairline);
   max-width: 78%;
@@ -383,9 +383,9 @@
 /* Assistant text — full row width, no chrome. */
 .chatAssistantText {
   font-family: var(--font-text);
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 400;
-  letter-spacing: -0.05px;
+  letter-spacing: -0.1px;
   line-height: 1.65;
   color: var(--ink);
   word-break: break-word;
@@ -772,18 +772,18 @@
 
 .chatTextarea {
   flex: 1;
-  padding: 8px var(--space-sm);
+  padding: 10px var(--space-sm);
   background: var(--surface-1);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-md);
   color: var(--ink);
   font-family: var(--font-text);
-  font-size: 14px;
+  font-size: 15px;
   letter-spacing: -0.05px;
   resize: none;
   outline: none;
-  min-height: 38px;
-  max-height: 160px;
+  min-height: 42px;
+  max-height: 180px;
   line-height: 1.5;
   transition: border-color 0.15s, box-shadow 0.15s;
 }

@@ -6,6 +6,8 @@ export interface Project {
   connection: ConnectionConfig
   settings: ProjectSettings
   summary?: ProjectSummary
+  /** Top-level plan — vision + milestones. Optional. */
+  plan?: Plan
   createdAt: string
   updatedAt: string
 }
@@ -66,6 +68,8 @@ export interface Phase {
   order: number
   status: PhaseStatus
   summary?: PhaseSummary
+  /** Mid-level plan (shorter than Project, broader than Task). Optional. */
+  plan?: Plan
   createdAt: string
   updatedAt: string
 }
@@ -104,6 +108,9 @@ export interface Task {
   interactionLevel?: InteractionLevel  // 사용자 간섭 정도
   weightHint?: WeightHint              // 자원/시간 무게
 
+  // ─── Plan (auto-extracted from agent output, optional) ───
+  plan?: Plan
+
   createdAt: string
   updatedAt: string
   completedAt?: string
@@ -111,6 +118,40 @@ export interface Task {
 
 export type InteractionLevel = 'autonomous' | 'mixed' | 'interactive'
 export type WeightHint = 'light' | 'normal' | 'heavy'
+
+// ─── Plan / Checklist / JudgmentLog (per-entity context structuring) ───
+//
+// Optional structured plan attached to a task / phase / project. Purpose:
+// give the agent a stable mental model so it doesn't re-derive context every
+// turn, and give the user a glanceable progress signal.
+// Auto-extracted from agent output (regex-parse) — never required, never
+// blocking. UI surfaces them when present, stays quiet when absent.
+
+export interface ChecklistItem {
+  id: string
+  text: string
+  done: boolean
+  doneAt?: string
+}
+
+export interface JudgmentEntry {
+  timestamp: string
+  decision: string   // one line
+  reason: string     // one line
+}
+
+export interface Plan {
+  /** Markdown paragraph — what / why / how at a glance. */
+  design: string
+  /** Ordered checkbox steps; progress = done / total. */
+  checklist: ChecklistItem[]
+  /** Decision log accumulated during execution. */
+  judgmentLog: JudgmentEntry[]
+  /** Optional retrospective written after completion. */
+  retrospective?: string
+  generatedAt: string
+  updatedAt: string
+}
 
 export type TaskStatus =
   | 'idle'        // 에이전트 미호출
