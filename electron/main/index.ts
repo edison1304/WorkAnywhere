@@ -235,6 +235,10 @@ connMgr.on('connection:lost', (data) => broadcastToAll('connection:status', { ..
 connMgr.on('connection:reconnecting', (data) => broadcastToAll('connection:status', { ...data, status: 'reconnecting' }))
 connMgr.on('connection:restored', (data) => broadcastToAll('connection:status', { ...data, status: 'restored' }))
 connMgr.on('connection:failed', (data) => broadcastToAll('connection:status', { ...data, status: 'failed' }))
+connMgr.on('connection:healthy', (data) => broadcastToAll('connection:status', { ...data, status: 'healthy' }))
+
+// Start the proactive heartbeat — pings each active connection every 30s.
+connMgr.startHeartbeat()
 
 /** Helper: get connection for a project by ID (lazy connect) */
 async function getConnForProject(projectId: string) {

@@ -186,6 +186,49 @@ export class ConnectionManager extends EventEmitter {
     return conn.checkClaude()
   }
 
+  // ─── Heartbeat (proactive health check) ───
+  //
+  // SSH connections can drop silently — TCP keep-alive fails to fire, idle
+  // timeouts cut the link, NAT tables expire. The reactive 'disconnected'
+  // event from SSHService doesn't always come in those cases. We poll each
+  // active connection with a no-op exec on a fixed interval; on timeout or
+  // failure we trigger the same handleDisconnect path so reconnection kicks
+  // in and the UI sees 'lost'.
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null
+  private readonly HEARTBEAT_INTERVAL_MS = 30_000
+  private readonly HEARTBEAT_TIMEOUT_MS = 5_000
+
+  startHeartbeat(): void {
+    if (this.heartbeatTimer) return
+    this.heartbeatTimer = setInterval(() => this.pingAll().catch(() => {}), this.HEARTBEAT_INTERVAL_MS)
+  }
+
+  stopHeartbeat(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer)
+      this.heartbeatTimer = null
+    }
+  }
+
+  private async pingAll(): Promise<void> {
+    for (const [key, entry] of this.entries) {
+      if (entry.reconnecting) continue
+      if (!entry.connection.isConnected()) continue
+      try {
+        await Promise.race([
+          entry.connection.exec(':'),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('heartbeat timeout')), this.HEARTBEAT_TIMEOUT_MS),
+          ),
+        ])
+        this.emit('connection:healthy', { key, projectIds: [...entry.projectIds], ts: Date.now() })
+      } catch (err) {
+        console.log(`[heartbeat] ping failed for ${key}: ${err}`)
+        this.handleDisconnect(key, entry)
+      }
+    }
+  }
+
   // ─── Reconnection ───
 
   private async handleDisconnect(key: string, entry: ConnectionEntry): Promise<void> {

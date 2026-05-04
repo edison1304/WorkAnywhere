@@ -3,6 +3,7 @@ import { CommandCenter } from './components/layout/CommandCenter'
 import { DetachedMonitor } from './components/layout/DetachedMonitor'
 import { DetachedStatusRail } from './components/layout/DetachedStatusRail'
 import { SSHConnectDialog } from './components/project/SSHConnectDialog'
+import { ConnectionStatus, type ConnState } from './components/connection/ConnectionStatus'
 import type { Project, Phase, Task, ConnectionConfig, LogEntry, Artifact, TaskSummary } from '../shared/types'
 import type { SidebarView } from './components/layout/TreeSidebar'
 
@@ -65,6 +66,8 @@ export default function App() {
   const [sshConnecting, setSshConnecting] = useState(false)
   const [sshError, setSshError] = useState<string>()
   const [claudeVersion, setClaudeVersion] = useState<string>()
+  const [lastPingTs, setLastPingTs] = useState<number | null>(null)
+  const [reconnectAttempt, setReconnectAttempt] = useState<{ attempt: number; max: number } | null>(null)
 
   const activeProject = activeProjectId ? projects.find(p => p.id === activeProjectId) || null : null
   const projectPhases = phases.filter(ph => ph.projectId === activeProjectId)
@@ -573,12 +576,25 @@ export default function App() {
     })
 
     const unsubConnStatus = window.api.onConnectionStatus((data) => {
+      // 'healthy' is a heartbeat success — refresh lastPing only, don't
+      // overwrite the connectionStatus banner state.
+      if (data.status === 'healthy') {
+        setLastPingTs(data.ts ?? Date.now())
+        return
+      }
       setConnectionStatus(data.status)
+      if (data.status === 'reconnecting') {
+        if (data.attempt && data.maxRetries) {
+          setReconnectAttempt({ attempt: data.attempt, max: data.maxRetries })
+        }
+      } else {
+        setReconnectAttempt(null)
+      }
       if (data.status === 'lost') {
         setSshError('Connection lost — reconnecting...')
       } else if (data.status === 'restored') {
         setSshError(undefined)
-        setConnectionStatus(null) // clear after a moment
+        setLastPingTs(Date.now())
         setTimeout(() => setConnectionStatus(null), 3000)
       } else if (data.status === 'failed') {
         setSshConnected(false)
@@ -848,6 +864,25 @@ export default function App() {
         onClose={() => setSshDialogOpen(false)}
         connecting={sshConnecting}
         error={sshError}
+      />
+      <ConnectionStatus
+        state={(() => {
+          if (sshConnecting) return 'reconnecting'
+          if (!sshConnected) return 'disconnected'
+          if (connectionStatus === 'lost') return 'lost'
+          if (connectionStatus === 'reconnecting') return 'reconnecting'
+          if (connectionStatus === 'failed') return 'failed'
+          return 'connected'
+        })() as ConnState}
+        hostLabel={
+          activeProject?.connection?.type === 'local'  ? 'Local'  :
+          activeProject?.connection?.type === 'remote' ? 'Remote' :
+          activeProject?.connection?.ssh?.host ?? (sshConnected ? 'Connected' : 'Not connected')
+        }
+        lastPing={lastPingTs}
+        attempt={reconnectAttempt?.attempt}
+        maxRetries={reconnectAttempt?.max}
+        onClick={!sshConnected || connectionStatus === 'failed' ? () => setSshDialogOpen(true) : undefined}
       />
     </>
   )

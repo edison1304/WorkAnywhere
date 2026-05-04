@@ -1,0 +1,70 @@
+.indicator {
+  position: fixed;
+  bottom: 12px;
+  right: 12px;
+  z-index: 1000;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 6px 8px;
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-text);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-muted);
+  letter-spacing: 0;
+  user-select: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  transition: border-color 0.12s, background 0.12s;
+}
+.clickable { cursor: pointer; }
+.clickable:hover { border-color: var(--hairline-strong); background: var(--surface-2); }
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ink-tertiary);
+  flex-shrink: 0;
+}
+
+.label { white-space: nowrap; }
+.ago {
+  color: var(--ink-tertiary);
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+}
+
+/* ─── State styling ─── */
+
+.indicator[data-state="connected"] .dot { background: var(--success); }
+.indicator[data-state="connected"] { color: var(--ink-muted); }
+
+.indicator[data-state="reconnecting"] .dot {
+  background: var(--warning);
+  animation: pulse-amber 1.4s ease-in-out infinite;
+}
+.indicator[data-state="reconnecting"] { color: var(--warning); }
+
+.indicator[data-state="lost"] .dot {
+  background: var(--error);
+  animation: pulse-red 1s ease-in-out infinite;
+}
+.indicator[data-state="lost"] { color: var(--error); border-color: color-mix(in srgb, var(--error) 40%, var(--hairline)); }
+
+.indicator[data-state="failed"] .dot { background: var(--error); }
+.indicator[data-state="failed"] { color: var(--error); border-color: color-mix(in srgb, var(--error) 40%, var(--hairline)); }
+
+.indicator[data-state="disconnected"] .dot { background: var(--ink-tertiary); }
+.indicator[data-state="disconnected"] { color: var(--ink-subtle); }
+
+@keyframes pulse-amber {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.4; transform: scale(0.85); }
+}
+@keyframes pulse-red {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}

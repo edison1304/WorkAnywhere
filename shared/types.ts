@@ -227,7 +227,7 @@ export interface IpcApi {
   onTaskLog(cb: (data: { taskId: string; log: LogEntry }) => void): () => void
   onTaskPlan(cb: (data: { taskId: string; plan: Plan }) => void): () => void
   onArtifactNew(cb: (data: { taskId: string; artifact: Artifact }) => void): () => void
-  onConnectionStatus(cb: (data: { key: string; status: 'lost' | 'reconnecting' | 'restored' | 'failed'; attempt?: number; maxRetries?: number; projectIds?: string[] }) => void): () => void
+  onConnectionStatus(cb: (data: { key: string; status: 'lost' | 'reconnecting' | 'restored' | 'failed' | 'healthy'; attempt?: number; maxRetries?: number; projectIds?: string[]; ts?: number }) => void): () => void
 
   // Window management (dual monitor)
   windowDetach(panelId: string, options: DetachOptions): Promise<{ success: boolean; reused?: boolean }>
