@@ -1103,6 +1103,16 @@ ipcMain.handle('data:load-from-server', async () => {
     const trimmed = raw.trim()
     if (!trimmed) return { success: true, data: null }
     const data: import('../../../shared/types').SavedData = JSON.parse(trimmed)
+    // Agent processes don't survive a restart — any task persisted as
+    // running/waiting/queued is stale. Reset to idle so the UI doesn't
+    // show a "running" agent that the AgentService has no record of.
+    if (Array.isArray(data.tasks)) {
+      data.tasks = data.tasks.map(t =>
+        t.status === 'running' || t.status === 'waiting' || t.status === 'queued'
+          ? { ...t, status: 'idle' as const }
+          : t
+      )
+    }
     // Also update local DataStore
     if (data.projects?.length || data.phases?.length || data.tasks?.length) {
       dataStore.replaceAll(data)
