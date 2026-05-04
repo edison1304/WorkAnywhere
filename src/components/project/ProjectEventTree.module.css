@@ -1,0 +1,193 @@
+/* ProjectEventTree — project-wide swimlane view.
+ *
+ * Page chrome (header / empty / scope) mirrors TimelineView so the two
+ * sibling pages (Timeline, Tree) feel coherent. The lane area is the
+ * unique part: each task is a row, with sticky left header and a
+ * horizontal-scrolling EventTreePanel-detailed flow on the right.
+ */
+
+.page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--canvas);
+  color: var(--ink);
+}
+
+.empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: var(--space-xs);
+  background: var(--canvas);
+  color: var(--ink-subtle);
+}
+.emptyTitle {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: -0.2px;
+  color: var(--ink-muted);
+}
+.emptyHint {
+  font-size: 13px;
+  color: var(--ink-tertiary);
+}
+
+/* ─── Header ─── */
+.header {
+  padding: var(--space-lg) var(--space-xl) var(--space-md);
+  border-bottom: 1px solid var(--hairline);
+}
+.title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.4px;
+  color: var(--ink);
+}
+.subtitle {
+  margin-top: 4px;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  font-size: 13px;
+}
+.scopeName {
+  color: var(--ink);
+  font-weight: 500;
+}
+.scopeMeta {
+  color: var(--ink-tertiary);
+  font-size: 12px;
+}
+
+/* ─── Body ─── */
+.body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-md) var(--space-xl) var(--space-xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+}
+
+/* ─── Phase section ─── */
+.phaseSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+.phaseHeader {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  padding-bottom: var(--space-xxs);
+  border-bottom: 1px solid var(--hairline);
+}
+.phaseName {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-subtle);
+}
+.phaseCount {
+  font-size: 11px;
+  color: var(--ink-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Lanes ─── */
+.lanes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.lane {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: var(--space-sm);
+  align-items: stretch;
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  min-height: 64px;
+  overflow: hidden;
+}
+
+/* Left edge accent — status color so a row of lanes reads at a glance */
+.lane[data-status="running"]   { border-left: 2px solid var(--primary); }
+.lane[data-status="waiting"],
+.lane[data-status="review"]    { border-left: 2px solid var(--warning); }
+.lane[data-status="completed"] { border-left: 2px solid var(--success); }
+.lane[data-status="failed"]    { border-left: 2px solid var(--error); }
+
+/* Lane header (sticky-feeling left column) */
+.laneHeader {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-sm);
+  border-right: 1px solid var(--hairline);
+  background: var(--surface-1);
+  min-width: 0;
+}
+.laneHeader:hover {
+  background: var(--surface-2);
+}
+.laneName {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+.laneStatus {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Right column = the per-task event flow.
+ * EventTreePanel[data-variant="detailed"] sets `height: 100%` and its
+ * own padding, so we just give it a constrained box to live in. The
+ * inner list handles horizontal scroll on its own. */
+.laneFlow {
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+}
+.laneFlow > * {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Tighten EventTreePanel's detailed padding for swimlane context — its
+ * default 16/20/24 padding is sized for a full Tree tab. We target via
+ * data attributes (not the hashed CSS-module class) so this still works
+ * across the module boundary. */
+.laneFlow [data-variant="detailed"] {
+  padding: var(--space-xs) var(--space-sm);
+  background: transparent;
+  height: 100%;
+  overflow: visible;
+}
+.laneFlow [data-compact-empty="true"] {
+  padding: var(--space-xs) var(--space-sm);
+  border: none;
+  background: transparent;
+  display: flex;
+  align-items: center;
+}

@@ -101,15 +101,32 @@ function extractEventNodes(task: Task): EventNode[] {
 interface Props {
   task: Task
   variant: 'compact' | 'detailed'
+  /** Hide the panel's own header — used when embedded in ProjectEventTree
+   *  swimlane where each lane already has a task header. */
+  hideHeader?: boolean
+  /** Hide the legend in detailed mode — same swimlane reasoning. */
+  hideLegend?: boolean
+  /** Compact placeholder for the "no events yet" state — shows a single
+   *  short line instead of the title + hint block. */
+  compactEmpty?: boolean
 }
 
-export function EventTreePanel({ task, variant }: Props) {
+export function EventTreePanel({
+  task, variant, hideHeader = false, hideLegend = false, compactEmpty = false,
+}: Props) {
   const nodes = useMemo(
     () => extractEventNodes(task),
     [task.compacted, task.summary, task.id],
   )
 
   if (nodes.length === 0) {
+    if (compactEmpty) {
+      return (
+        <div className={styles.empty} data-variant={variant} data-compact-empty="true">
+          <p className={styles.emptyHint}>사건 없음 — Summarize/Compact 후 누적</p>
+        </div>
+      )
+    }
     return (
       <div className={styles.empty} data-variant={variant}>
         <p className={styles.emptyTitle}>사건 흐름이 아직 없습니다</p>
@@ -122,10 +139,12 @@ export function EventTreePanel({ task, variant }: Props) {
 
   return (
     <div className={styles.panel} data-variant={variant}>
-      <div className={styles.header}>
-        <span className={styles.title}>사건 흐름</span>
-        <span className={styles.count}>{nodes.length}개</span>
-      </div>
+      {!hideHeader && (
+        <div className={styles.header}>
+          <span className={styles.title}>사건 흐름</span>
+          <span className={styles.count}>{nodes.length}개</span>
+        </div>
+      )}
       <ol className={styles.list} data-variant={variant}>
         {nodes.map((node) => (
           <li
@@ -148,7 +167,7 @@ export function EventTreePanel({ task, variant }: Props) {
           </li>
         ))}
       </ol>
-      {variant === 'detailed' && (
+      {variant === 'detailed' && !hideLegend && (
         <div className={styles.legend}>
           <LegendItem status="resolved"   label="해결" />
           <LegendItem status="workaround" label="우회/임시방편" />

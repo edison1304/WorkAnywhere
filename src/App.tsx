@@ -20,7 +20,7 @@ export default function App() {
   const [activePhaseId, setActivePhaseId] = useState<string | null>(null)
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null)
   const [sidebarView, setSidebarView] = useState<SidebarView>('monitor')
-  const [currentPage, setCurrentPage] = useState<'workspace' | 'schedule' | 'timeline'>('workspace')
+  const [currentPage, setCurrentPage] = useState<'workspace' | 'schedule' | 'timeline' | 'tree'>('workspace')
   const [detachedPanels, setDetachedPanels] = useState<Set<string>>(new Set())
   const [showCreateProject, setShowCreateProject] = useState(false)
   const [openFilePath, setOpenFilePath] = useState<string | null>(null)

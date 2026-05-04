@@ -5,9 +5,10 @@ import { StatusRail } from './StatusRail'
 import { MainPanel } from './MainPanel'
 import { SchedulePage } from '../schedule/SchedulePage'
 import { TimelineView } from '../timeline/TimelineView'
+import { ProjectEventTree } from '../project/ProjectEventTree'
 import styles from './CommandCenter.module.css'
 
-export type PageView = 'workspace' | 'schedule' | 'timeline'
+export type PageView = 'workspace' | 'schedule' | 'timeline' | 'tree'
 
 interface Props {
   projects: Project[]
@@ -152,6 +153,12 @@ export function CommandCenter({
             onClick={() => onChangePage('timeline')}
           >
             Timeline
+          </button>
+          <button
+            className={`${styles.pageBtn} ${currentPage === 'tree' ? styles.pageBtnActive : ''}`}
+            onClick={() => onChangePage('tree')}
+          >
+            Tree
           </button>
         </div>
 
@@ -375,6 +382,13 @@ export function CommandCenter({
             tasks={allProjectTasks}
             onSelectTask={(taskId) => { onSelectTask(taskId); onChangePage('workspace') }}
             onSelectPhase={(phaseId) => { onSelectPhase(phaseId) }}
+          />
+        ) : currentPage === 'tree' ? (
+          <ProjectEventTree
+            project={activeProject}
+            phases={allPhases}
+            tasks={allTasks}
+            onSelectTask={(taskId) => { onSelectTask(taskId); onChangePage('workspace') }}
           />
         ) : (
           <>
