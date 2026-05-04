@@ -5,6 +5,7 @@ import { ShellTerminal } from '../terminal/ShellTerminal'
 import { FolderBrowser } from '../project/FolderBrowser'
 import { ArtifactViewer } from '../viewer/ArtifactViewer'
 import { HierarchyView } from '../sessions/HierarchyView'
+import { IntentLockHeader } from './IntentLockHeader'
 import styles from './MainPanel.module.css'
 
 // ─── Session Drift Detection ───
@@ -316,9 +317,6 @@ export function MainPanel({
               </span>
             )}
           </div>
-          {activeTask.purpose && (
-            <span className={styles.taskPurpose}>{activeTask.purpose}</span>
-          )}
           <span className={styles.taskPrompt}>{activeTask.prompt}</span>
           {/* Drift gauge — always visible when task has logs */}
           {activeTask.logs.length > 0 && (
@@ -401,6 +399,9 @@ export function MainPanel({
           )}
         </div>
       </div>
+
+      {/* Intent Lock — 본목적 고정 영역 (§10) */}
+      <IntentLockHeader task={activeTask} />
 
       {/* Summary panel (when available) */}
       {activeTask.summary && (

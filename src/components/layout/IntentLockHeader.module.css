@@ -1,0 +1,82 @@
+/* Intent Lock — 본목적 고정 영역 (work_anywhere_context_summary_ui.md §10).
+ * Acts as the "north star": purpose + out-of-scope + success criteria.
+ * Always visible while a task is active; user references it before
+ * deciding whether to keep going or intervene. */
+
+.band {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--hairline);
+  border-left: 2px solid var(--primary);
+}
+
+.cell {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 10px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-right: 1px solid var(--hairline);
+}
+.cell:last-child { border-right: none; }
+.cellPurpose { flex: 2 1 0; }
+
+.label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-subtle);
+}
+
+.dot {
+  width: 6px; height: 6px;
+  border-radius: 999px;
+}
+.dot[data-tone="purpose"] { background: var(--primary); }
+.dot[data-tone="must-not"] { background: var(--warning); }
+.dot[data-tone="success"]  { background: var(--success); }
+
+.value {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink);
+  word-break: break-word;
+}
+
+.valueMuted {
+  font-size: 12px;
+  color: var(--ink-tertiary);
+  font-style: italic;
+}
+
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-xs);
+  font-size: 11px;
+  background: rgba(216, 160, 80, 0.10);
+  color: var(--warning);
+  border: 1px solid rgba(216, 160, 80, 0.25);
+  line-height: 1.4;
+}
+
+@media (max-width: 900px) {
+  .band { flex-direction: column; }
+  .cell { border-right: none; border-bottom: 1px solid var(--hairline); }
+  .cell:last-child { border-bottom: none; }
+}

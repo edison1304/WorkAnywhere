@@ -86,6 +86,14 @@ export interface PhaseSummary {
 
 export type PhaseStatus = 'active' | 'paused' | 'completed'
 
+// ─── Intent Lock (작업의 북극성) ───
+// 사용자가 작업의 범위를 의도적으로 좁혀 AI가 산으로 가는 것을 막는다.
+// purpose가 "무엇을 할 것인가"라면, intentLock은 "무엇을 하지 말 것인가" + "끝났는지 어떻게 알 것인가".
+export interface IntentLock {
+  mustNotTouch?: string[]      // 건드리면 안 되는 것 (예: "전체 인증 리팩토링", "OAuth 확장")
+  successCriteria?: string     // 성공 기준 (예: "로컬 환경에서 로그인 성공/실패 흐름 검증")
+}
+
 // ─── 소분류: Task ───
 export interface Task {
   id: string
@@ -93,6 +101,7 @@ export interface Task {
   projectId: string
   name: string
   purpose: string             // 이 태스크의 본래 목적/목표
+  intentLock?: IntentLock     // 범위 잠금 — 본목적 고정 영역(Intent Lock)에서 표시
   order: number              // 같은 phase 내 정렬 순서
   status: TaskStatus
   sessionId?: string
