@@ -433,6 +433,71 @@
   letter-spacing: 0.3px;
 }
 
+/* ─── Project picker dropdown ─── */
+.projectPickerWrapper {
+  position: relative;
+}
+.projectPickerTrigger {
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+.projectPickerTrigger:hover {
+  border-color: var(--accent);
+}
+.projectPickerChevron {
+  font-size: 9px;
+  color: var(--text-muted);
+  margin-left: auto;
+  flex-shrink: 0;
+  transition: color 0.15s;
+}
+.projectPickerTrigger:hover .projectPickerChevron {
+  color: var(--accent);
+}
+.projectDropdown {
+  position: absolute;
+  top: calc(100% - 4px);
+  left: 0;
+  right: 0;
+  z-index: 1500;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  max-height: 280px;
+  overflow-y: auto;
+}
+.projectDropdownItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-primary);
+  transition: background 0.1s;
+}
+.projectDropdownItem:hover {
+  background: var(--bg-hover);
+}
+.projectDropdownItemActive {
+  background: var(--bg-tertiary);
+}
+.projectDropdownCheck {
+  margin-left: auto;
+  color: var(--accent);
+  font-size: 11px;
+}
+.projectDropdownEmpty {
+  padding: 10px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 .managePhase {
   margin-bottom: 4px;
 }

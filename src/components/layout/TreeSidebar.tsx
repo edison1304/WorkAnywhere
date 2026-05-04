@@ -711,16 +711,96 @@ function useReorderDrag<T extends { id: string }>(
   return { dragId, dragOverId, dragOverHalf, handleDragStart, handleDragOver, handleDrop, handleDragEnd }
 }
 
+// ─── Project picker (dropdown) for Manage view ───
+function ProjectPicker({
+  projects, activeProjectId, projectHasRunning, onSelect, onDelete, onContextMenu,
+}: {
+  projects: Project[]
+  activeProjectId: string | null
+  projectHasRunning: boolean
+  onSelect: (id: string) => void
+  onDelete?: (id: string, name: string) => void
+  onContextMenu?: (e: React.MouseEvent, id: string, name: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const activeProject = activeProjectId ? projects.find(p => p.id === activeProjectId) : null
+
+  useEffect(() => {
+    if (!open) return
+    const handler = () => setOpen(false)
+    window.addEventListener('click', handler)
+    return () => window.removeEventListener('click', handler)
+  }, [open])
+
+  const connIcon = (t: string) => t === 'ssh' ? 'S' : t === 'remote' ? 'R' : 'L'
+
+  return (
+    <div className={styles.projectPickerWrapper} onClick={e => e.stopPropagation()}>
+      <div
+        className={`${styles.manageProjectHeader} ${styles.active} ${styles.projectPickerTrigger}`}
+        onClick={() => setOpen(v => !v)}
+        onContextMenu={activeProject && onContextMenu ? e => onContextMenu(e, activeProject.id, activeProject.name) : undefined}
+        title="클릭해서 프로젝트 전환 / 우클릭으로 삭제"
+        role="button"
+        tabIndex={0}
+      >
+        {activeProject ? (
+          <>
+            <span className={styles.nodeIcon}>{connIcon(activeProject.connection.type)}</span>
+            <span className={styles.nodeName}>{activeProject.name}</span>
+          </>
+        ) : (
+          <span className={styles.nodeName} style={{ color: 'var(--text-muted)' }}>Select project…</span>
+        )}
+        <span className={styles.projectPickerChevron}>{open ? '▴' : '▾'}</span>
+        {activeProject && onDelete && !projectHasRunning && (
+          <span
+            className={styles.removeBtn}
+            onClick={e => {
+              e.stopPropagation()
+              if (confirm(`Delete project "${activeProject.name}" and all its phases and tasks?`)) {
+                onDelete(activeProject.id, activeProject.name)
+              }
+            }}
+            title="Remove project"
+            role="button"
+          >×</span>
+        )}
+      </div>
+      {open && (
+        <div className={styles.projectDropdown}>
+          {projects.length === 0 ? (
+            <div className={styles.projectDropdownEmpty}>No projects</div>
+          ) : projects.map(p => (
+            <div
+              key={p.id}
+              className={`${styles.projectDropdownItem} ${p.id === activeProjectId ? styles.projectDropdownItemActive : ''}`}
+              onClick={() => { onSelect(p.id); setOpen(false) }}
+              role="button"
+              tabIndex={0}
+            >
+              <span className={styles.nodeIcon}>{connIcon(p.connection.type)}</span>
+              <span className={styles.nodeName}>{p.name}</span>
+              {p.id === activeProjectId && <span className={styles.projectDropdownCheck}>✓</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Manage view ───
 function ManageView({
   projects, phases, allTasks, activeProjectId, activePhaseId, activeTaskId,
-  collapsed, toggle, onSelectPhase, onSelectTask, onTaskContext, onPhaseContext, onProjectContext, onPhaseDrop, dragOverPhase,
+  collapsed, toggle, onSelectProject, onSelectPhase, onSelectTask, onTaskContext, onPhaseContext, onProjectContext, onPhaseDrop, dragOverPhase,
   onCreatePhase, onCreateTask, onReorderTasks, onReorderPhases,
   onDeleteTask, onDeletePhase, onDeleteProject
 }: {
   projects: Project[]; phases: Phase[]; allTasks: Task[]
   activeProjectId: string | null; activePhaseId: string | null; activeTaskId: string | null
   collapsed: Record<string, boolean>; toggle: (k: string) => void
+  onSelectProject: (id: string) => void
   onSelectPhase: (id: string) => void; onSelectTask: (id: string | null) => void
   onTaskContext?: (e: React.MouseEvent, taskId: string) => void
   onPhaseContext?: (e: React.MouseEvent, phaseId: string, name: string) => void
@@ -736,41 +816,29 @@ function ManageView({
   onDeleteProject?: (id: string) => void
 }) {
   const projectPhases = phases.filter(ph => ph.projectId === activeProjectId).sort((a, b) => a.order - b.order)
-  if (!activeProjectId) return <div className={styles.emptyHint}>Select a project</div>
-  const activeProject = projects.find(p => p.id === activeProjectId)
-  const projectHasRunning = allTasks.some(t => t.projectId === activeProjectId && t.status === 'running')
+  const projectHasRunning = activeProjectId
+    ? allTasks.some(t => t.projectId === activeProjectId && t.status === 'running')
+    : false
 
   const phaseDrag = useReorderDrag(
     projectPhases,
-    (orderedIds) => onReorderPhases?.(activeProjectId!, orderedIds),
+    (orderedIds) => { if (activeProjectId) onReorderPhases?.(activeProjectId, orderedIds) },
     'phase-id'
   )
 
   return (
     <>
-      {/* Active project header — right-click to delete */}
-      {activeProject && (
-        <div
-          className={`${styles.manageProjectHeader} ${styles.active}`}
-          onContextMenu={e => onProjectContext?.(e, activeProject.id, activeProject.name)}
-          title="우클릭으로 프로젝트 삭제"
-        >
-          <span className={styles.nodeIcon}>{activeProject.connection.type === 'ssh' ? 'S' : activeProject.connection.type === 'remote' ? 'R' : 'L'}</span>
-          <span className={styles.nodeName}>{activeProject.name}</span>
-          {onDeleteProject && !projectHasRunning && (
-            <span
-              className={styles.removeBtn}
-              onClick={e => {
-                e.stopPropagation()
-                if (confirm(`Delete project "${activeProject.name}" and all its phases and tasks?`)) {
-                  onDeleteProject(activeProject.id)
-                }
-              }}
-              title="Remove project"
-              role="button"
-            >×</span>
-          )}
-        </div>
+      {/* Project picker — always visible so user can switch projects */}
+      <ProjectPicker
+        projects={projects}
+        activeProjectId={activeProjectId}
+        projectHasRunning={projectHasRunning}
+        onSelect={onSelectProject}
+        onDelete={onDeleteProject ? (id) => onDeleteProject(id) : undefined}
+        onContextMenu={onProjectContext}
+      />
+      {!activeProjectId && (
+        <div className={styles.emptyHint}>Select a project above</div>
       )}
       {/* Top drop zone — allows dragging a phase to the very first position */}
       {phaseDrag.dragId && (
@@ -785,13 +853,13 @@ function ManageView({
           onDrop={e => {
             e.preventDefault()
             const sourceId = e.dataTransfer.getData('phase-id')
-            if (sourceId && projectPhases.length > 0 && sourceId !== projectPhases[0].id) {
+            if (sourceId && activeProjectId && projectPhases.length > 0 && sourceId !== projectPhases[0].id) {
               const ids = projectPhases.map(p => p.id)
               const fromIdx = ids.indexOf(sourceId)
               if (fromIdx > 0) {
                 ids.splice(fromIdx, 1)
                 ids.unshift(sourceId)
-                onReorderPhases?.(activeProjectId!, ids)
+                onReorderPhases?.(activeProjectId, ids)
               }
             }
           }}
@@ -799,7 +867,7 @@ function ManageView({
           Drop here to move to top
         </div>
       )}
-      {projectPhases.map(phase => {
+      {activeProjectId && projectPhases.map(phase => {
         const phaseKey = `mng-phase-${phase.id}`
         const isCollapsed = collapsed[phaseKey]
         const phaseTasks = allTasks.filter(t => t.phaseId === phase.id).sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
@@ -874,7 +942,7 @@ function ManageView({
           </div>
         )
       })}
-      <InlineAddPhase onAdd={onCreatePhase} />
+      {activeProjectId && <InlineAddPhase onAdd={onCreatePhase} />}
     </>
   )
 }
@@ -1147,6 +1215,7 @@ export function TreeSidebar(props: Props) {
               activeProjectId={props.activeProjectId} activePhaseId={props.activePhaseId}
               activeTaskId={props.activeTaskId}
               collapsed={collapsed} toggle={toggle}
+              onSelectProject={props.onSelectProject}
               onSelectPhase={props.onSelectPhase} onSelectTask={props.onSelectTask}
               onTaskContext={handleTaskContext} onPhaseContext={handlePhaseContext}
               onProjectContext={handleProjectContext}
