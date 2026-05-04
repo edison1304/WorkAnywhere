@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import type { Task } from '../../../shared/types'
 import styles from './EventCard.module.css'
 
@@ -152,7 +152,7 @@ export function EventCard({ task, onSummarize, onFillChat }: Props) {
           <Section label="대응"           tone="neutral"   value={summary.response} />
           <Section label="이유"           tone="neutral"   value={summary.reason} />
           <Section label="남은 위험"      tone="warning"   value={summary.residualRisk} />
-          <Section label="사람 개입 필요" tone="attention" value={summary.humanNeeded} />
+          <HumanNeededSection task={task} value={summary.humanNeeded} onFillChat={onFillChat} />
 
           {summary.nextPrompt && (
             <div className={styles.nextPromptBlock}>
@@ -203,6 +203,135 @@ function Section({
     <div className={styles.section} data-tone={tone}>
       <span className={styles.sectionLabel}>{label}</span>
       <p className={styles.sectionValue}>{value}</p>
+    </div>
+  )
+}
+
+// ─── HumanNeededSection ─────────────────────────────────────────────
+// work_anywhere_context_summary_ui.md §15.5 (Human-needed Signal) +
+// §15.6 (Intervention Prompt). Renders the same row as Section, but
+// adds an inline form: user types the missing fact, and the helper
+// wraps it in a re-anchoring prompt (purpose + out-of-scope + the new
+// fact) before handing it to ChatInput via the existing onFillChat.
+//
+// Inline (not modal) — matches the click-to-edit pattern from
+// IntentLockHeader and avoids adding another dialog component.
+function HumanNeededSection({
+  task,
+  value,
+  onFillChat,
+}: {
+  task: Task
+  value: string | undefined
+  onFillChat?: (text: string) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const taRef = useRef<HTMLTextAreaElement | null>(null)
+
+  useEffect(() => {
+    if (editing && taRef.current) {
+      taRef.current.focus()
+    }
+  }, [editing])
+
+  if (!value || !value.trim()) return null
+
+  const formatIntervention = (answer: string) => {
+    const lines: string[] = []
+    lines.push('사용자가 직접 확인한 정보를 전달한다.')
+    lines.push('')
+    lines.push(`요청된 정보: ${value.trim()}`)
+    lines.push(`내가 제공한 답: ${answer.trim()}`)
+    lines.push('')
+    lines.push('위 답을 권위 있는 사실로 받아들이고, 이 부분에 대한 추측을 멈춰라.')
+    if (task.purpose?.trim()) {
+      lines.push(`본목적: ${task.purpose.trim()}`)
+    }
+    const mustNot = task.intentLock?.mustNotTouch?.filter(Boolean) ?? []
+    if (mustNot.length > 0) {
+      lines.push(`다음은 손대지 말 것: ${mustNot.join(' / ')}`)
+    }
+    if (task.intentLock?.successCriteria?.trim()) {
+      lines.push(`성공 기준: ${task.intentLock.successCriteria.trim()}`)
+    }
+    return lines.join('\n')
+  }
+
+  const submit = () => {
+    const answer = draft.trim()
+    if (!answer || !onFillChat) return
+    onFillChat(formatIntervention(answer))
+    setDraft('')
+    setEditing(false)
+  }
+
+  const cancel = () => {
+    setDraft('')
+    setEditing(false)
+  }
+
+  return (
+    <div className={styles.section} data-tone="attention">
+      <span className={styles.sectionLabel}>사람 개입 필요</span>
+      <div className={styles.humanNeededBody}>
+        <p className={styles.sectionValue}>{value}</p>
+
+        {!editing && onFillChat && (
+          <button
+            type="button"
+            className={styles.interveneBtn}
+            onClick={() => setEditing(true)}
+            title="이 정보를 직접 입력하면, 추측을 멈추라는 형태로 채팅에 자동 정렬됩니다 (§15.6)"
+          >
+            직접 입력해서 보내기 →
+          </button>
+        )}
+
+        {editing && (
+          <div className={styles.interveneForm}>
+            <textarea
+              ref={taRef}
+              className={styles.interveneInput}
+              value={draft}
+              placeholder="요청된 정보에 대한 답을 입력하세요. (예: 실제 API 응답 JSON, 토큰 저장 정책)"
+              onChange={e => setDraft(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault()
+                  submit()
+                } else if (e.key === 'Escape') {
+                  e.preventDefault()
+                  cancel()
+                }
+              }}
+              rows={4}
+            />
+            <div className={styles.interveneActions}>
+              <span className={styles.interveneHint}>
+                Cmd/Ctrl+Enter 로 보내기 · Esc 로 취소
+              </span>
+              <div className={styles.interveneButtons}>
+                <button
+                  type="button"
+                  className={styles.interveneCancel}
+                  onClick={cancel}
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  className={styles.interveneSubmit}
+                  onClick={submit}
+                  disabled={!draft.trim()}
+                >
+                  채팅에 보내기
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

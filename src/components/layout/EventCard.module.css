@@ -303,6 +303,114 @@
   word-break: break-word;
 }
 
+/* ─── HumanNeeded intervention helper (§15.5 + §15.6) ─── */
+.humanNeededBody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.interveneBtn {
+  appearance: none;
+  align-self: flex-start;
+  background: transparent;
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-sm);
+  padding: 4px 12px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--primary);
+  cursor: pointer;
+  font-family: var(--font-text);
+}
+.interveneBtn:hover {
+  background: rgba(94, 106, 210, 0.10);
+}
+
+.interveneForm {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-sm);
+  background: rgba(94, 106, 210, 0.04);
+}
+
+.interveneInput {
+  appearance: none;
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-xs);
+  padding: 8px 10px;
+  font-family: var(--font-text);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink);
+  resize: vertical;
+  min-height: 72px;
+}
+.interveneInput:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(94, 106, 210, 0.18);
+}
+.interveneInput::placeholder { color: var(--ink-tertiary); }
+
+.interveneActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.interveneHint {
+  font-size: 10px;
+  color: var(--ink-tertiary);
+  font-family: var(--font-mono);
+}
+
+.interveneButtons {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.interveneCancel {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-xs);
+  padding: 4px 12px;
+  font-size: 11px;
+  color: var(--ink-subtle);
+  cursor: pointer;
+  font-family: var(--font-text);
+}
+.interveneCancel:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+  border-color: var(--hairline-strong);
+}
+
+.interveneSubmit {
+  appearance: none;
+  background: var(--primary);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-xs);
+  padding: 4px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--on-primary);
+  cursor: pointer;
+  font-family: var(--font-text);
+}
+.interveneSubmit:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
+.interveneSubmit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 @media (max-width: 700px) {
   .section {
     grid-template-columns: 1fr;
