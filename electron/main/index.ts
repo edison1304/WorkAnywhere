@@ -12,6 +12,22 @@ import { PlanSyncService } from './services/PlanSyncService'
 let mainWindow: BrowserWindow | null = null
 const detachedWindows = new Map<string, BrowserWindow>()
 
+// Tasks that entered `waiting` (need user input) and the user hasn't seen yet.
+// Cleared when the main window gains focus, or when status moves off waiting.
+const unseenWaitingTasks = new Set<string>()
+
+function refreshAttention(): void {
+  const count = unseenWaitingTasks.size
+  try { app.setBadgeCount(count) } catch { /* unsupported on some platforms */ }
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (count > 0 && !mainWindow.isFocused()) {
+      mainWindow.flashFrame(true)
+    } else {
+      mainWindow.flashFrame(false)
+    }
+  }
+}
+
 function getRendererURL(hash: string = ''): string {
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     return `${process.env['ELECTRON_RENDERER_URL']}${hash ? `#${hash}` : ''}`
@@ -50,6 +66,13 @@ function createWindow(): void {
   mainWindow.on('closed', () => {
     mainWindow = null
     // DON'T close detached windows when main closes
+  })
+
+  mainWindow.on('focus', () => {
+    if (unseenWaitingTasks.size > 0) {
+      unseenWaitingTasks.clear()
+    }
+    refreshAttention()
   })
 }
 
@@ -351,6 +374,36 @@ function setupAgentListeners(agent: AgentService): void {
           }
         })
         n.show()
+      }
+    }
+
+    // ─── waiting (사용자 입력 대기) — badge + flash + notification ───
+    if (data.status === 'waiting') {
+      const focused = mainWindow?.isFocused() ?? false
+      if (!focused) {
+        unseenWaitingTasks.add(data.taskId)
+        refreshAttention()
+        if (Notification.isSupported()) {
+          const task = dataStore?.taskGet(data.taskId)
+          const n = new Notification({
+            title: '⌛ 입력 대기',
+            body: task?.name ? `${task.name} — 사용자 입력이 필요합니다` : `Task ${data.taskId} — 사용자 입력이 필요합니다`,
+            urgency: 'normal',
+          })
+          n.on('click', () => {
+            if (mainWindow) {
+              if (mainWindow.isMinimized()) mainWindow.restore()
+              mainWindow.show()
+              mainWindow.focus()
+            }
+          })
+          n.show()
+        }
+      }
+    } else {
+      // Any non-waiting status → this task is no longer pending user input
+      if (unseenWaitingTasks.delete(data.taskId)) {
+        refreshAttention()
       }
     }
   })
