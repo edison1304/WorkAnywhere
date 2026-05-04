@@ -113,6 +113,15 @@ export function MainPanel({
 }: Props) {
   const [activeTab, setActiveTab] = useState<'context' | 'log' | 'terminal' | 'artifacts'>('terminal')
 
+  // Chat prefill — when EventCard's "채팅에 채우기" is clicked, this carries the
+  // text to ChatInput. Key changes per request so re-filling the same prompt
+  // text still triggers a useEffect re-run inside ChatInput.
+  const [chatPrefill, setChatPrefill] = useState<{ text: string; key: number } | null>(null)
+  const handleFillChat = (text: string) => {
+    setChatPrefill({ text, key: Date.now() })
+    setActiveTab('log')
+  }
+
   // All hooks MUST be before any conditional return (React hooks rule)
   const drift = useMemo(
     () => activeTask ? calcDrift(activeTask) : { level: 'ok' as const, score: 0, reason: '', elapsedMin: 0, logCount: 0, toolCalls: 0, estimatedTokensK: 0 },
@@ -487,7 +496,7 @@ export function MainPanel({
       {/* Content */}
       <div className={styles.content}>
         <div style={{ display: activeTab === 'context' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
-          <EventCard task={activeTask} onSummarize={onSummarize} />
+          <EventCard task={activeTask} onSummarize={onSummarize} onFillChat={handleFillChat} />
         </div>
         <div style={{ display: activeTab === 'log' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
           <ChatView
@@ -509,6 +518,7 @@ export function MainPanel({
         onSend={(msg) => onSendMessage?.(activeTask.id, msg)}
         disabled={false}
         workspacePath={workspacePath}
+        prefill={chatPrefill}
       />
     </div>
   )
@@ -655,13 +665,33 @@ function ChatView({ task, pendingPermission, onRespondPermission }: {
 }
 
 // ─── Chat Input ───
-function ChatInput({ onSend, disabled, workspacePath }: {
-  onSend: (msg: string) => void; disabled: boolean; workspacePath?: string
+function ChatInput({ onSend, disabled, workspacePath, prefill }: {
+  onSend: (msg: string) => void
+  disabled: boolean
+  workspacePath?: string
+  /** Prefill the input. `key` changes per request so repeating the same
+   *  text still re-fires this effect. Replaces empty drafts silently;
+   *  prompts a confirm before clobbering a non-empty draft. */
+  prefill?: { text: string; key: number } | null
 }) {
   const [message, setMessage] = useState('')
   const [uploading, setUploading] = useState(false)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Apply prefill — guarded so we don't lose a draft mid-typing without asking.
+  useEffect(() => {
+    if (!prefill) return
+    setMessage(prev => {
+      if (prev.trim() === '' || prev.trim() === prefill.text.trim()) {
+        return prefill.text
+      }
+      const ok = window.confirm('현재 입력 중인 내용이 있습니다. 다음 지시로 덮어쓸까요?')
+      return ok ? prefill.text : prev
+    })
+    // Defer focus past the tab switch in MainPanel so caret lands correctly.
+    setTimeout(() => inputRef.current?.focus(), 50)
+  }, [prefill?.key])
 
   const handleSubmit = () => {
     if (disabled) return

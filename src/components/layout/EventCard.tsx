@@ -6,6 +6,9 @@ interface Props {
   task: Task
   /** Triggers task:summarize IPC. Used by Generate / Refresh buttons. */
   onSummarize?: (taskId: string) => void
+  /** Fills the ChatInput with the given text and switches to the Chat tab.
+   *  Defined in MainPanel; lets the user review before sending. */
+  onFillChat?: (text: string) => void
 }
 
 /**
@@ -23,7 +26,7 @@ interface Props {
  * residualRisk and humanNeeded use warning tone (§14.5 — emphasize
  * judgment points: 임시방편, 위험, 사람 개입 필요).
  */
-export function EventCard({ task, onSummarize }: Props) {
+export function EventCard({ task, onSummarize, onFillChat }: Props) {
   const summary = task.summary
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle')
 
@@ -125,14 +128,26 @@ export function EventCard({ task, onSummarize }: Props) {
             <div className={styles.nextPromptBlock}>
               <div className={styles.nextPromptHeader}>
                 <span className={styles.nextPromptLabel}>다음 지시</span>
-                <button
-                  type="button"
-                  className={styles.copyBtn}
-                  onClick={copyNextPrompt}
-                  data-state={copyState}
-                >
-                  {copyState === 'copied' ? '복사됨' : '복사'}
-                </button>
+                <div className={styles.nextPromptActions}>
+                  {onFillChat && (
+                    <button
+                      type="button"
+                      className={styles.fillBtn}
+                      onClick={() => onFillChat(summary.nextPrompt!)}
+                      title="이 프롬프트를 채팅 입력칸에 채우고 검토 후 전송"
+                    >
+                      채팅에 채우기
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className={styles.copyBtn}
+                    onClick={copyNextPrompt}
+                    data-state={copyState}
+                  >
+                    {copyState === 'copied' ? '복사됨' : '복사'}
+                  </button>
+                </div>
               </div>
               <pre className={styles.nextPromptBody}>{summary.nextPrompt}</pre>
             </div>

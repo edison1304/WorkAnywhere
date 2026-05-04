@@ -183,6 +183,26 @@
   color: var(--primary);
 }
 
+.nextPromptActions {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.fillBtn {
+  appearance: none;
+  background: var(--primary);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-xs);
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--on-primary);
+  cursor: pointer;
+  font-family: var(--font-text);
+}
+.fillBtn:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
+
 .copyBtn {
   appearance: none;
   background: transparent;
