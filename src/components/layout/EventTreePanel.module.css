@@ -1,0 +1,224 @@
+/* EventTreePanel — work_anywhere_context_summary_ui.md §11.
+ *
+ * Two visual modes:
+ *   compact  → horizontal flow, chip-like, tooltip for detail
+ *   detailed → vertical list, detail inline, legend at bottom
+ *
+ * Status palette mirrors the rest of the EventCard family so the user
+ * doesn't relearn colors:
+ *   resolved   = success (green)
+ *   workaround = warning (amber)
+ *   blocked    = error (red)
+ *   live       = primary (lavender) — current event
+ */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+}
+.panel[data-variant="detailed"] {
+  background: var(--canvas);
+  border: none;
+  padding: 16px 20px 24px;
+  height: 100%;
+  overflow: auto;
+}
+
+/* ─── Header ─── */
+.header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-tertiary);
+}
+.count {
+  font-size: 11px;
+  color: var(--ink-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── List ─── */
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 8px;
+}
+.list[data-variant="compact"] {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.list[data-variant="detailed"] {
+  flex-direction: column;
+  gap: 0;
+}
+
+/* ─── Node ─── */
+.node {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.node[data-variant="compact"] {
+  padding: 4px 10px 4px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: var(--canvas);
+  cursor: help;
+  max-width: 220px;
+}
+.node[data-variant="compact"]:hover {
+  border-color: var(--hairline-strong);
+  background: var(--surface-2);
+}
+.node[data-variant="detailed"] {
+  align-items: flex-start;
+  padding: 12px 0 12px 14px;
+  border-left: 2px solid var(--hairline);
+  margin-left: 6px;
+}
+.node[data-variant="detailed"][data-status="resolved"]   { border-left-color: var(--success); }
+.node[data-variant="detailed"][data-status="workaround"] { border-left-color: var(--warning); }
+.node[data-variant="detailed"][data-status="blocked"]    { border-left-color: var(--error);   }
+.node[data-variant="detailed"][data-status="live"]       { border-left-color: var(--primary); background: rgba(94, 106, 210, 0.04); }
+
+/* ─── Status dot ─── */
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--hairline-strong);
+  box-shadow: 0 0 0 2px var(--canvas);
+}
+.node[data-status="resolved"]   .dot,
+.dot[data-status="resolved"]    { background: var(--success); }
+.node[data-status="workaround"] .dot,
+.dot[data-status="workaround"]  { background: var(--warning); }
+.node[data-status="blocked"]    .dot,
+.dot[data-status="blocked"]     { background: var(--error); }
+.node[data-status="live"]       .dot,
+.dot[data-status="live"]        {
+  background: var(--primary);
+  animation: live-pulse 1.6s ease-in-out infinite;
+}
+@keyframes live-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px var(--canvas), 0 0 0 4px rgba(94, 106, 210, 0.18); }
+  50%      { box-shadow: 0 0 0 2px var(--canvas), 0 0 0 6px rgba(94, 106, 210, 0.30); }
+}
+
+/* ─── Body (title + detail + ts) ─── */
+.body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+.node[data-variant="compact"] .body {
+  flex-direction: row;
+  align-items: center;
+  gap: 0;
+}
+
+.nodeTitle {
+  font-size: 12px;
+  color: var(--ink);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.node[data-variant="detailed"] .nodeTitle {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: normal;
+}
+.node[data-variant="detailed"][data-status="live"] .nodeTitle { color: var(--primary); }
+.node[data-variant="detailed"][data-status="blocked"] .nodeTitle { color: var(--error); }
+
+.nodeDetail {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ink-subtle);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.nodeTimestamp {
+  font-size: 10px;
+  color: var(--ink-tertiary);
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
+}
+
+/* ─── Connector (compact only) — pseudo-element BETWEEN chips,
+   not inside them, so the line sits in the gap visually. */
+.node[data-variant="compact"]:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  right: -8px;
+  top: 50%;
+  width: 8px;
+  height: 1px;
+  background: var(--hairline);
+  pointer-events: none;
+}
+
+/* ─── Empty state ─── */
+.empty {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px;
+  background: var(--surface-1);
+  border: 1px dashed var(--hairline);
+  border-radius: var(--radius-sm);
+}
+.empty[data-variant="detailed"] {
+  margin: 16px 20px;
+  padding: 24px;
+}
+.emptyTitle {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink);
+  font-weight: 500;
+}
+.emptyHint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-subtle);
+}
+
+/* ─── Legend (detailed only) ─── */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 12px 14px;
+  margin-top: 16px;
+  border-top: 1px solid var(--hairline);
+  font-size: 11px;
+  color: var(--ink-subtle);
+}
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}

@@ -7,6 +7,7 @@ import { ArtifactViewer } from '../viewer/ArtifactViewer'
 import { HierarchyView } from '../sessions/HierarchyView'
 import { IntentLockHeader } from './IntentLockHeader'
 import { EventCard } from './EventCard'
+import { EventTreePanel } from './EventTreePanel'
 import styles from './MainPanel.module.css'
 
 // ─── Session Drift Detection ───
@@ -111,7 +112,7 @@ export function MainPanel({
   pendingPermission, onRespondPermission,
   onUpdateTask,
 }: Props) {
-  const [activeTab, setActiveTab] = useState<'context' | 'log' | 'terminal' | 'artifacts'>('terminal')
+  const [activeTab, setActiveTab] = useState<'context' | 'tree' | 'log' | 'terminal' | 'artifacts'>('terminal')
 
   // Chat prefill — when EventCard's "채팅에 채우기" is clicked, this carries the
   // text to ChatInput. Key changes per request so re-filling the same prompt
@@ -485,6 +486,13 @@ export function MainPanel({
           )}
         </button>
         <button
+          className={`${styles.tab} ${activeTab === 'tree' ? styles.tabActive : ''}`}
+          onClick={() => setActiveTab('tree')}
+          title="이 task 의 사건 흐름 트리 (work_anywhere_context_summary_ui.md §11)"
+        >
+          Tree
+        </button>
+        <button
           className={`${styles.tab} ${activeTab === 'log' ? styles.tabActive : ''}`}
           onClick={() => setActiveTab('log')}
         >
@@ -511,7 +519,14 @@ export function MainPanel({
       {/* Content */}
       <div className={styles.content}>
         <div style={{ display: activeTab === 'context' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
+          {/* §14.4 — 트리(전체) + 카드(현재) 동시 표시. compact 트리는 카드 위. */}
+          <div className={styles.contextTreeSlot}>
+            <EventTreePanel task={activeTask} variant="compact" />
+          </div>
           <EventCard task={activeTask} onSummarize={onSummarize} onFillChat={handleFillChat} />
+        </div>
+        <div style={{ display: activeTab === 'tree' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
+          <EventTreePanel task={activeTask} variant="detailed" />
         </div>
         <div style={{ display: activeTab === 'log' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
           <ChatView

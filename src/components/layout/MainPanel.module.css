@@ -357,6 +357,13 @@
   background: var(--bg-primary);
 }
 
+/* Slot for the compact event tree above the EventCard inside the Context tab.
+   Keeps the tree from sticking to the card and gives it a clear gutter. */
+.contextTreeSlot {
+  padding: 16px 20px 0;
+  background: var(--canvas);
+}
+
 .emptyContent {
   display: flex;
   align-items: center;
