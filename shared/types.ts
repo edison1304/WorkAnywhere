@@ -225,12 +225,35 @@ export interface ErrorItem {
 }
 
 // ─── Task Summary (Claude API 기반 요약) ───
+//
+// 두 종류의 필드가 공존한다.
+//
+//   1) "체크리스트적" 필드 (currentStep / completedSteps / nextSteps / issues / progress)
+//      — 시간순 진행 상태. 기존 InsightPanel / summaryPanel 가 사용.
+//
+//   2) "판단 흐름적" 필드 (problem / cause / response / reason / residualRisk
+//      / humanNeeded / nextPrompt)
+//      — work_anywhere_context_summary_ui.md §5/§12 의 사건 카드 구조.
+//      EventCard / Auto Prompt Panel 이 사용. 모두 optional.
+//
+// 같은 요약 1회 호출에서 둘 다 채워진다. 점진 마이그레이션 후 (1) 제거 예정.
 export interface TaskSummary {
+  // ─── (1) Checklist-shaped (legacy, required) ───
   currentStep: string         // 현재 진행 중인 단계
   completedSteps: string[]    // 완료된 단계들
   nextSteps: string[]         // 예상 다음 단계
   issues: string[]            // 발견된 문제/에러
   progress: string            // 전체 진행 요약 (한 줄)
+
+  // ─── (2) Event-shaped (new, optional) ───
+  problem?: string            // 문제 — 막히거나 우회한 것
+  cause?: string              // 원인 판단 — AI가 본 원인
+  response?: string           // 대응 — 무엇을 했는지
+  reason?: string             // 이유 — 왜 그 대응을 택했는지
+  residualRisk?: string       // 남은 위험 — 임시방편이거나 미해결인 부분
+  humanNeeded?: string        // 사람 개입 필요 — 사람이 한 번 봐주면 효율 폭증할 지점
+  nextPrompt?: string         // 다음 프롬프트 — AI에게 바로 줄 수 있는 고품질 지시문
+
   updatedAt: string
 }
 

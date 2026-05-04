@@ -572,24 +572,54 @@ ipcMain.handle('task:summarize', async (_event, taskId: string) => {
       ? '\nArtifacts: ' + task.artifacts.map(a => `${a.action} ${a.filePath}`).join(', ')
       : ''
 
-    const prompt = `You are a task progress analyzer. Given the following agent execution logs for a task, produce a JSON summary.
+    // Intent Lock context — gives the model the user's locked-in scope so the
+    // generated nextPrompt and reason fields respect what the user already
+    // ruled in / out. work_anywhere_context_summary_ui.md §10 + §15.1.
+    const purposeLine = task.purpose ? `\nTask purpose (north star): ${task.purpose}` : ''
+    const mustNot = task.intentLock?.mustNotTouch?.filter(Boolean) ?? []
+    const mustNotLine = mustNot.length > 0
+      ? `\nOut of scope (the user has locked these OFF; do NOT propose actions or next steps that touch them): ${mustNot.join(' / ')}`
+      : ''
+    const successLine = task.intentLock?.successCriteria
+      ? `\nSuccess criteria (the task is "done" only when this holds): ${task.intentLock.successCriteria}`
+      : ''
+
+    const prompt = `You are a task progress analyzer. You produce TWO views of the same session in one JSON object:
+  (A) a checklist-shaped progress view (currentStep/completedSteps/nextSteps/issues/progress)
+  (B) an event-shaped judgment trace (problem/cause/response/reason/residualRisk/humanNeeded/nextPrompt)
+
+(B) is for a UI that helps the user re-take the steering wheel after stepping away. It must capture WHY decisions were made, not just WHAT happened. If the logs don't show a real problem-and-response arc this session, leave (B) fields as null — do NOT invent one.
 
 Task name: ${task.name}
 Task prompt: ${task.prompt}
-Current status: ${task.status}
+Current status: ${task.status}${purposeLine}${mustNotLine}${successLine}
 
 Logs:
 ${logText}
 ${artifactText}
 
-Respond with ONLY a JSON object (no markdown, no backticks):
+Respond with ONLY a JSON object (no markdown, no backticks). Use the same language as the logs (Korean if Korean):
 {
   "currentStep": "what is happening or just finished (1 sentence)",
   "completedSteps": ["step 1 done", "step 2 done"],
   "nextSteps": ["likely next step"],
   "issues": ["any errors or problems found"],
-  "progress": "one-line overall progress summary"
-}`
+  "progress": "one-line overall progress summary",
+
+  "problem": "the most salient problem the agent hit or worked around this session, 1 sentence — or null if none",
+  "cause": "the agent's stated/implied diagnosis of WHY the problem occurred — or null",
+  "response": "what the agent actually did about it — or null",
+  "reason": "WHY the agent chose that response over alternatives (the judgment, not the action) — or null",
+  "residualRisk": "what's still unresolved, deferred, or only patched (e.g. workaround vs root fix) — or null",
+  "humanNeeded": "where a single human input would unblock or massively speed up the agent (e.g. 'API response example', 'token storage policy') — or null if agent is fully unblocked",
+  "nextPrompt": "a concrete, ready-to-paste prompt the user can give the agent next, respecting the out-of-scope list and success criteria above — or null if no clear next step"
+}
+
+Rules for (B):
+- Use null (not empty string) when a field doesn't apply.
+- nextPrompt must NOT propose anything that touches the out-of-scope items.
+- residualRisk must explicitly call out workaround-vs-root-fix when applicable.
+- Don't restate the original task prompt. Speak about THIS session's events.`
 
     console.log(`[Summarize] calling runClaudeOnProject, prompt length=${prompt.length}`)
     const rawOutput = await runClaudeOnProject(task.projectId, prompt)
@@ -602,12 +632,29 @@ Respond with ONLY a JSON object (no markdown, no backticks):
     try { parsed = JSON.parse(jsonMatch[0]) }
     catch { return { success: false, error: 'Failed to parse summary — invalid JSON' } }
 
+    // Coerce "null" / undefined / non-string values for optional event fields
+    // into undefined so the UI's `??` and `&&` checks behave predictably.
+    const optStr = (v: any): string | undefined => {
+      if (v === null || v === undefined) return undefined
+      const s = String(v).trim()
+      return s.length > 0 ? s : undefined
+    }
+
     const summary: import('../../../shared/types').TaskSummary = {
+      // (A) checklist-shaped — required
       currentStep: String(parsed.currentStep || ''),
       completedSteps: Array.isArray(parsed.completedSteps) ? parsed.completedSteps.map(String) : [],
       nextSteps: Array.isArray(parsed.nextSteps) ? parsed.nextSteps.map(String) : [],
       issues: Array.isArray(parsed.issues) ? parsed.issues.map(String) : [],
       progress: String(parsed.progress || ''),
+      // (B) event-shaped — optional, undefined when null/missing
+      problem: optStr(parsed.problem),
+      cause: optStr(parsed.cause),
+      response: optStr(parsed.response),
+      reason: optStr(parsed.reason),
+      residualRisk: optStr(parsed.residualRisk),
+      humanNeeded: optStr(parsed.humanNeeded),
+      nextPrompt: optStr(parsed.nextPrompt),
       updatedAt: new Date().toISOString(),
     }
 
