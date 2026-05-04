@@ -60,6 +60,73 @@
   border-color: var(--hairline-strong);
 }
 
+/* ─── Alignment chip (header, always visible when alignment field present) ─── */
+.alignmentChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: help;
+  letter-spacing: 0.02em;
+}
+.alignmentChip[data-level="aligned"] {
+  background: rgba(63, 159, 95, 0.10);
+  color: var(--success);
+  border: 1px solid rgba(63, 159, 95, 0.25);
+}
+.alignmentChip[data-level="mild-drift"] {
+  background: rgba(94, 106, 210, 0.10);
+  color: var(--primary);
+  border: 1px solid rgba(94, 106, 210, 0.30);
+}
+.alignmentChip[data-level="severe-drift"] {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--error);
+  border: 1px solid rgba(239, 68, 68, 0.30);
+}
+.alignmentLabel { font-size: 11px; }
+.alignmentScore {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  opacity: 0.85;
+}
+
+/* ─── Alignment reason block (only on drift) ─── */
+.alignmentReason {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--primary);
+  background: rgba(94, 106, 210, 0.05);
+}
+.alignmentReason[data-level="severe-drift"] {
+  border-left-color: var(--error);
+  background: rgba(239, 68, 68, 0.05);
+}
+.alignmentReasonLabel {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+.alignmentReason[data-level="severe-drift"] .alignmentReasonLabel {
+  color: var(--error);
+}
+.alignmentReasonText {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
 /* ─── Empty state (no summary yet) ─── */
 .empty {
   display: flex;

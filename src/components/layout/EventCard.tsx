@@ -85,12 +85,33 @@ export function EventCard({ task, onSummarize, onFillChat }: Props) {
     } catch { /* clipboard blocked — silent */ }
   }
 
+  const alignmentChip = (() => {
+    const a = summary.alignment
+    if (!a) return null
+    const score = typeof summary.alignmentScore === 'number' ? `${summary.alignmentScore}%` : null
+    const label =
+      a === 'aligned'      ? '정상 정렬' :
+      a === 'mild-drift'   ? '범위 확장 감지' :
+                             '목표 이탈'
+    return (
+      <span
+        className={styles.alignmentChip}
+        data-level={a}
+        title={summary.alignmentReason || '본목적과의 정렬도'}
+      >
+        <span className={styles.alignmentLabel}>{label}</span>
+        {score && <span className={styles.alignmentScore}>{score}</span>}
+      </span>
+    )
+  })()
+
   return (
     <div className={styles.card}>
       <div className={styles.header}>
         <div className={styles.headerMeta}>
           <span className={styles.metaLabel}>요약 갱신</span>
           <span className={styles.metaValue}>{updatedAgo}</span>
+          {alignmentChip}
         </div>
         {onSummarize && (
           <button
@@ -103,6 +124,15 @@ export function EventCard({ task, onSummarize, onFillChat }: Props) {
           </button>
         )}
       </div>
+
+      {/* Alignment reason — full sentence, only when drift is detected so the
+          user can see WHY the badge fired without hovering the title attr. */}
+      {summary.alignment && summary.alignment !== 'aligned' && summary.alignmentReason && (
+        <div className={styles.alignmentReason} data-level={summary.alignment}>
+          <span className={styles.alignmentReasonLabel}>정렬 판단</span>
+          <span className={styles.alignmentReasonText}>{summary.alignmentReason}</span>
+        </div>
+      )}
 
       {/* ─── State 3: summary exists but no event arc detected ─── */}
       {!hasAnyEvent && (

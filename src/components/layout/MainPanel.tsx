@@ -329,6 +329,21 @@ export function MainPanel({
                 <span className={styles.driftScore}>{drift.score}%</span>
               </span>
             )}
+            {/* Semantic alignment badge — only shown when there's a real drift signal.
+                Distinct from token drift above: this asks "is the agent still on
+                the locked-in purpose?" (work_anywhere_context_summary_ui.md §15.4) */}
+            {activeTask.summary?.alignment && activeTask.summary.alignment !== 'aligned' && (
+              <span
+                className={styles.alignmentBadge}
+                data-level={activeTask.summary.alignment}
+                title={activeTask.summary.alignmentReason || '본목적과의 정렬도가 떨어졌습니다.'}
+              >
+                {activeTask.summary.alignment === 'severe-drift' ? '목표이탈' : '범위확장'}
+                {typeof activeTask.summary.alignmentScore === 'number' && (
+                  <span className={styles.driftScore}>{activeTask.summary.alignmentScore}%</span>
+                )}
+              </span>
+            )}
           </div>
           <span className={styles.taskPrompt}>{activeTask.prompt}</span>
           {/* Drift gauge — always visible when task has logs */}

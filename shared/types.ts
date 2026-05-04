@@ -254,8 +254,17 @@ export interface TaskSummary {
   humanNeeded?: string        // 사람 개입 필요 — 사람이 한 번 봐주면 효율 폭증할 지점
   nextPrompt?: string         // 다음 프롬프트 — AI에게 바로 줄 수 있는 고품질 지시문
 
+  // ─── (3) Semantic drift / alignment (work_anywhere_context_summary_ui.md §15.4) ───
+  // 토큰 사용량 기반의 calcDrift 와는 별도. 이쪽은 "AI가 본목적/IntentLock 에 비해
+  // 얼마나 정렬되어 있는가" 를 LLM 이 판단해서 채운다.
+  alignment?: AlignmentLevel  // 'aligned' | 'mild-drift' | 'severe-drift'
+  alignmentScore?: number     // 0~100 (100 = 완전 정렬, 0 = 완전 이탈)
+  alignmentReason?: string    // 한 문장 — 왜 그 등급인지 (예: "목표는 버그 수정이었으나 인증 리팩토링으로 확장 중")
+
   updatedAt: string
 }
+
+export type AlignmentLevel = 'aligned' | 'mild-drift' | 'severe-drift'
 
 // ─── Artifact ───
 export interface Artifact {

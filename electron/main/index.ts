@@ -584,11 +584,14 @@ ipcMain.handle('task:summarize', async (_event, taskId: string) => {
       ? `\nSuccess criteria (the task is "done" only when this holds): ${task.intentLock.successCriteria}`
       : ''
 
-    const prompt = `You are a task progress analyzer. You produce TWO views of the same session in one JSON object:
+    const prompt = `You are a task progress analyzer. You produce THREE views of the same session in one JSON object:
   (A) a checklist-shaped progress view (currentStep/completedSteps/nextSteps/issues/progress)
   (B) an event-shaped judgment trace (problem/cause/response/reason/residualRisk/humanNeeded/nextPrompt)
+  (C) a SEMANTIC alignment score (alignment/alignmentScore/alignmentReason) — does what THIS session actually did still match the task's purpose + locked scope?
 
 (B) is for a UI that helps the user re-take the steering wheel after stepping away. It must capture WHY decisions were made, not just WHAT happened. If the logs don't show a real problem-and-response arc this session, leave (B) fields as null — do NOT invent one.
+
+(C) is the "drift detection" the user sees as a small badge. It is NOT about token usage — it is purely about whether the agent's actual work this session is still on-target relative to the locked-in purpose and out-of-scope items above. Distinct from token/context drift.
 
 Task name: ${task.name}
 Task prompt: ${task.prompt}
@@ -612,14 +615,25 @@ Respond with ONLY a JSON object (no markdown, no backticks). Use the same langua
   "reason": "WHY the agent chose that response over alternatives (the judgment, not the action) — or null",
   "residualRisk": "what's still unresolved, deferred, or only patched (e.g. workaround vs root fix) — or null",
   "humanNeeded": "where a single human input would unblock or massively speed up the agent (e.g. 'API response example', 'token storage policy') — or null if agent is fully unblocked",
-  "nextPrompt": "a concrete, ready-to-paste prompt the user can give the agent next, respecting the out-of-scope list and success criteria above — or null if no clear next step"
+  "nextPrompt": "a concrete, ready-to-paste prompt the user can give the agent next, respecting the out-of-scope list and success criteria above — or null if no clear next step",
+
+  "alignment": "aligned" | "mild-drift" | "severe-drift" | null,
+  "alignmentScore": 0-100 integer (100 = perfectly on the original purpose, 0 = totally off-track) — or null if no purpose/IntentLock context to judge against,
+  "alignmentReason": "one short sentence (Korean if Korean logs) explaining the alignment judgment, e.g. '목표는 로그인 API 검증이었으나 현재 OAuth 확장으로 확장 중' — or null"
 }
 
 Rules for (B):
 - Use null (not empty string) when a field doesn't apply.
 - nextPrompt must NOT propose anything that touches the out-of-scope items.
 - residualRisk must explicitly call out workaround-vs-root-fix when applicable.
-- Don't restate the original task prompt. Speak about THIS session's events.`
+- Don't restate the original task prompt. Speak about THIS session's events.
+
+Rules for (C):
+- If purpose is missing AND IntentLock is empty, set alignment/alignmentScore/alignmentReason to null — there's nothing to align against.
+- "aligned" (score ≥ 80): session work is squarely inside the stated purpose + respects out-of-scope.
+- "mild-drift" (score 50-79): adjacent expansion — work is related but starting to widen scope or graze an out-of-scope item.
+- "severe-drift" (score < 50): clearly off — touching out-of-scope items, or pursuing a different goal than the stated purpose.
+- alignmentReason must be specific (cite WHAT shifted), not generic ("작업이 잘 진행되고 있음" is forbidden).`
 
     console.log(`[Summarize] calling runClaudeOnProject, prompt length=${prompt.length}`)
     const rawOutput = await runClaudeOnProject(task.projectId, prompt)
@@ -640,6 +654,18 @@ Rules for (B):
       return s.length > 0 ? s : undefined
     }
 
+    // (C) alignment normalization — clamp score to 0-100 and accept only known levels.
+    const alignmentLevel = ((): import('../../../shared/types').AlignmentLevel | undefined => {
+      const v = parsed.alignment
+      if (v === 'aligned' || v === 'mild-drift' || v === 'severe-drift') return v
+      return undefined
+    })()
+    const alignmentScore = ((): number | undefined => {
+      const n = Number(parsed.alignmentScore)
+      if (!Number.isFinite(n)) return undefined
+      return Math.max(0, Math.min(100, Math.round(n)))
+    })()
+
     const summary: import('../../../shared/types').TaskSummary = {
       // (A) checklist-shaped — required
       currentStep: String(parsed.currentStep || ''),
@@ -655,6 +681,10 @@ Rules for (B):
       residualRisk: optStr(parsed.residualRisk),
       humanNeeded: optStr(parsed.humanNeeded),
       nextPrompt: optStr(parsed.nextPrompt),
+      // (C) alignment — optional
+      alignment: alignmentLevel,
+      alignmentScore,
+      alignmentReason: optStr(parsed.alignmentReason),
       updatedAt: new Date().toISOString(),
     }
 

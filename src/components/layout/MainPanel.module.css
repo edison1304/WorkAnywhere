@@ -147,6 +147,31 @@
   50% { opacity: 0.6; }
 }
 
+/* Semantic alignment badge — distinct palette from token-drift so the user
+   can tell "context too long" apart from "agent is off-target". §15.4. */
+.alignmentBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+  cursor: help;
+}
+.alignmentBadge[data-level="mild-drift"] {
+  background: rgba(94, 106, 210, 0.12);
+  color: var(--primary);
+  border: 1px solid rgba(94, 106, 210, 0.30);
+}
+.alignmentBadge[data-level="severe-drift"] {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--error);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
 /* Drift gauge */
 .driftGauge {
   position: relative;
