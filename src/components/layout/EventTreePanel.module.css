@@ -62,8 +62,12 @@
   align-items: center;
 }
 .list[data-variant="detailed"] {
-  flex-direction: column;
-  gap: 0;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 28px;
+  overflow-x: auto;
+  padding: 4px 4px 12px;
+  scroll-snap-type: x proximity;
 }
 
 /* ─── Node ─── */
@@ -87,14 +91,43 @@
 }
 .node[data-variant="detailed"] {
   align-items: flex-start;
-  padding: 12px 0 12px 14px;
-  border-left: 2px solid var(--hairline);
-  margin-left: 6px;
+  flex: 0 0 220px;
+  padding: 12px 14px;
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-top: 3px solid var(--hairline-strong);
+  border-radius: var(--radius-sm);
+  scroll-snap-align: start;
 }
-.node[data-variant="detailed"][data-status="resolved"]   { border-left-color: var(--success); }
-.node[data-variant="detailed"][data-status="workaround"] { border-left-color: var(--warning); }
-.node[data-variant="detailed"][data-status="blocked"]    { border-left-color: var(--error);   }
-.node[data-variant="detailed"][data-status="live"]       { border-left-color: var(--primary); background: rgba(94, 106, 210, 0.04); }
+.node[data-variant="detailed"][data-status="resolved"]   { border-top-color: var(--success); }
+.node[data-variant="detailed"][data-status="workaround"] { border-top-color: var(--warning); }
+.node[data-variant="detailed"][data-status="blocked"]    { border-top-color: var(--error);   }
+.node[data-variant="detailed"][data-status="live"]       { border-top-color: var(--primary); background: rgba(94, 106, 210, 0.04); }
+
+/* Horizontal connector + arrow between detailed cards */
+.node[data-variant="detailed"]:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  right: -28px;
+  top: 22px;
+  width: 28px;
+  height: 1px;
+  background: var(--hairline-strong);
+  pointer-events: none;
+}
+.node[data-variant="detailed"]:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  right: -8px;
+  top: 18px;
+  width: 0;
+  height: 0;
+  border: 4px solid transparent;
+  border-left-color: var(--hairline-strong);
+  border-right: 0;
+  pointer-events: none;
+  z-index: 1;
+}
 
 /* ─── Status dot ─── */
 .dot {
