@@ -16,12 +16,9 @@ interface Props {
   onSelectPhase?: (phaseId: string) => void
 }
 
-function formatTime(iso: string): { date: string; time: string } {
+function formatTime(iso: string): string {
   const d = new Date(iso)
-  return {
-    date: d.toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' }),
-    time: d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }),
-  }
+  return d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
 }
 
 function dayKey(iso: string): string {
@@ -29,7 +26,6 @@ function dayKey(iso: string): string {
 }
 
 export function TimelineView({ project, phase, task, phases, tasks, onSelectTask, onSelectPhase }: Props) {
-  // Most-specific selection wins: task > phase > project
   const { events, scopeLabel, scopeName } = useMemo(() => {
     if (task) {
       return { events: buildTaskTimeline(task), scopeLabel: 'Task', scopeName: task.name }
@@ -60,8 +56,12 @@ export function TimelineView({ project, phase, task, phases, tasks, onSelectTask
     )
   }
 
-  // Group events by day for the date dividers
   let lastDay = ''
+
+  const handleEntityClick = (ev: TimelineEvent) => {
+    if (ev.entityRef?.kind === 'task') onSelectTask?.(ev.entityRef.id)
+    else if (ev.entityRef?.kind === 'phase') onSelectPhase?.(ev.entityRef.id)
+  }
 
   return (
     <div className={styles.page}>
@@ -74,48 +74,73 @@ export function TimelineView({ project, phase, task, phases, tasks, onSelectTask
         </div>
       </div>
 
-      <div className={styles.body}>
-        <div className={styles.axis} aria-hidden />
-        {events.map(ev => {
-          const day = dayKey(ev.timestamp)
-          const isNewDay = day !== lastDay
-          lastDay = day
-          const t = formatTime(ev.timestamp)
-          const handleClick = () => {
-            if (ev.entityRef?.kind === 'task') onSelectTask?.(ev.entityRef.id)
-            else if (ev.entityRef?.kind === 'phase') onSelectPhase?.(ev.entityRef.id)
-          }
-          return (
-            <div key={ev.id} className={styles.row}>
-              {isNewDay && (
-                <div className={styles.dayDivider}>
-                  <span>{day}</span>
-                </div>
-              )}
-              <div className={styles.rowInner}>
-                <div className={styles.timeCol}>
-                  <div className={styles.dot} data-tone={ev.tone} />
-                  <div className={styles.time}>{t.time}</div>
-                </div>
-                <div
-                  className={`${styles.card} ${styles[`tone_${ev.tone}`]} ${ev.entityRef ? styles.cardClickable : ''}`}
-                  onClick={ev.entityRef ? handleClick : undefined}
-                  role={ev.entityRef ? 'button' : undefined}
-                  tabIndex={ev.entityRef ? 0 : undefined}
-                >
-                  <div className={styles.cardHeader}>
-                    <span className={styles.category}>{ev.category}</span>
-                    {ev.entityRef && (
-                      <span className={styles.entityRef}>{ev.entityRef.name}</span>
-                    )}
+      <div className={styles.bodyWrap}>
+        {/* Sticky column headers */}
+        <div className={styles.colHeaders}>
+          <div className={styles.timeHead} />
+          <div className={`${styles.colHead} ${styles.col_success}`}>완료</div>
+          <div className={`${styles.colHead} ${styles.col_detour}`}>우회</div>
+          <div className={`${styles.colHead} ${styles.col_error}`}>에러</div>
+        </div>
+
+        <div className={styles.body}>
+          {events.map(ev => {
+            const day = dayKey(ev.timestamp)
+            const isNewDay = day !== lastDay
+            lastDay = day
+
+            return (
+              <div key={ev.id} className={styles.eventGroup}>
+                {isNewDay && (
+                  <div className={styles.dayDivider}>
+                    <span>{day}</span>
                   </div>
-                  <div className={styles.cardTitle}>{ev.title}</div>
-                  {ev.body && <div className={styles.cardBody}>{ev.body}</div>}
-                </div>
+                )}
+
+                {ev.tone === 'info' ? (
+                  // Info = milestone band, full width
+                  <div className={styles.bandRow}>
+                    <span className={styles.time}>{formatTime(ev.timestamp)}</span>
+                    <div
+                      className={`${styles.bandCard} ${ev.entityRef ? styles.clickable : ''}`}
+                      onClick={ev.entityRef ? () => handleEntityClick(ev) : undefined}
+                      role={ev.entityRef ? 'button' : undefined}
+                      tabIndex={ev.entityRef ? 0 : undefined}
+                    >
+                      <div className={styles.bandHeader}>
+                        <span className={styles.category}>{ev.category}</span>
+                        {ev.entityRef && (
+                          <span className={styles.entityRef}>{ev.entityRef.name}</span>
+                        )}
+                      </div>
+                      <div className={styles.bandTitle}>{ev.title}</div>
+                      {ev.body && <div className={styles.cardBody}>{ev.body}</div>}
+                    </div>
+                  </div>
+                ) : (
+                  <div className={styles.row}>
+                    <span className={styles.time}>{formatTime(ev.timestamp)}</span>
+                    <div
+                      className={`${styles.card} ${styles[`tone_${ev.tone}`]} ${ev.entityRef ? styles.clickable : ''}`}
+                      onClick={ev.entityRef ? () => handleEntityClick(ev) : undefined}
+                      role={ev.entityRef ? 'button' : undefined}
+                      tabIndex={ev.entityRef ? 0 : undefined}
+                    >
+                      <div className={styles.cardHeader}>
+                        <span className={styles.category}>{ev.category}</span>
+                        {ev.entityRef && (
+                          <span className={styles.entityRef}>{ev.entityRef.name}</span>
+                        )}
+                      </div>
+                      <div className={styles.cardTitle}>{ev.title}</div>
+                      {ev.body && <div className={styles.cardBody}>{ev.body}</div>}
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
       </div>
     </div>
   )

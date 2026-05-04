@@ -55,51 +55,59 @@
   border: 1px solid var(--hairline);
   border-radius: var(--radius-pill);
 }
-.scopeName {
-  color: var(--ink);
-  font-weight: 500;
-}
-.scopeMeta {
-  color: var(--ink-tertiary);
-  font-size: 12px;
-}
+.scopeName { color: var(--ink); font-weight: 500; }
+.scopeMeta { color: var(--ink-tertiary); font-size: 12px; }
 
-/* ─── Body — vertical timeline ─── */
-.body {
+/* ─── Body wrap holds sticky headers + scrolling rows ─── */
+.bodyWrap {
   flex: 1;
   overflow-y: auto;
-  padding: var(--space-xl) 0 var(--space-xxl);
-  position: relative;
-  /* Center the column at ~720px */
   display: flex;
   flex-direction: column;
-  align-items: stretch;
 }
 
-/* The vertical axis line behind the dots — full body height */
-.axis {
-  position: absolute;
-  left: calc(50% - 360px + 56px); /* 720px column, axis at 56px from its left */
+/* ─── Column headers — sticky ─── */
+.colHeaders {
+  position: sticky;
   top: 0;
-  bottom: 0;
-  width: 1px;
-  background: var(--hairline);
-  pointer-events: none;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: 56px 1fr 1fr 1fr;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-xl);
+  background: var(--canvas);
+  border-bottom: 1px solid var(--hairline);
 }
+.timeHead { /* spacer for time column */ }
+.colHead {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  text-align: center;
+  padding: 4px var(--space-xs);
+  border-bottom: 2px solid transparent;
+}
+.col_success { color: var(--success); border-bottom-color: var(--success); }
+.col_detour  { color: var(--warning); border-bottom-color: var(--warning); }
+.col_error   { color: var(--error);   border-bottom-color: var(--error); }
 
-.row {
+/* ─── Body ─── */
+.body {
+  padding: var(--space-md) var(--space-xl) var(--space-xxl);
   display: flex;
   flex-direction: column;
-  width: 100%;
+}
+
+.eventGroup {
+  display: flex;
+  flex-direction: column;
 }
 
 .dayDivider {
-  position: relative;
   display: flex;
   justify-content: center;
-  align-items: center;
   margin: var(--space-md) 0 var(--space-sm);
-  z-index: 1;
 }
 .dayDivider span {
   background: var(--canvas);
@@ -112,77 +120,60 @@
   border-radius: var(--radius-pill);
 }
 
-.rowInner {
+/* ─── A single tone-coloured card row (3-col grid) ─── */
+.row {
   display: grid;
-  grid-template-columns: 56px 1fr;
-  gap: var(--space-md);
-  width: 720px;
-  max-width: calc(100% - var(--space-xl) * 2);
-  margin: 0 auto var(--space-md);
+  grid-template-columns: 56px 1fr 1fr 1fr;
+  gap: var(--space-sm);
   align-items: start;
+  margin-bottom: var(--space-sm);
 }
-
-.timeCol {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding-top: 14px;
-}
-.dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  border: 2px solid var(--canvas);
-  background: var(--ink-tertiary);
-  box-shadow: 0 0 0 1px var(--hairline);
-  z-index: 2;
-}
-.dot[data-tone="success"]  { background: var(--success); box-shadow: 0 0 0 1px var(--success); }
-.dot[data-tone="detour"]   { background: var(--warning); box-shadow: 0 0 0 1px var(--warning); }
-.dot[data-tone="error"]    { background: var(--error);   box-shadow: 0 0 0 1px var(--error); }
-.dot[data-tone="info"]     { background: var(--ink-tertiary); }
 
 .time {
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   color: var(--ink-tertiary);
+  padding-top: 14px;
+  text-align: right;
 }
 
-/* ─── Card — PPT slide block ─── */
+/* Card lands in its tone's column (success=2, detour=3, error=4) */
 .card {
   position: relative;
   background: var(--surface-1);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-lg);
-  padding: var(--space-md) var(--space-lg);
+  padding: var(--space-md) var(--space-md) var(--space-sm);
   transition: border-color 0.12s, transform 0.08s;
 }
 .card::before {
   content: '';
   position: absolute;
-  left: 0; top: var(--space-sm); bottom: var(--space-sm);
+  left: 0; top: var(--space-xs); bottom: var(--space-xs);
   width: 3px;
   border-radius: 2px;
-  background: var(--ink-tertiary);
 }
+.tone_success { grid-column: 2; }
 .tone_success::before { background: var(--success); }
-.tone_detour::before  { background: var(--warning); }
-.tone_error::before   { background: var(--error); }
-.tone_info::before    { background: var(--ink-tertiary); }
 
-.cardClickable { cursor: pointer; }
-.cardClickable:hover {
+.tone_detour  { grid-column: 3; }
+.tone_detour::before  { background: var(--warning); }
+
+.tone_error   { grid-column: 4; }
+.tone_error::before   { background: var(--error); }
+
+.clickable { cursor: pointer; }
+.clickable:hover {
   border-color: var(--hairline-strong);
   background: var(--surface-2);
 }
-.cardClickable:active { transform: translateY(1px); }
+.clickable:active { transform: translateY(1px); }
 
 .cardHeader {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  gap: var(--space-sm);
+  gap: var(--space-xs);
   margin-bottom: 6px;
 }
 .category {
@@ -193,8 +184,8 @@
   color: var(--ink-tertiary);
 }
 .tone_success .category { color: var(--success); }
-.tone_detour .category  { color: var(--warning); }
-.tone_error .category   { color: var(--error); }
+.tone_detour  .category { color: var(--warning); }
+.tone_error   .category { color: var(--error); }
 
 .entityRef {
   font-size: 11px;
@@ -203,12 +194,12 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 50%;
+  max-width: 60%;
 }
 
 .cardTitle {
   font-family: var(--font-display);
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 500;
   letter-spacing: -0.1px;
   color: var(--ink);
@@ -217,8 +208,39 @@
 }
 .cardBody {
   margin-top: 6px;
-  font-size: 13px;
+  font-size: 12.5px;
   line-height: 1.55;
   color: var(--ink-muted);
   word-break: break-word;
+}
+
+/* ─── Info = full-width milestone band ─── */
+.bandRow {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  gap: var(--space-sm);
+  align-items: start;
+  margin: var(--space-md) 0 var(--space-sm);
+}
+.bandCard {
+  position: relative;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm) var(--space-md);
+  /* spans success / detour / error columns visually since the parent row is
+   * its own grid (only time + 1fr) and we mount it outside the 3-col row */
+}
+.bandHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-xs);
+  margin-bottom: 4px;
+}
+.bandTitle {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.05px;
+  color: var(--ink);
 }
