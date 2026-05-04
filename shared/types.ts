@@ -264,6 +264,10 @@ export interface IpcApi {
   agentResume(taskId: string): Promise<{ success: boolean; error?: string }>
   agentSend(taskId: string, message: string): Promise<{ success: boolean }>
 
+  // Permission approval (PTY-detected prompts)
+  taskRespondPermission(taskId: string, approved: boolean, format: 'numbered' | 'yn'): Promise<{ success: boolean; error?: string }>
+  onTaskPermissionRequest(cb: (data: { taskId: string; id: string; text: string; format: 'numbered' | 'yn' }) => void): () => void
+
   // PTY I/O (for xterm.js)
   ptyWrite(taskId: string, data: string): void
   ptyResize(taskId: string, cols: number, rows: number): void

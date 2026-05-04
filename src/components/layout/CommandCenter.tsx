@@ -61,6 +61,8 @@ interface Props {
   openFilePath?: string | null
   onPhaseSummarize?: (phaseId: string) => void
   onProjectSummarize?: (projectId: string) => void
+  pendingPermission?: { id: string; text: string; format: 'numbered' | 'yn' } | null
+  onRespondPermission?: (taskId: string, approved: boolean) => void
   sshConnected: boolean
   sshConnecting?: boolean
   sshError?: string
@@ -77,7 +79,8 @@ export function CommandCenter({
   onSelectProject, onSelectPhase, onSelectTask, onAcknowledgeTask, onPinTask, onDeleteTask, onDeletePhase, onDeleteProject, onForkTask, onMoveTask, onReorderTasks, onReorderPhases,
   onDetach, onReattach, onRunAgent, onStopAgent, onResumeAgent, onMarkCompleted, onSummarize, onRestartFresh, onSendMessage, onSSHConnect, onLocalConnect, onRemoteConnect, onOpenSSH, onDisconnectSSH,
   onCreateProject, onRequestCreateProject, showCreateProject, onCancelCreateProject, onCreatePhase, onCreateTask, onImportProject, onOpenFile, openFilePath,
-  onPhaseSummarize, onProjectSummarize
+  onPhaseSummarize, onProjectSummarize,
+  pendingPermission, onRespondPermission,
 }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [showShortcuts, setShowShortcuts] = useState(false)
@@ -444,6 +447,8 @@ export function CommandCenter({
           activeProjectId={activeProject?.id ?? null}
           onSelectTask={onSelectTask}
           onApproveTask={onMarkCompleted}
+          pendingPermission={pendingPermission}
+          onRespondPermission={onRespondPermission}
         />
 
         {/* Status rail: hidden in grid mode (no active task) — info would duplicate */}

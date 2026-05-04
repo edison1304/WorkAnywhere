@@ -168,7 +168,10 @@ export class LocalService extends EventEmitter {
     if (engine === 'opencode') {
       agentCmd = this.getEngineCmd('opencode', [...resumeArgs, '-p', JSON.stringify(prompt), '-f', 'json'])
     } else {
-      agentCmd = this.getEngineCmd('claude', [...resumeArgs, '-p', JSON.stringify(prompt), '--output-format', 'stream-json', '--verbose'])
+      // bypassPermissions: most tools auto-approved (deny rules + hooks still apply).
+      // Prompts that survive bypass are picked up by the PTY-side permission
+      // detector and surfaced to the chat as an approval card.
+      agentCmd = this.getEngineCmd('claude', [...resumeArgs, '-p', JSON.stringify(prompt), '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose'])
     }
     const wslPath = this.toWslPath(workspacePath)
     const innerCmd = `${prefix}cd ${JSON.stringify(wslPath)} && ${agentCmd}`

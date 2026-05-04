@@ -213,7 +213,9 @@ export class SSHService extends EventEmitter {
       if (engine === 'opencode') {
         agentCmd = this.getEngineCmd('opencode', [...resumeArgs, '-p', JSON.stringify(prompt), '-f', 'json'])
       } else {
-        agentCmd = this.getEngineCmd('claude', [...resumeArgs, '-p', JSON.stringify(prompt), '--output-format', 'stream-json', '--verbose'])
+        // bypassPermissions: most tools auto-approved (deny rules + hooks
+        // still apply). Surviving prompts go through the PTY detector.
+        agentCmd = this.getEngineCmd('claude', [...resumeArgs, '-p', JSON.stringify(prompt), '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose'])
       }
       // Build command: setup prefix + cd + agent command
       // prefix already ends with " && " if non-empty, so just concatenate

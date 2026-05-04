@@ -381,7 +381,14 @@ function setupAgentListeners(agent: AgentService): void {
   })
   agent.on('pty:data', (data) => broadcastToAll('pty:data', data))
   agent.on('pty:close', (data) => broadcastToAll('pty:close', data))
+  agent.on('task:permission_request', (data) => broadcastToAll('task:permission_request', data))
 }
+
+ipcMain.handle('task:respond-permission', async (_event, taskId: string, approved: boolean, format: 'numbered' | 'yn') => {
+  if (!agentService) return { success: false, error: 'No agent service' }
+  agentService.respondPermission(taskId, approved, format)
+  return { success: true }
+})
 
 // ─── Project connection (per-project, lazy) ───
 ipcMain.handle('project:connect', async (_event, projectId: string, appConfig?: import('../../../shared/types').AppConfig) => {

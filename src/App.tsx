@@ -68,6 +68,10 @@ export default function App() {
   const [claudeVersion, setClaudeVersion] = useState<string>()
   const [lastPingTs, setLastPingTs] = useState<number | null>(null)
   const [reconnectAttempt, setReconnectAttempt] = useState<{ attempt: number; max: number } | null>(null)
+  // Per-task pending permission prompts surfaced from the PTY detector.
+  // Replaces, doesn't accumulate — only the latest live prompt is shown,
+  // and it clears when the user answers or the task ends.
+  const [pendingPermissions, setPendingPermissions] = useState<Record<string, { id: string; text: string; format: 'numbered' | 'yn' }>>({})
 
   const activeProject = activeProjectId ? projects.find(p => p.id === activeProjectId) || null : null
   const projectPhases = phases.filter(ph => ph.projectId === activeProjectId)
@@ -562,6 +566,10 @@ export default function App() {
       ))
     })
 
+    const unsubPermission = window.api.onTaskPermissionRequest(({ taskId, id, text, format }) => {
+      setPendingPermissions(prev => ({ ...prev, [taskId]: { id, text, format } }))
+    })
+
     const unsubArtifact = window.api.onArtifactNew(({ taskId, artifact }) => {
       setTasks(prev => prev.map(t => {
         if (t.id !== taskId) return t
@@ -602,7 +610,7 @@ export default function App() {
       }
     })
 
-    return () => { unsubStatus(); unsubLog(); unsubPlan(); unsubArtifact(); unsubConnStatus() }
+    return () => { unsubStatus(); unsubLog(); unsubPlan(); unsubPermission(); unsubArtifact(); unsubConnStatus() }
   }, [])
 
   // Sync detached panels list
@@ -711,6 +719,17 @@ export default function App() {
     await window.api.phaseReorder(projectId, orderedIds)
     syncToServer()
   }, [syncToServer])
+
+  const handleRespondPermission = useCallback(async (taskId: string, approved: boolean) => {
+    const pending = pendingPermissions[taskId]
+    if (!pending || !window.api) return
+    await window.api.taskRespondPermission(taskId, approved, pending.format)
+    setPendingPermissions(prev => {
+      const next = { ...prev }
+      delete next[taskId]
+      return next
+    })
+  }, [pendingPermissions])
 
   // Generic task update — used by Schedule page toggles (interactionLevel, weightHint)
   const handleUpdateTask = useCallback(async (taskId: string, patch: Partial<Task>) => {
@@ -857,6 +876,8 @@ export default function App() {
         openFilePath={openFilePath}
         onPhaseSummarize={handlePhaseSummarize}
         onProjectSummarize={handleProjectSummarize}
+        pendingPermission={activeTaskId ? pendingPermissions[activeTaskId] ?? null : null}
+        onRespondPermission={handleRespondPermission}
       />
       <SSHConnectDialog
         isOpen={sshDialogOpen}

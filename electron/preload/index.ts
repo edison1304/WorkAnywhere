@@ -92,6 +92,14 @@ const api: IpcApi = {
   agentResume: (taskId) => ipcRenderer.invoke('agent:resume', taskId),
   agentSend: (taskId, message) => ipcRenderer.invoke('agent:send', taskId, message),
 
+  // Permission approval
+  taskRespondPermission: (taskId, approved, format) => ipcRenderer.invoke('task:respond-permission', taskId, approved, format),
+  onTaskPermissionRequest: (cb) => {
+    const handler = (_event: unknown, data: Parameters<typeof cb>[0]) => cb(data)
+    ipcRenderer.on('task:permission_request', handler)
+    return () => ipcRenderer.removeListener('task:permission_request', handler)
+  },
+
   // PTY I/O
   ptyWrite: (taskId, data) => ipcRenderer.send('pty:write', taskId, data),
   ptyResize: (taskId, cols, rows) => ipcRenderer.send('pty:resize', taskId, cols, rows),

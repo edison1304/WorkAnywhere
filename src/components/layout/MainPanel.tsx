@@ -91,6 +91,9 @@ interface Props {
   activeProjectId?: string | null
   onSelectTask?: (taskId: string) => void
   onApproveTask?: (taskId: string) => void
+  // ─── Inline approval card in chat ───
+  pendingPermission?: { id: string; text: string; format: 'numbered' | 'yn' } | null
+  onRespondPermission?: (taskId: string, approved: boolean) => void
 }
 
 export function MainPanel({
@@ -101,6 +104,7 @@ export function MainPanel({
   showCreateProject, onCancelCreateProject,
   openFilePath, onOpenFile,
   allProjectTasks, projectPhases, allProjects, activeProjectId, onSelectTask, onApproveTask,
+  pendingPermission, onRespondPermission,
 }: Props) {
   const [activeTab, setActiveTab] = useState<'log' | 'terminal' | 'artifacts'>('terminal')
 
@@ -466,7 +470,11 @@ export function MainPanel({
       {/* Content */}
       <div className={styles.content}>
         <div style={{ display: activeTab === 'log' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
-          <ChatView task={activeTask} />
+          <ChatView
+            task={activeTask}
+            pendingPermission={pendingPermission ?? null}
+            onRespondPermission={onRespondPermission}
+          />
         </div>
         <div style={{ display: activeTab === 'terminal' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
           <ShellTerminal projectId={activeTask.projectId} />
@@ -509,12 +517,16 @@ function renderMarkdownInline(text: string): string {
     .replace(/\n/g, '<br />')
 }
 
-function ChatView({ task }: { task: Task }) {
+function ChatView({ task, pendingPermission, onRespondPermission }: {
+  task: Task
+  pendingPermission: { id: string; text: string; format: 'numbered' | 'yn' } | null
+  onRespondPermission?: (taskId: string, approved: boolean) => void
+}) {
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [task.logs.length])
+  }, [task.logs.length, pendingPermission?.id])
 
   if (task.logs.length === 0) {
     return (
@@ -587,9 +599,34 @@ function ChatView({ task }: { task: Task }) {
           </div>
         )
       })}
-      {task.status === 'running' && (
+      {task.status === 'running' && !pendingPermission && (
         <div className={styles.chatRow} data-role="assistant">
           <div className={styles.chatTyping}><span /><span /><span /></div>
+        </div>
+      )}
+      {pendingPermission && (
+        <div className={styles.chatRow} data-role="assistant">
+          <div className={styles.approvalCard}>
+            <div className={styles.approvalHeader}>
+              <span className={styles.approvalIcon}>⚠</span>
+              <span className={styles.approvalTitle}>승인이 필요한 작업</span>
+            </div>
+            <pre className={styles.approvalText}>{pendingPermission.text}</pre>
+            <div className={styles.approvalActions}>
+              <button
+                className={styles.approveBtn}
+                onClick={() => onRespondPermission?.(task.id, true)}
+              >
+                수락
+              </button>
+              <button
+                className={styles.denyBtn}
+                onClick={() => onRespondPermission?.(task.id, false)}
+              >
+                거부
+              </button>
+            </div>
+          </div>
         </div>
       )}
       <div ref={bottomRef} />

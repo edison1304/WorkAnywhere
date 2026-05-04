@@ -2,6 +2,7 @@ import { EventEmitter } from 'events'
 import type { ConnectionManager, AnyConnection } from './ConnectionManager'
 import type { ClaudeStreamEvent, StreamHandle, ISession } from './ConnectionTypes'
 import type { LogEntry, TaskStatus, Artifact, ArtifactType, Project } from '../../../shared/types'
+import { feed as feedPermissionDetector, reset as resetPermissionDetector, type PermissionPrompt } from './permissionDetector'
 
 interface AgentInstance {
   taskId: string
@@ -161,7 +162,20 @@ export class AgentService extends EventEmitter {
       const ptySession = await conn.spawnPTY(fullCmd, `pty-${taskId}`)
       agent.ptySession = ptySession
 
-      ptySession.onData((data) => this.emit('pty:data', { taskId, data }))
+      ptySession.onData((data) => {
+        this.emit('pty:data', { taskId, data })
+        // Watch for permission prompts in the raw stream and surface them
+        // to the chat UI as an approval card.
+        const prompt = feedPermissionDetector(taskId, data)
+        if (prompt) {
+          this.emit('task:permission_request', {
+            taskId,
+            id: `${taskId}-perm-${Date.now()}`,
+            text: prompt.text,
+            format: prompt.format,
+          })
+        }
+      })
       ptySession.onClose(() => {
         this.emit('pty:close', { taskId })
         if (agent) agent.ptySession = null
@@ -382,6 +396,21 @@ export class AgentService extends EventEmitter {
   }
 
   /**
+   * Respond to a pending permission prompt by writing to the PTY.
+   * - numbered: "1\r" approve, "3\r" deny (option 3 is "No, and tell Claude")
+   * - yn:       "y\r" / "n\r"
+   */
+  respondPermission(taskId: string, approved: boolean, format: 'numbered' | 'yn'): void {
+    const agent = this.agents.get(taskId)
+    if (!agent?.ptySession) return
+    const payload = format === 'numbered'
+      ? (approved ? '1\r' : '3\r')
+      : (approved ? 'y\r' : 'n\r')
+    agent.ptySession.write(payload)
+    this.emitLog(taskId, 'text', `[YOU] ${approved ? 'approved' : 'denied'} permission prompt`)
+  }
+
+  /**
    * Stop a running agent — handles both channels
    */
   stopAgent(taskId: string): void {
@@ -406,6 +435,7 @@ export class AgentService extends EventEmitter {
     this.emitStatus(taskId, 'failed')
     this.emitLog(taskId, 'agent_end', 'Agent stopped by user')
     this.cleanupArtifacts(taskId)
+    resetPermissionDetector(taskId)
     this.agents.delete(taskId)
   }
 
