@@ -95,6 +95,14 @@ export class AgentService extends EventEmitter {
           console.log(`[stream ${taskId}] FIRST event received — type=${event.type}`)
           firstEventLogged = true
         }
+        // Diagnostic: surface raw / unknown events to the console so we can
+        // see what claude is actually emitting between system and assistant.
+        if (event.type === 'raw') {
+          const txt = String((event as any).content || '').slice(0, 200)
+          if (txt.trim()) console.log(`[stream ${taskId}] raw: ${txt}`)
+        } else if (event.type !== 'system' && event.type !== 'assistant' && event.type !== 'text_delta') {
+          console.log(`[stream ${taskId}] event ${eventCount}: type=${event.type}`)
+        }
         this.handleStreamEvent(taskId, agent, event)
       })
 
