@@ -33,6 +33,11 @@ const api: IpcApi = {
     ipcRenderer.on('task:log', handler)
     return () => ipcRenderer.removeListener('task:log', handler)
   },
+  onTaskPlan: (cb) => {
+    const handler = (_event: unknown, data: Parameters<typeof cb>[0]) => cb(data)
+    ipcRenderer.on('task:plan', handler)
+    return () => ipcRenderer.removeListener('task:plan', handler)
+  },
   onArtifactNew: (cb) => {
     const handler = (_event: unknown, data: Parameters<typeof cb>[0]) => cb(data)
     ipcRenderer.on('artifact:new', handler)

@@ -225,6 +225,7 @@ export interface IpcApi {
   // Events (Main → Renderer)
   onTaskStatus(cb: (data: { taskId: string; status: TaskStatus }) => void): () => void
   onTaskLog(cb: (data: { taskId: string; log: LogEntry }) => void): () => void
+  onTaskPlan(cb: (data: { taskId: string; plan: Plan }) => void): () => void
   onArtifactNew(cb: (data: { taskId: string; artifact: Artifact }) => void): () => void
   onConnectionStatus(cb: (data: { key: string; status: 'lost' | 'reconnecting' | 'restored' | 'failed'; attempt?: number; maxRetries?: number; projectIds?: string[] }) => void): () => void
 

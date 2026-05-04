@@ -7,6 +7,7 @@ import { ConnectionManager } from './services/ConnectionManager'
 import { DataStore } from './services/DataStore'
 import { compute as computeSchedule } from './services/SchedulingService'
 import { WorkflowFileService } from './services/WorkflowFileService'
+import { PlanSyncService } from './services/PlanSyncService'
 
 let mainWindow: BrowserWindow | null = null
 const detachedWindows = new Map<string, BrowserWindow>()
@@ -210,6 +211,24 @@ let agentService: AgentService | null = null
 const workflow = new WorkflowFileService(connMgr, (pid) =>
   dataStore.projectList().find(p => p.id === pid) || null,
 )
+const planSync = new PlanSyncService(
+  workflow,
+  (taskId) => dataStore.taskGet(taskId),
+  (phaseId) => {
+    for (const p of dataStore.projectList()) {
+      const ph = dataStore.phaseList(p.id).find(x => x.id === phaseId)
+      if (ph) return ph
+    }
+    return null
+  },
+  (pid) => dataStore.projectList().find(p => p.id === pid) || null,
+  (taskId, plan) => {
+    // Persist derived plan onto the task and broadcast so the UI updates
+    // checklist progress + insight panel without polling.
+    dataStore.taskUpdate(taskId, { plan })
+    broadcastToAll('task:plan', { taskId, plan })
+  },
+)
 
 // Forward ConnectionManager reconnection events to renderer
 connMgr.on('connection:lost', (data) => broadcastToAll('connection:status', { ...data, status: 'lost' }))
@@ -304,6 +323,11 @@ function setupAgentListeners(agent: AgentService): void {
       dataStore.taskUpdate(data.taskId, patch)
     }
     broadcastToAll('task:status', data)
+    // Force final plan sync on terminal states so the file reflects the
+    // very last log batch.
+    if (data.status === 'completed' || data.status === 'failed' || data.status === 'review') {
+      planSync.flushNow(data.taskId).catch(() => {})
+    }
     // Write phase context when task finishes
     if (data.status === 'review' || data.status === 'completed') {
       writePhaseContext(data.taskId).catch(() => {})
@@ -332,6 +356,13 @@ function setupAgentListeners(agent: AgentService): void {
       dataStore.taskAddLog(data.taskId, data.log)
     }
     broadcastToAll('task:log', data)
+    // Debounced parse → CHECKLIST.md / NOTES.md sync + plan field update.
+    // Only on text-bearing logs (skip pure events like agent_start with no
+    // checklist content) — the parser itself is cheap but the file write
+    // isn't.
+    if (data.log.type === 'text' || data.log.type === 'agent_end') {
+      planSync.notify(data.taskId)
+    }
   })
   agent.on('task:sessionId', (data) => {
     if (dataStore) {

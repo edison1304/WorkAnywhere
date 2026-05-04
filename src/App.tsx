@@ -553,6 +553,12 @@ export default function App() {
       ))
     })
 
+    const unsubPlan = window.api.onTaskPlan(({ taskId, plan }) => {
+      setTasks(prev => prev.map(t =>
+        t.id === taskId ? { ...t, plan } : t
+      ))
+    })
+
     const unsubArtifact = window.api.onArtifactNew(({ taskId, artifact }) => {
       setTasks(prev => prev.map(t => {
         if (t.id !== taskId) return t
@@ -580,7 +586,7 @@ export default function App() {
       }
     })
 
-    return () => { unsubStatus(); unsubLog(); unsubArtifact(); unsubConnStatus() }
+    return () => { unsubStatus(); unsubLog(); unsubPlan(); unsubArtifact(); unsubConnStatus() }
   }, [])
 
   // Sync detached panels list

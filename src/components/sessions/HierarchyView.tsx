@@ -32,17 +32,25 @@ const STATUS_FALLBACK_PROGRESS: Record<TaskStatus, number> = {
 }
 
 function taskProgress(task: Task): number {
+  if (task.status === 'completed') return 1
+
+  // Highest signal: checklist parsed from agent output (CHECKLIST.md mirror)
+  const cl = task.plan?.checklist
+  if (cl && cl.length > 0) {
+    const done = cl.filter(c => c.done).length
+    return Math.min(0.99, done / cl.length)
+  }
+
+  // Next: TaskSummary's completed/next steps (Claude-summarised)
   const sum = task.summary
   if (sum) {
     const done = sum.completedSteps?.length ?? 0
     const next = sum.nextSteps?.length ?? 0
     const total = done + next
-    if (total > 0) {
-      // Plan-based progress, clamped so a finished status forces 100%
-      if (task.status === 'completed') return 1
-      return Math.min(0.99, done / total)
-    }
+    if (total > 0) return Math.min(0.99, done / total)
   }
+
+  // Fallback: status-implied
   return STATUS_FALLBACK_PROGRESS[task.status] ?? 0
 }
 

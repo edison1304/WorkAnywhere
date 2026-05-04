@@ -52,6 +52,7 @@ export interface InsightRow {
 export function taskInsight(task: Task): InsightRow[] {
   const rows: InsightRow[] = []
   const sum = task.summary
+  const plan = task.plan
 
   // 1. "Now" — what is happening right this moment
   if (task.status === 'running') {
@@ -71,14 +72,23 @@ export function taskInsight(task: Task): InsightRow[] {
     rows.push({ tone: 'neutral', label: '목적', value: task.purpose || task.prompt.slice(0, 80) })
   }
 
-  // 2. 끝낸 것
-  if (sum?.completedSteps?.length) {
+  // 2. Checklist progress (highest signal — comes from CHECKLIST.md)
+  if (plan?.checklist?.length) {
+    const done = plan.checklist.filter(c => c.done).length
+    const total = plan.checklist.length
+    const nextItem = plan.checklist.find(c => !c.done)
+    const value = nextItem
+      ? `${done}/${total} · 다음: ${nextItem.text}`
+      : `${done}/${total}`
+    rows.push({ tone: done === total ? 'done' : 'active', label: '체크리스트', value })
+  } else if (sum?.completedSteps?.length) {
+    // Fallback to TaskSummary
     const recent = sum.completedSteps.slice(-3).join(' · ')
     rows.push({ tone: 'done', label: '끝낸 것', value: recent })
   }
 
-  // 3. 다음
-  if (sum?.nextSteps?.length && task.status !== 'completed') {
+  // 3. 다음 (only when no checklist — checklist row already shows next)
+  if (!plan?.checklist?.length && sum?.nextSteps?.length && task.status !== 'completed') {
     const upcoming = sum.nextSteps.slice(0, 3).join(' · ')
     rows.push({ tone: 'neutral', label: '다음', value: upcoming })
   }
