@@ -449,6 +449,7 @@ export function CommandCenter({
           onApproveTask={onMarkCompleted}
           pendingPermission={pendingPermission}
           onRespondPermission={onRespondPermission}
+          onUpdateTask={onUpdateTask}
         />
 
         {/* Status rail: hidden in grid mode (no active task) — info would duplicate */}

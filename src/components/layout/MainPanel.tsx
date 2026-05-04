@@ -95,6 +95,8 @@ interface Props {
   // ─── Inline approval card in chat ───
   pendingPermission?: { id: string; text: string; format: 'numbered' | 'yn' } | null
   onRespondPermission?: (taskId: string, approved: boolean) => void
+  // ─── Generic task patch (used by IntentLockHeader inline editor) ───
+  onUpdateTask?: (taskId: string, patch: Partial<Task>) => void
 }
 
 export function MainPanel({
@@ -106,6 +108,7 @@ export function MainPanel({
   openFilePath, onOpenFile,
   allProjectTasks, projectPhases, allProjects, activeProjectId, onSelectTask, onApproveTask,
   pendingPermission, onRespondPermission,
+  onUpdateTask,
 }: Props) {
   const [activeTab, setActiveTab] = useState<'log' | 'terminal' | 'artifacts'>('terminal')
 
@@ -401,7 +404,7 @@ export function MainPanel({
       </div>
 
       {/* Intent Lock — 본목적 고정 영역 (§10) */}
-      <IntentLockHeader task={activeTask} />
+      <IntentLockHeader task={activeTask} onUpdate={onUpdateTask} />
 
       {/* Summary panel (when available) */}
       {activeTask.summary && (

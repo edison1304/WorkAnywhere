@@ -1,7 +1,8 @@
 /* Intent Lock — 본목적 고정 영역 (work_anywhere_context_summary_ui.md §10).
  * Acts as the "north star": purpose + out-of-scope + success criteria.
  * Always visible while a task is active; user references it before
- * deciding whether to keep going or intervene. */
+ * deciding whether to keep going or intervene. Cells are click-to-edit
+ * when an onUpdate callback is provided. */
 
 .band {
   display: flex;
@@ -57,22 +58,107 @@
   font-style: italic;
 }
 
+/* Click-to-edit text — looks like value, behaves like button */
+.valueButton, .valueButtonMuted {
+  appearance: none;
+  background: transparent;
+  border: 1px dashed transparent;
+  border-radius: var(--radius-xs);
+  padding: 2px 4px;
+  margin: -2px -4px;
+  text-align: left;
+  font: inherit;
+  cursor: text;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.45;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+.valueButtonMuted {
+  color: var(--ink-tertiary);
+  font-style: italic;
+  font-size: 12px;
+}
+.valueButton:hover, .valueButtonMuted:hover {
+  border-color: var(--hairline-strong);
+  background: var(--surface-2);
+}
+
+/* Edit textarea — inherits cell typography */
+.editArea {
+  width: 100%;
+  font-family: var(--font-text);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--primary-focus);
+  border-radius: var(--radius-xs);
+  padding: 4px 6px;
+  resize: vertical;
+  outline: none;
+}
+.editArea:focus {
+  border-color: var(--primary);
+  background: var(--canvas);
+}
+
+/* ─── Chip list (mustNotTouch) ─── */
 .chipRow {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
   margin-top: 2px;
+  align-items: center;
 }
 
 .chip {
-  display: inline-block;
-  padding: 2px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 8px;
   border-radius: var(--radius-xs);
   font-size: 11px;
   background: rgba(216, 160, 80, 0.10);
   color: var(--warning);
   border: 1px solid rgba(216, 160, 80, 0.25);
   line-height: 1.4;
+}
+
+.chipDelete {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: var(--warning);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  border-radius: var(--radius-xs);
+  opacity: 0.6;
+}
+.chipDelete:hover { opacity: 1; background: rgba(216, 160, 80, 0.20); }
+
+.chipInput {
+  appearance: none;
+  background: transparent;
+  border: 1px dashed var(--hairline);
+  border-radius: var(--radius-xs);
+  padding: 2px 6px;
+  font-size: 11px;
+  color: var(--ink-subtle);
+  font-family: var(--font-text);
+  outline: none;
+  min-width: 88px;
+  flex: 0 1 auto;
+}
+.chipInput::placeholder { color: var(--ink-tertiary); font-style: italic; }
+.chipInput:focus {
+  border-style: solid;
+  border-color: var(--primary-focus);
+  background: var(--surface-2);
+  color: var(--ink);
 }
 
 @media (max-width: 900px) {
