@@ -97,6 +97,29 @@ app.on('window-all-closed', () => {
   }
 })
 
+// Final flush to server on graceful quit. Renderer's syncToServer is
+// debounced (2s) and only fires on turn boundaries, so logs accumulated
+// during a still-running turn won't have reached the server yet — and
+// reconnect's loadFromServer would clobber them via dataStore.replaceAll.
+// On unexpected termination (kill -9, power loss) we just skip.
+let isFlushingOnQuit = false
+app.on('before-quit', async (event) => {
+  if (isFlushingOnQuit || !dataStore) return
+  const conn = getAnyConn()
+  if (!conn) return // no active connection, nothing to flush
+  isFlushingOnQuit = true
+  event.preventDefault()
+  try {
+    const data = dataStore.getAll()
+    const json = JSON.stringify(data)
+    const b64 = Buffer.from(json, 'utf-8').toString('base64')
+    await conn.exec(`mkdir -p ~/.workanywhere && echo '${b64}' | base64 -d > ~/.workanywhere/data.json`)
+  } catch {
+    // best-effort — fall through to quit even if push failed
+  }
+  app.quit()
+})
+
 // ─── Detached Window Management ───
 ipcMain.handle('window:detach', async (_event, panelId: string, options: {
   title?: string
