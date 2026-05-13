@@ -600,8 +600,10 @@ export default function App() {
           ...(status === 'completed' || status === 'failed' ? { completedAt: new Date().toISOString() } : {})
         } : t
       ))
-      // Sync to server on task completion/failure
-      if (status === 'completed' || status === 'failed' || status === 'review') {
+      // Sync to server on task completion/failure, and at each agent
+      // turn boundary ('waiting') so logs accumulated during the turn
+      // get pushed up before the user might close the app or reconnect.
+      if (status === 'completed' || status === 'failed' || status === 'review' || status === 'waiting') {
         syncToServer()
       }
     })
