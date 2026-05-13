@@ -464,6 +464,28 @@ export default function App() {
     }
   }, [])
 
+  // ─── Initial load from local DataStore on app startup ───
+  // Without this, previous chats / tasks don't appear until the user
+  // manually reconnects (loadFromServer is only called after a connect click).
+  // dataLoad() reads the local data.json synced by taskAddLog and returns
+  // immediately — no connection required.
+  useEffect(() => {
+    if (!window.api || windowHash) return // only main window
+    let cancelled = false
+    window.api.dataLoad().then(result => {
+      if (cancelled || !result.success || !result.data) return
+      const data = result.data
+      // Don't overwrite anything the user already loaded via reconnect
+      setProjects(prev => prev.length ? prev : (data.projects || []))
+      setPhases(prev => prev.length ? prev : (data.phases || []))
+      setTasks(prev => prev.length ? prev : (data.tasks || []))
+      if (data.projects?.length) {
+        setActiveProjectId(prev => prev ?? data.projects[0].id)
+      }
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [windowHash])
+
   // ─── Dynamic window title ───
   useEffect(() => {
     if (!window.api || windowHash) return // only main window
