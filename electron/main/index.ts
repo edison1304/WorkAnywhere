@@ -638,7 +638,9 @@ async function runClaudeOnProject(projectId: string, prompt: string): Promise<st
   const execCmd = `bash -lc '${escapedScript}'`
 
   console.log(`[runClaude] exec cmd: ${execCmd.slice(0, 200)}...`)
-  const result = await conn.exec(execCmd)
+  // Use execChannel (dedicated SSH channel) — claude CLI runs for minutes
+  // and would block the persistent shell queue if sent through exec().
+  const result = await conn.execChannel(execCmd)
   console.log(`[runClaude] result length=${result.length}, preview: "${result.slice(0, 200)}"`)
   return result
 }

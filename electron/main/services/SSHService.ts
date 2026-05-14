@@ -3,6 +3,7 @@ import { EventEmitter } from 'events'
 import type { ConnectionConfig, AppConfig } from '../../../shared/types'
 import type { ClaudeStreamEvent } from './ConnectionTypes'
 import { readFileSync } from 'fs'
+import { PersistentShell } from './PersistentShell'
 
 export interface EngineExecConfig {
   command: string
@@ -25,6 +26,8 @@ export class SSHService extends EventEmitter {
   private client: Client | null = null
   private connected = false
   private sessions = new Map<string, SSHSession>()
+  private persistentShell: PersistentShell | null = null
+  private shellReconnecting = false
   public engines: Record<string, EngineExecConfig> = {
     claude: { command: 'claude', args: [], env: {}, setupScript: '' },
     opencode: { command: 'opencode', args: [], env: {}, setupScript: '' },
@@ -118,6 +121,8 @@ export class SSHService extends EventEmitter {
   }
 
   disconnect(): void {
+    this.persistentShell?.destroy()
+    this.persistentShell = null
     for (const session of this.sessions.values()) {
       session.close()
     }
@@ -131,10 +136,59 @@ export class SSHService extends EventEmitter {
     return this.connected
   }
 
-  // Execute a command and return output
-  // useLogin: wraps in bash -lc to pick up .bashrc/.profile PATH
-  // Retries on "Channel open failure" with backoff.
+  // ─── Persistent Shell management ───
+
+  private async getOrCreateShell(): Promise<PersistentShell> {
+    if (this.persistentShell?.isAlive) return this.persistentShell
+    if (this.shellReconnecting) {
+      // Wait for reconnection to complete
+      await new Promise<void>(resolve => this.once('shell:ready', resolve))
+      if (this.persistentShell?.isAlive) return this.persistentShell
+      throw new Error('PersistentShell reconnection failed')
+    }
+    return this.createShell()
+  }
+
+  private async createShell(): Promise<PersistentShell> {
+    if (!this.client || !this.connected) throw new Error('Not connected')
+    this.shellReconnecting = true
+    try {
+      this.persistentShell = new PersistentShell(this.client, () => {
+        // Shell died — auto-recreate on next exec()
+        console.log('[SSHService] PersistentShell died, will recreate on next exec')
+        this.persistentShell = null
+      })
+      await this.persistentShell.init()
+      this.shellReconnecting = false
+      this.emit('shell:ready')
+      return this.persistentShell
+    } catch (err) {
+      this.shellReconnecting = false
+      this.persistentShell = null
+      throw err
+    }
+  }
+
+  // Execute a short-lived command via the persistent shell channel.
+  // All commands share ONE shell channel instead of opening a new channel each time.
   async exec(command: string, useLogin = false): Promise<string> {
+    if (!this.client || !this.connected) throw new Error('Not connected')
+    const finalCmd = useLogin ? `bash -lc ${JSON.stringify(command)}` : command
+
+    try {
+      const shell = await this.getOrCreateShell()
+      return await shell.exec(finalCmd)
+    } catch (err: any) {
+      // If persistent shell fails, fall back to a direct channel once
+      console.log(`[SSH exec] PersistentShell failed (${err.message}), falling back to direct channel`)
+      return this.execChannel(finalCmd)
+    }
+  }
+
+  // Execute a command via a dedicated SSH channel.
+  // Use this for long-running commands (e.g. claude CLI) that would block the
+  // persistent shell queue. Also used as fallback when the persistent shell fails.
+  async execChannel(command: string, useLogin = false): Promise<string> {
     if (!this.client || !this.connected) throw new Error('Not connected')
     const finalCmd = useLogin ? `bash -lc ${JSON.stringify(command)}` : command
 
@@ -165,7 +219,7 @@ export class SSHService extends EventEmitter {
       } catch (err: any) {
         const msg = err?.message || String(err)
         if (msg.includes('Channel open failure') && attempt < MAX_RETRIES) {
-          console.log(`[SSH exec] Channel open failure, retry ${attempt + 1}/${MAX_RETRIES} in ${RETRY_DELAYS[attempt]}ms`)
+          console.log(`[SSH execChannel] Channel open failure, retry ${attempt + 1}/${MAX_RETRIES} in ${RETRY_DELAYS[attempt]}ms`)
           await new Promise(r => setTimeout(r, RETRY_DELAYS[attempt]))
           continue
         }

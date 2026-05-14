@@ -114,6 +114,11 @@ export class LocalService extends EventEmitter {
     })
   }
 
+  // Local mode has no channel limits — alias to exec()
+  async execChannel(command: string, useLogin = false): Promise<string> {
+    return this.exec(command, useLogin)
+  }
+
   async spawnPTY(command: string, sessionId: string, cols = 120, rows = 30): Promise<LocalSession> {
     const { bin, args } = this.shellCmd(command)
     const child = spawn(bin, args, {

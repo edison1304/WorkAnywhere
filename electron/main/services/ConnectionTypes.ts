@@ -33,6 +33,7 @@ export interface IConnectionService {
   spawnAgentStream(engine: string, workspacePath: string, prompt: string, sessionId: string, resumeSessionId?: string): Promise<StreamHandle>
   spawnPTY(command: string, sessionId: string, cols?: number, rows?: number): Promise<ISession>
   exec(command: string, useLogin?: boolean): Promise<string>
+  execChannel(command: string, useLogin?: boolean): Promise<string>
   isConnected(): boolean
   checkClaude(): Promise<{ available: boolean; version?: string }>
 }
