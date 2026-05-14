@@ -86,6 +86,55 @@ function createWindow(): void {
     mainWindow.loadFile(getRendererFile())
   }
 
+  // Intercept window close to flush data BEFORE the window disappears.
+  // Without this, the window closes instantly and before-quit runs
+  // invisibly in the background — the user sees "바로 꺼짐" and if the
+  // flush fails, data is lost on next loadFromServer.
+  let isClosing = false
+  mainWindow.on('close', (event) => {
+    if (isClosing) return // already flushing, let it close
+    const conn = getAnyConn()
+    if (!conn) return // no connection, close immediately (local data is safe)
+
+    event.preventDefault()
+    isClosing = true
+
+    // Show the user that saving is in progress
+    mainWindow?.webContents.send('app:saving', true)
+
+    const doFlush = async () => {
+      try {
+        const data = dataStore.getAll()
+        const json = JSON.stringify(data)
+        const b64 = Buffer.from(json, 'utf-8').toString('base64')
+        const remotePath = '~/.workanywhere/data.json'
+        const tmpPath = '~/.workanywhere/.data.json.tmp'
+        await conn.execChannel(`mkdir -p ~/.workanywhere && rm -f ${tmpPath}`)
+        const CHUNK = 60000
+        for (let i = 0; i < b64.length; i += CHUNK) {
+          const chunk = b64.slice(i, i + CHUNK)
+          await conn.execChannel(`printf '%s' '${chunk}' >> ${tmpPath}`)
+        }
+        await conn.execChannel(`base64 -d ${tmpPath} > ${remotePath} && rm -f ${tmpPath}`)
+        console.log(`[close] Flushed ${b64.length} chars to server`)
+      } catch (err) {
+        console.error('[close] Flush failed:', err)
+      }
+      // Now actually close — skip before-quit flush since we already did it
+      isFlushingOnQuit = true
+      mainWindow?.destroy()
+    }
+
+    // Timeout: don't hang forever if SSH is dead
+    const timeout = setTimeout(() => {
+      console.error('[close] Flush timed out, closing anyway')
+      isFlushingOnQuit = true
+      mainWindow?.destroy()
+    }, 10_000)
+
+    doFlush().finally(() => clearTimeout(timeout))
+  })
+
   mainWindow.on('closed', () => {
     mainWindow = null
     // DON'T close detached windows when main closes

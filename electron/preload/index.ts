@@ -168,6 +168,13 @@ const api: IpcApi = {
   // Window info
   setWindowTitle: (title) => ipcRenderer.send('window:set-title', title),
   getWindowHash: () => window.location.hash.replace('#', ''),
+
+  // App lifecycle
+  onAppSaving: (cb) => {
+    const handler = (_event: unknown, saving: boolean) => cb(saving)
+    ipcRenderer.on('app:saving', handler)
+    return () => ipcRenderer.removeListener('app:saving', handler)
+  },
 }
 
 contextBridge.exposeInMainWorld('api', api)

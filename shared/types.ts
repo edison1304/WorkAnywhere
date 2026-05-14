@@ -408,6 +408,9 @@ export interface IpcApi {
   // Window info
   setWindowTitle(title: string): void
   getWindowHash(): string
+
+  // App lifecycle
+  onAppSaving(cb: (saving: boolean) => void): () => void
 }
 
 export interface DetachOptions {
