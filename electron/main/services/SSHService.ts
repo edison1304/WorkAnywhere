@@ -78,6 +78,12 @@ export class SSHService extends EventEmitter {
         host: config.ssh!.host,
         port: config.ssh!.port,
         username: config.ssh!.username,
+        // Keep the connection alive — without these, NAT/firewall/load balancers
+        // drop idle TCP connections (often after 60-300s of silence), killing
+        // long-running agent channels while claude is "thinking" with no stdout.
+        keepaliveInterval: 15_000,  // send keepalive every 15s
+        keepaliveCountMax: 3,       // disconnect after 3 missed responses (45s)
+        readyTimeout: 30_000,       // 30s to establish connection
       }
 
       if (config.ssh!.authMethod === 'key' && config.ssh!.keyPath) {
