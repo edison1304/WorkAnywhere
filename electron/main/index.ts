@@ -136,9 +136,22 @@ app.on('before-quit', async (event) => {
     const data = dataStore.getAll()
     const json = JSON.stringify(data)
     const b64 = Buffer.from(json, 'utf-8').toString('base64')
-    await conn.exec(`mkdir -p ~/.workanywhere && echo '${b64}' | base64 -d > ~/.workanywhere/data.json`)
-  } catch {
-    // best-effort — fall through to quit even if push failed
+    // Use execChannel (dedicated SSH channel) to avoid PersistentShell
+    // which may already be dead during shutdown.
+    // Chunk the base64 to avoid ARG_MAX shell limits (~128KB-2MB).
+    // Large task logs can easily push the payload beyond that.
+    const remotePath = '~/.workanywhere/data.json'
+    const tmpPath = '~/.workanywhere/.data.json.tmp'
+    await conn.execChannel(`mkdir -p ~/.workanywhere && rm -f ${tmpPath}`)
+    const CHUNK = 60000
+    for (let i = 0; i < b64.length; i += CHUNK) {
+      const chunk = b64.slice(i, i + CHUNK)
+      await conn.execChannel(`printf '%s' '${chunk}' >> ${tmpPath}`)
+    }
+    await conn.execChannel(`base64 -d ${tmpPath} > ${remotePath} && rm -f ${tmpPath}`)
+    console.log(`[before-quit] Flushed ${b64.length} chars to server`)
+  } catch (err) {
+    console.error('[before-quit] Flush failed:', err)
   }
   app.quit()
 })
@@ -1382,6 +1395,7 @@ ipcMain.handle('data:save', async (_event, data: import('../../../shared/types')
 
 // ─── Server-side data sync ───
 // Save workspace data to server's ~/.workanywhere/data.json
+// Uses chunked base64 write to avoid shell ARG_MAX limits.
 ipcMain.handle('data:save-to-server', async () => {
   try {
     const conn = getAnyConn()
@@ -1389,7 +1403,15 @@ ipcMain.handle('data:save-to-server', async () => {
     const data = dataStore.getAll()
     const json = JSON.stringify(data)
     const b64 = Buffer.from(json, 'utf-8').toString('base64')
-    await conn.exec(`mkdir -p ~/.workanywhere && echo '${b64}' | base64 -d > ~/.workanywhere/data.json`)
+    const remotePath = '~/.workanywhere/data.json'
+    const tmpPath = '~/.workanywhere/.data.json.tmp'
+    await conn.exec(`mkdir -p ~/.workanywhere && rm -f ${tmpPath}`)
+    const CHUNK = 60000
+    for (let i = 0; i < b64.length; i += CHUNK) {
+      const chunk = b64.slice(i, i + CHUNK)
+      await conn.exec(`printf '%s' '${chunk}' >> ${tmpPath}`)
+    }
+    await conn.exec(`base64 -d ${tmpPath} > ${remotePath} && rm -f ${tmpPath}`)
     return { success: true }
   } catch (err) {
     return { success: false, error: String(err) }
@@ -1397,6 +1419,9 @@ ipcMain.handle('data:save-to-server', async () => {
 })
 
 // Load workspace data from server's ~/.workanywhere/data.json
+// Merges with local data — keeps whichever version of each entity is newer
+// based on updatedAt timestamp, preventing stale server data from clobbering
+// locally-persisted logs that haven't been synced yet.
 ipcMain.handle('data:load-from-server', async () => {
   try {
     const conn = getAnyConn()
@@ -1404,22 +1429,54 @@ ipcMain.handle('data:load-from-server', async () => {
     const raw = await conn.exec('cat ~/.workanywhere/data.json 2>/dev/null || echo ""')
     const trimmed = raw.trim()
     if (!trimmed) return { success: true, data: null }
-    const data: import('../../../shared/types').SavedData = JSON.parse(trimmed)
+    const serverData: import('../../../shared/types').SavedData = JSON.parse(trimmed)
     // Agent processes don't survive a restart — any task persisted as
     // running/waiting/queued is stale. Reset to idle so the UI doesn't
     // show a "running" agent that the AgentService has no record of.
-    if (Array.isArray(data.tasks)) {
-      data.tasks = data.tasks.map(t =>
+    if (Array.isArray(serverData.tasks)) {
+      serverData.tasks = serverData.tasks.map(t =>
         t.status === 'running' || t.status === 'waiting' || t.status === 'queued'
           ? { ...t, status: 'idle' as const }
           : t
       )
     }
-    // Also update local DataStore
-    if (data.projects?.length || data.phases?.length || data.tasks?.length) {
-      dataStore.replaceAll(data)
+
+    // Merge server + local: for each entity, keep the one with the later updatedAt.
+    // This prevents stale server data from overwriting newer local data (e.g.
+    // logs that accumulated after the last syncToServer).
+    const localData = dataStore.getAll()
+
+    function mergeById<T extends { id: string; updatedAt?: string }>(
+      local: T[], server: T[]
+    ): T[] {
+      const map = new Map<string, T>()
+      for (const item of local) map.set(item.id, item)
+      for (const item of server) {
+        const existing = map.get(item.id)
+        if (!existing) {
+          // New on server — add it
+          map.set(item.id, item)
+        } else {
+          // Both exist — keep the one with later updatedAt
+          const localTime = existing.updatedAt || ''
+          const serverTime = item.updatedAt || ''
+          if (serverTime > localTime) {
+            map.set(item.id, item)
+          }
+          // else: keep local (it's newer)
+        }
+      }
+      return Array.from(map.values())
     }
-    return { success: true, data }
+
+    const merged: import('../../../shared/types').SavedData = {
+      projects: mergeById(localData.projects || [], serverData.projects || []),
+      phases: mergeById(localData.phases || [], serverData.phases || []),
+      tasks: mergeById(localData.tasks || [], serverData.tasks || []),
+    }
+
+    dataStore.replaceAll(merged)
+    return { success: true, data: merged }
   } catch (err) {
     return { success: false, error: String(err) }
   }
