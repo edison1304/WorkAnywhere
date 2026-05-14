@@ -9,6 +9,29 @@ import { compute as computeSchedule } from './services/SchedulingService'
 import { WorkflowFileService } from './services/WorkflowFileService'
 import { PlanSyncService } from './services/PlanSyncService'
 
+// ─── Global error handlers — prevent ECONNRESET and similar network
+// errors from crashing the app with an uncaught exception dialog. ───
+process.on('uncaughtException', (err) => {
+  const msg = err?.message || ''
+  // Network errors (ECONNRESET, EPIPE, ETIMEDOUT, etc.) are recoverable —
+  // ConnectionManager's reconnect logic will handle them.
+  if (msg.includes('ECONNRESET') || msg.includes('EPIPE') || msg.includes('ETIMEDOUT') || msg.includes('ECONNREFUSED')) {
+    console.error('[uncaughtException] Network error (suppressed):', msg)
+    return
+  }
+  // For non-network errors, log but don't crash
+  console.error('[uncaughtException]', err)
+})
+
+process.on('unhandledRejection', (reason) => {
+  const msg = String(reason || '')
+  if (msg.includes('ECONNRESET') || msg.includes('EPIPE') || msg.includes('ETIMEDOUT') || msg.includes('ECONNREFUSED')) {
+    console.error('[unhandledRejection] Network error (suppressed):', msg)
+    return
+  }
+  console.error('[unhandledRejection]', reason)
+})
+
 let mainWindow: BrowserWindow | null = null
 const detachedWindows = new Map<string, BrowserWindow>()
 
