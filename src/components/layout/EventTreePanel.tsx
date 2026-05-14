@@ -31,6 +31,17 @@ interface EventNode {
   source: 'completed' | 'detour' | 'error' | 'live-summary'
 }
 
+// ─── Detour keyword detection (mirrors timelineEvents.ts) ──────────
+const DETOUR_KEYWORDS = [
+  'skip', 'skipped', 'defer', 'deferred', 'bypass', 'bypassed',
+  'rollback', 'rolled back', 'reverted', 'instead of', 'workaround',
+  '우회', '건너뛰', '보류', '대신', '미뤄', '되돌',
+]
+function isDetour(text: string): boolean {
+  const lower = text.toLowerCase()
+  return DETOUR_KEYWORDS.some(k => lower.includes(k))
+}
+
 function extractEventNodes(task: Task): EventNode[] {
   const nodes: EventNode[] = []
   const c = task.compacted
@@ -67,6 +78,41 @@ function extractEventNodes(task: Task): EventNode[] {
           ? `원인: ${item.cause}\n해결: ${item.fix}`
           : `원인: ${item.cause}\n상태: 미해결`,
         timestamp: item.timestamp,
+        source: 'error',
+      })
+    }
+  } else {
+    // ─── Fallback: derive nodes from plan.judgmentLog + error logs ───
+    // Lets the tree fill in while task:compact is still running (or hasn't
+    // been triggered yet). Once compacted lands these get replaced by the
+    // curated 3-bucket nodes.
+    for (const j of task.plan?.judgmentLog ?? []) {
+      const drift = isDetour(`${j.decision} ${j.reason}`)
+      nodes.push({
+        id: `${task.id}-j-${j.timestamp}-${j.decision.slice(0, 24)}`,
+        title: j.decision,
+        status: drift ? 'workaround' : 'resolved',
+        detail: j.reason,
+        timestamp: j.timestamp,
+        source: drift ? 'detour' : 'completed',
+      })
+    }
+    // Collapse duplicate errors into one node per unique message.
+    const errSeen = new Map<string, { ts: string; count: number }>()
+    for (const l of task.logs) {
+      if (l.type !== 'error') continue
+      const key = l.content.slice(0, 80)
+      const prev = errSeen.get(key)
+      if (prev) prev.count++
+      else errSeen.set(key, { ts: l.timestamp, count: 1 })
+    }
+    for (const [msg, info] of errSeen) {
+      nodes.push({
+        id: `${task.id}-err-${info.ts}`,
+        title: msg,
+        status: 'blocked',
+        detail: info.count > 1 ? `${info.count}회 발생 — 미해결` : '미해결',
+        timestamp: info.ts,
         source: 'error',
       })
     }
@@ -116,14 +162,15 @@ export function EventTreePanel({
 }: Props) {
   const nodes = useMemo(
     () => extractEventNodes(task),
-    [task.compacted, task.summary, task.id],
+    // task.logs/task.plan feed the fallback path before compacted lands.
+    [task.compacted, task.summary, task.logs, task.plan, task.id],
   )
 
   if (nodes.length === 0) {
     if (compactEmpty) {
       return (
         <div className={styles.empty} data-variant={variant} data-compact-empty="true">
-          <p className={styles.emptyHint}>사건 없음 — Summarize/Compact 후 누적</p>
+          <p className={styles.emptyHint}>사건 없음 — 에이전트가 작업을 시작하면 자동으로 누적됩니다</p>
         </div>
       )
     }
@@ -131,7 +178,7 @@ export function EventTreePanel({
       <div className={styles.empty} data-variant={variant}>
         <p className={styles.emptyTitle}>사건 흐름이 아직 없습니다</p>
         <p className={styles.emptyHint}>
-          요약 (Summarize) 또는 완료 처리 (Compact) 후 이 트리에 사건이 누적됩니다.
+          에이전트가 판단·에러를 만들거나 턴이 끝나면 자동으로 채워집니다.
         </p>
       </div>
     )

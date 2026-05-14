@@ -26,6 +26,26 @@ export default function App() {
   const [openFilePath, setOpenFilePath] = useState<string | null>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Fresh-tasks ref so IPC event listeners (registered with empty deps) can
+  // read the current task state without going stale.
+  const tasksRef = useRef<Task[]>([])
+  useEffect(() => { tasksRef.current = tasks }, [tasks])
+
+  // Auto-summarize / auto-compact throttling state. Drives the Tree + EventCard
+  // without requiring the user to press 요약/완료.
+  //   summary: every turn boundary (waiting/review/completed), min 45s gap,
+  //            min 4 new logs since last run.
+  //   compact: first time the task reaches review or completed (and not
+  //            already compacted).
+  const autoOpsRef = useRef({
+    summaryAt:        new Map<string, number>(),
+    summaryLogCount:  new Map<string, number>(),
+    summaryInFlight:  new Set<string>(),
+    summaryTimers:    new Map<string, ReturnType<typeof setTimeout>>(),
+    compactInFlight:  new Set<string>(),
+    compactDone:      new Set<string>(),
+  })
+
   // Debounced save to server — called after data changes
   const syncToServer = useCallback(() => {
     if (!window.api) return
@@ -34,6 +54,75 @@ export default function App() {
       window.api.dataSaveToServer().catch(() => {})
     }, 2000)
   }, [])
+
+  // Run task:summarize in the background and merge the result into state.
+  // Skips if another auto-summary is already running, if it ran too recently,
+  // or if no meaningful new content has arrived.
+  const triggerAutoSummary = useCallback((taskId: string) => {
+    if (!window.api) return
+    const ops = autoOpsRef.current
+    if (ops.summaryInFlight.has(taskId)) return
+    const task = tasksRef.current.find(t => t.id === taskId)
+    if (!task) return
+    const now = Date.now()
+    const last = ops.summaryAt.get(taskId) ?? 0
+    const lastLogs = ops.summaryLogCount.get(taskId) ?? 0
+    const newLogs = task.logs.length - lastLogs
+    // First run: any logs OK. Subsequent runs: ≥45s + ≥4 new logs.
+    if (last > 0 && (now - last < 45_000 || newLogs < 4)) return
+    if (task.logs.length === 0) return
+
+    ops.summaryInFlight.add(taskId)
+    ops.summaryAt.set(taskId, now)
+    ops.summaryLogCount.set(taskId, task.logs.length)
+    window.api.taskSummarize(taskId).then(result => {
+      if (result.success && result.summary) {
+        setTasks(prev => prev.map(t =>
+          t.id === taskId ? { ...t, summary: result.summary! } : t
+        ))
+        syncToServer()
+      }
+    }).catch(() => {}).finally(() => {
+      autoOpsRef.current.summaryInFlight.delete(taskId)
+    })
+  }, [syncToServer])
+
+  // Schedule an auto-summary after a short debounce so a burst of status
+  // events doesn't trigger multiple LLM calls.
+  const scheduleAutoSummary = useCallback((taskId: string, delayMs: number = 5_000) => {
+    const ops = autoOpsRef.current
+    const existing = ops.summaryTimers.get(taskId)
+    if (existing) clearTimeout(existing)
+    const t = setTimeout(() => {
+      ops.summaryTimers.delete(taskId)
+      triggerAutoSummary(taskId)
+    }, delayMs)
+    ops.summaryTimers.set(taskId, t)
+  }, [triggerAutoSummary])
+
+  // Run task:compact silently when a task hits review/completed. Fills the
+  // 3-bucket structure that drives the Timeline + Tree without the user
+  // having to open the CompactDialog.
+  const triggerAutoCompact = useCallback((taskId: string) => {
+    if (!window.api) return
+    const ops = autoOpsRef.current
+    if (ops.compactInFlight.has(taskId) || ops.compactDone.has(taskId)) return
+    const task = tasksRef.current.find(t => t.id === taskId)
+    if (!task || task.compacted || task.logs.length === 0) return
+
+    ops.compactInFlight.add(taskId)
+    window.api.taskCompact(taskId).then(result => {
+      if (result.success && result.compacted) {
+        ops.compactDone.add(taskId)
+        setTasks(prev => prev.map(t =>
+          t.id === taskId ? { ...t, compacted: result.compacted! } : t
+        ))
+        syncToServer()
+      }
+    }).catch(() => {}).finally(() => {
+      autoOpsRef.current.compactInFlight.delete(taskId)
+    })
+  }, [syncToServer])
 
   // Load data from server after connection established
   const loadFromServer = useCallback(async () => {
@@ -605,6 +694,17 @@ export default function App() {
       // get pushed up before the user might close the app or reconnect.
       if (status === 'completed' || status === 'failed' || status === 'review' || status === 'waiting') {
         syncToServer()
+      }
+      // Auto-summarize at every turn boundary so EventCard + Tree stay
+      // current without manual button presses (throttled inside).
+      if (status === 'waiting' || status === 'review' || status === 'completed') {
+        scheduleAutoSummary(taskId, 5_000)
+      }
+      // Auto-compact when the task is done (or under review) so the Tree
+      // shows the curated 3-bucket arc without the user opening the dialog.
+      if (status === 'review' || status === 'completed') {
+        // Slight delay so the final logs land in DataStore first.
+        setTimeout(() => triggerAutoCompact(taskId), 3_000)
       }
     })
 
