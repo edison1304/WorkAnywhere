@@ -133,19 +133,36 @@ export class SSHService extends EventEmitter {
 
   // Execute a command and return output
   // useLogin: wraps in bash -lc to pick up .bashrc/.profile PATH
+  // Retries on "Channel open failure" (SSH MaxSessions limit) with backoff.
   async exec(command: string, useLogin = false): Promise<string> {
     if (!this.client || !this.connected) throw new Error('Not connected')
     const finalCmd = useLogin ? `bash -lc ${JSON.stringify(command)}` : command
 
-    return new Promise((resolve, reject) => {
-      this.client!.exec(finalCmd, (err, stream) => {
-        if (err) return reject(err)
-        let output = ''
-        stream.on('data', (data: Buffer) => { output += data.toString() })
-        stream.stderr.on('data', (data: Buffer) => { output += data.toString() })
-        stream.on('close', () => resolve(output))
-      })
-    })
+    const MAX_RETRIES = 4
+    const RETRY_DELAYS = [1000, 2000, 4000, 8000]
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        return await new Promise<string>((resolve, reject) => {
+          this.client!.exec(finalCmd, (err, stream) => {
+            if (err) return reject(err)
+            let output = ''
+            stream.on('data', (data: Buffer) => { output += data.toString() })
+            stream.stderr.on('data', (data: Buffer) => { output += data.toString() })
+            stream.on('close', () => resolve(output))
+          })
+        })
+      } catch (err: any) {
+        const msg = err?.message || String(err)
+        if (msg.includes('Channel open failure') && attempt < MAX_RETRIES) {
+          console.log(`[SSH exec] Channel open failure, retry ${attempt + 1}/${MAX_RETRIES} in ${RETRY_DELAYS[attempt]}ms`)
+          await new Promise(r => setTimeout(r, RETRY_DELAYS[attempt]))
+          continue
+        }
+        throw err
+      }
+    }
+    throw new Error('Unreachable')
   }
 
   // Spawn an interactive PTY session (for xterm.js)
