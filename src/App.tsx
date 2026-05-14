@@ -24,6 +24,7 @@ export default function App() {
   const [detachedPanels, setDetachedPanels] = useState<Set<string>>(new Set())
   const [showCreateProject, setShowCreateProject] = useState(false)
   const [openFilePath, setOpenFilePath] = useState<string | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Fresh-tasks ref so IPC event listeners (registered with empty deps) can
@@ -764,7 +765,11 @@ export default function App() {
       }
     })
 
-    return () => { unsubStatus(); unsubLog(); unsubPlan(); unsubPermission(); unsubArtifact(); unsubConnStatus() }
+    const unsubSaving = window.api.onAppSaving((saving) => {
+      setIsSaving(saving)
+    })
+
+    return () => { unsubStatus(); unsubLog(); unsubPlan(); unsubPermission(); unsubArtifact(); unsubConnStatus(); unsubSaving() }
   }, [])
 
   // Sync detached panels list
@@ -1066,6 +1071,24 @@ export default function App() {
         maxRetries={reconnectAttempt?.max}
         onClick={!sshConnected || connectionStatus === 'failed' ? () => setSshDialogOpen(true) : undefined}
       />
+
+      {/* Saving overlay — shown when app is flushing data before close */}
+      {isSaving && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 99999,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)',
+        }}>
+          <div style={{
+            background: '#1a1a1a', border: '1px solid #333', borderRadius: 8,
+            padding: '24px 40px', textAlign: 'center',
+            color: '#ccc', fontSize: 14, fontFamily: 'inherit',
+          }}>
+            <div style={{ fontSize: 18, color: '#fff', marginBottom: 8 }}>Saving...</div>
+            <div style={{ color: '#888' }}>Syncing data to server before closing</div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
