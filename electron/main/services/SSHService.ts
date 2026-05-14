@@ -133,7 +133,7 @@ export class SSHService extends EventEmitter {
 
   // Execute a command and return output
   // useLogin: wraps in bash -lc to pick up .bashrc/.profile PATH
-  // Retries on "Channel open failure" (SSH MaxSessions limit) with backoff.
+  // Retries on "Channel open failure" with backoff.
   async exec(command: string, useLogin = false): Promise<string> {
     if (!this.client || !this.connected) throw new Error('Not connected')
     const finalCmd = useLogin ? `bash -lc ${JSON.stringify(command)}` : command
@@ -147,9 +147,19 @@ export class SSHService extends EventEmitter {
           this.client!.exec(finalCmd, (err, stream) => {
             if (err) return reject(err)
             let output = ''
+            let settled = false
+            const settle = (fn: () => void) => { if (!settled) { settled = true; fn() } }
+
             stream.on('data', (data: Buffer) => { output += data.toString() })
             stream.stderr.on('data', (data: Buffer) => { output += data.toString() })
-            stream.on('close', () => resolve(output))
+            stream.on('error', (e: Error) => {
+              stream.destroy()
+              settle(() => reject(e))
+            })
+            stream.on('close', () => {
+              stream.destroy()
+              settle(() => resolve(output))
+            })
           })
         })
       } catch (err: any) {
@@ -183,8 +193,16 @@ export class SSHService extends EventEmitter {
             for (const cb of dataCallbacks) cb(str)
           })
 
+          stream.on('error', (err: Error) => {
+            console.error(`[PTY ${sessionId}] stream error:`, err.message)
+            this.sessions.delete(sessionId)
+            stream.destroy()
+            for (const cb of closeCallbacks) cb()
+          })
+
           stream.on('close', () => {
             this.sessions.delete(sessionId)
+            stream.destroy()
             for (const cb of closeCallbacks) cb()
           })
 
@@ -249,6 +267,7 @@ export class SSHService extends EventEmitter {
         const eventCallbacks: Array<(event: ClaudeStreamEvent) => void> = []
         const closeCallbacks: Array<(code: number) => void> = []
         let buffer = ''
+        let closed = false
 
         stream.on('data', (data: Buffer) => {
           buffer += data.toString()
@@ -269,14 +288,27 @@ export class SSHService extends EventEmitter {
           }
         })
 
+        stream.on('error', (err: Error) => {
+          console.error(`[AgentStream] stream error:`, err.message)
+          if (!closed) {
+            closed = true
+            stream.destroy()
+            for (const cb of closeCallbacks) cb(-1)
+          }
+        })
+
         stream.on('close', (code: number) => {
-          for (const cb of closeCallbacks) cb(code)
+          if (!closed) {
+            closed = true
+            stream.destroy()
+            for (const cb of closeCallbacks) cb(code)
+          }
         })
 
         resolve({
           onEvent: (cb) => { eventCallbacks.push(cb) },
           onClose: (cb) => { closeCallbacks.push(cb) },
-          kill: () => { stream.signal?.('KILL'); stream.close() },
+          kill: () => { stream.signal?.('KILL'); stream.destroy() },
         })
       })
     })
