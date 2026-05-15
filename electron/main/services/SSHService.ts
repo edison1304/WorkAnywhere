@@ -1,5 +1,6 @@
 import { Client, type ConnectConfig, type ClientChannel } from 'ssh2'
 import { EventEmitter } from 'events'
+import { StringDecoder } from 'string_decoder'
 import type { ConnectionConfig, AppConfig } from '../../../shared/types'
 import type { ClaudeStreamEvent } from './ConnectionTypes'
 import { readFileSync } from 'fs'
@@ -209,14 +210,19 @@ export class SSHService extends EventEmitter {
             let output = ''
             let settled = false
             const settle = (fn: () => void) => { if (!settled) { settled = true; fn() } }
+            // StringDecoder handles multi-byte UTF-8 chars split across chunks
+            const decoder = new StringDecoder('utf8')
+            const decoderErr = new StringDecoder('utf8')
 
-            stream.on('data', (data: Buffer) => { output += data.toString() })
-            stream.stderr.on('data', (data: Buffer) => { output += data.toString() })
+            stream.on('data', (data: Buffer) => { output += decoder.write(data) })
+            stream.stderr.on('data', (data: Buffer) => { output += decoderErr.write(data) })
             stream.on('error', (e: Error) => {
               stream.destroy()
               settle(() => reject(e))
             })
             stream.on('close', () => {
+              output += decoder.end()
+              output += decoderErr.end()
               stream.destroy()
               settle(() => resolve(output))
             })
@@ -328,9 +334,10 @@ export class SSHService extends EventEmitter {
         const closeCallbacks: Array<(code: number) => void> = []
         let buffer = ''
         let closed = false
+        const decoder = new StringDecoder('utf8')
 
         stream.on('data', (data: Buffer) => {
-          buffer += data.toString()
+          buffer += decoder.write(data)
           // Parse newline-delimited JSON
           const lines = buffer.split('\n')
           buffer = lines.pop() || '' // keep incomplete line
