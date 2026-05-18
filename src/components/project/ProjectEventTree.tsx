@@ -103,7 +103,7 @@ export function ProjectEventTree({ project, phases, tasks, onSelectTask }: Props
           <AttentionBoard sections={sections} onSelectTask={onSelectTask} />
         )}
         {mode === 'pulse'    && <ModePlaceholder label="Pulse"    hint="Layer 4 — Activity heatmap, 시간 bucket 가공" />}
-        {mode === 'timeline' && <ModePlaceholder label="Timeline" hint="Layer 3 — 공유 horizontal time axis (Gantt-ish)" />}
+        {mode === 'timeline' && <TimelineMode sections={sections} onSelectTask={onSelectTask} />}
         {mode === 'flow'     && <ModePlaceholder label="Flow"     hint="Layer 5 — forkedFromId + 시퀀스 노드-엣지" />}
       </div>
     </div>
@@ -334,6 +334,146 @@ function AttentionPinBar({
   )
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Mode D — Timeline (Gantt-ish horizontal axis)
+
+type Zoom = 'day' | 'week' | 'month'
+const ZOOM_KEY = 'wa.tree.timeline.zoom'
+const ZOOM_MS: Record<Zoom, number> = {
+  day:   24 * 3600 * 1000,
+  week:  7 * 24 * 3600 * 1000,
+  month: 30 * 24 * 3600 * 1000,
+}
+const ZOOM_LABELS: Record<Zoom, string> = { day: '1d', week: '1w', month: '1mo' }
+
+function TimelineMode({
+  sections,
+  onSelectTask,
+}: {
+  sections: Array<{ phase: Phase | null; tasks: Task[] }>
+  onSelectTask: (id: string) => void
+}) {
+  const [zoom, setZoom] = useState<Zoom>(() => {
+    if (typeof window === 'undefined') return 'week'
+    const v = window.localStorage?.getItem(ZOOM_KEY)
+    if (v === 'day' || v === 'week' || v === 'month') return v
+    return 'week'
+  })
+  useEffect(() => {
+    try { window.localStorage?.setItem(ZOOM_KEY, zoom) } catch { /* ignore */ }
+  }, [zoom])
+
+  // Re-derive range each render — Date.now() is OK; user is unlikely to leave
+  // this tab open for hours where the "now" drift becomes visible.
+  const range = useMemo(() => {
+    const end = Date.now()
+    return { start: end - ZOOM_MS[zoom], end }
+  }, [zoom])
+
+  const ticks = useMemo(() => axisTicks(zoom), [zoom])
+
+  return (
+    <div className={styles.timeline}>
+      <div className={styles.zoomRow}>
+        <span className={styles.zoomLabel}>Zoom</span>
+        {(['day', 'week', 'month'] as Zoom[]).map(z => (
+          <button
+            key={z}
+            type="button"
+            className={`${styles.zoomBtn} ${z === zoom ? styles.zoomBtnActive : ''}`}
+            onClick={() => setZoom(z)}
+          >
+            {ZOOM_LABELS[z]}
+          </button>
+        ))}
+      </div>
+
+      <div className={styles.timelineAxis} role="presentation">
+        <div className={styles.timelineAxisHead} />
+        <div className={styles.timelineAxisTicks}>
+          {ticks.map((t, i) => (
+            <span
+              key={i}
+              className={styles.timelineTick}
+              style={{ left: `${t.left}%` }}
+            >
+              {t.label}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className={styles.timelineBody}>
+        {sections.map((sec, idx) => (
+          <section key={sec.phase?.id ?? `orphan-${idx}`} className={styles.timelinePhase}>
+            <div className={styles.timelinePhaseHeader}>
+              <span className={styles.phaseName}>{sec.phase?.name ?? '(Phase 없음)'}</span>
+              <span className={styles.phaseCount}>{sec.tasks.length} tasks</span>
+            </div>
+            <div className={styles.timelineLanes}>
+              {sec.tasks.map(task => (
+                <TimelineLane
+                  key={task.id}
+                  task={task}
+                  range={range}
+                  onSelectTask={onSelectTask}
+                />
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function TimelineLane({
+  task,
+  range,
+  onSelectTask,
+}: {
+  task: Task
+  range: { start: number; end: number }
+  onSelectTask: (id: string) => void
+}) {
+  const span = taskSpan(task, range)
+  const dots = logTimestamps(task, range)
+  const empty = span === null
+
+  return (
+    <div className={styles.timelineLane} data-status={task.status}>
+      <button
+        type="button"
+        className={styles.timelineLaneHead}
+        onClick={() => onSelectTask(task.id)}
+        title={task.name}
+      >
+        <StatusDot status={task.status} size={7} />
+        <span className={styles.timelineLaneName}>{task.name}</span>
+      </button>
+      <div className={styles.timelineTrack}>
+        {empty ? (
+          <span className={styles.timelineEmpty}>시작 전</span>
+        ) : (
+          <span
+            className={styles.timelineBar}
+            data-status={task.status}
+            style={{ left: `${span.left}%`, width: `${Math.max(span.width, 0.4)}%` }}
+            aria-label={`${task.name} duration`}
+          />
+        )}
+        {dots.map((leftPct, i) => (
+          <span
+            key={i}
+            className={styles.timelineEvt}
+            style={{ left: `${leftPct}%` }}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function ModePlaceholder({ label, hint }: { label: string; hint: string }) {
   return (
     <div className={styles.placeholder}>
@@ -370,6 +510,63 @@ function relativeFromNow(iso: string): string {
   const d = Math.floor(h / 24)
   if (d < 7) return `${d}d`
   return `${Math.floor(d / 7)}w`
+}
+
+function taskSpan(
+  task: Task,
+  range: { start: number; end: number },
+): { left: number; width: number } | null {
+  const startIso = task.logs[0]?.timestamp ?? task.createdAt
+  if (!startIso) return null
+  const startMs = new Date(startIso).getTime()
+  if (!Number.isFinite(startMs)) return null
+
+  // Running / waiting / review tasks extend to "now". Otherwise to completedAt.
+  const endMs = task.completedAt
+    ? new Date(task.completedAt).getTime()
+    : Date.now()
+
+  // Clip to range. Tasks fully outside the window return null.
+  const visStart = Math.max(startMs, range.start)
+  const visEnd   = Math.min(endMs, range.end)
+  if (visEnd <= visStart) return null
+
+  const total = range.end - range.start
+  return {
+    left:  ((visStart - range.start) / total) * 100,
+    width: ((visEnd - visStart)      / total) * 100,
+  }
+}
+
+function logTimestamps(
+  task: Task,
+  range: { start: number; end: number },
+): number[] {
+  const total = range.end - range.start
+  const out: number[] = []
+  for (const log of task.logs) {
+    if (!log.timestamp) continue
+    const ms = new Date(log.timestamp).getTime()
+    if (!Number.isFinite(ms) || ms < range.start || ms > range.end) continue
+    out.push(((ms - range.start) / total) * 100)
+  }
+  return out
+}
+
+function axisTicks(zoom: Zoom): Array<{ label: string; left: number }> {
+  const count = zoom === 'month' ? 6 : 7
+  const totalMs = ZOOM_MS[zoom]
+  const ticks: Array<{ label: string; left: number }> = []
+  for (let i = 0; i < count; i++) {
+    const left = (i / (count - 1)) * 100
+    const agoMs = totalMs - (totalMs * i) / (count - 1)
+    let label: string
+    if (i === count - 1) label = '지금'
+    else if (zoom === 'day') label = `-${Math.round(agoMs / 3_600_000)}h`
+    else label = `-${Math.round(agoMs / 86_400_000)}d`
+    ticks.push({ label, left })
+  }
+  return ticks
 }
 
 function compactedDots(task: Task): Array<{ kind: DotKind; ts?: string }> {

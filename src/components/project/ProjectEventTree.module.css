@@ -427,6 +427,181 @@
   text-align: center;
 }
 
+/* ─── Timeline mode (Mode D — Layer 3) ─── */
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.zoomRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+.zoomLabel {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-tertiary);
+}
+.zoomBtn {
+  all: unset;
+  cursor: pointer;
+  padding: 3px 10px;
+  font-size: 11.5px;
+  color: var(--ink-subtle);
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-xs);
+  transition: background 0.12s, color 0.12s;
+  font-variant-numeric: tabular-nums;
+}
+.zoomBtn:hover {
+  background: var(--surface-2);
+  color: var(--ink-muted);
+}
+.zoomBtnActive {
+  background: var(--surface-3);
+  color: var(--ink);
+  border-color: var(--hairline-strong);
+}
+
+/* Shared lane grid — header column 160, track fills rest. */
+.timelineAxis,
+.timelineLane {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: var(--space-sm);
+  align-items: center;
+}
+
+.timelineAxis {
+  padding-bottom: var(--space-xs);
+  border-bottom: 1px solid var(--hairline);
+  font-size: 10.5px;
+  color: var(--ink-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.timelineAxisHead { color: var(--ink-subtle); }
+.timelineAxisTicks {
+  position: relative;
+  height: 14px;
+}
+.timelineTick {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.timelineTick:first-child { transform: translateX(0); }
+.timelineTick:last-child  { transform: translateX(-100%); }
+
+.timelineBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.timelinePhase {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+.timelinePhaseHeader {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  padding: 0 0 var(--space-xxs);
+  border-bottom: 1px solid var(--hairline);
+}
+.timelineLanes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.timelineLane {
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(35, 37, 42, 0.6);
+}
+.timelineLane:last-child { border-bottom: none; }
+
+.timelineLaneHead {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 4px 6px;
+  border-radius: var(--radius-xs);
+  overflow: hidden;
+  transition: background 0.12s;
+}
+.timelineLaneHead:hover { background: var(--surface-2); }
+.timelineLaneName {
+  font-size: 12px;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timelineTrack {
+  position: relative;
+  height: 16px;
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 3px;
+  overflow: hidden;
+}
+/* "Now" guide on the right edge — subtle vertical line. */
+.timelineTrack::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--primary);
+  opacity: 0.35;
+}
+
+.timelineBar {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  border-radius: 2px;
+  background: var(--ink-tertiary);
+  pointer-events: none;
+}
+.timelineBar[data-status='running']   { background: var(--primary); opacity: 0.85; }
+.timelineBar[data-status='completed'] { background: var(--success); opacity: 0.55; }
+.timelineBar[data-status='waiting'],
+.timelineBar[data-status='review']    { background: var(--warning); opacity: 0.9; }
+.timelineBar[data-status='failed']    { background: var(--error); opacity: 0.75; }
+
+.timelineEvt {
+  position: absolute;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--ink-muted);
+  opacity: 0.85;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.timelineEmpty {
+  display: block;
+  padding: 0 8px;
+  font-size: 10.5px;
+  color: var(--ink-tertiary);
+  line-height: 16px;
+}
+
 /* ─── Animations + reduced-motion guard ─── */
 @keyframes wa-tree-pulse {
   0%, 100% { background: var(--status-attention); }
