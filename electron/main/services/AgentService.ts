@@ -318,6 +318,51 @@ export class AgentService extends EventEmitter {
     }
   }
 
+  // Callback to get task data for context injection on resume.
+  // Set by the caller (index.ts) after construction.
+  public getTaskData: ((taskId: string) => import('../../../shared/types').Task | null) | null = null
+
+  /**
+   * Build a context recap prefix for resumed sessions.
+   * Claude's --resume restores conversation history, but older context
+   * may be compressed/truncated. Injecting a summary helps the model
+   * recall what it was doing.
+   */
+  private buildResumeContext(taskId: string): string {
+    if (!this.getTaskData) return ''
+    const task = this.getTaskData(taskId)
+    if (!task) return ''
+
+    const parts: string[] = []
+
+    // Summary recap
+    if (task.summary) {
+      parts.push(`[Context Recap — your previous work on this task]`)
+      if (task.summary.progress) parts.push(`Progress: ${task.summary.progress}`)
+      if (task.summary.completedSteps?.length) parts.push(`Completed: ${task.summary.completedSteps.join('; ')}`)
+      if (task.summary.nextSteps?.length) parts.push(`Planned next: ${task.summary.nextSteps.join('; ')}`)
+      if (task.summary.issues?.length) parts.push(`Issues: ${task.summary.issues.join('; ')}`)
+    }
+
+    // Compacted event recap
+    if (task.compacted) {
+      if (task.compacted.headline) parts.push(`Session headline: ${task.compacted.headline}`)
+      if (task.compacted.errors?.length) {
+        const unresolved = task.compacted.errors.filter(e => !e.fix || e.fix === '미해결')
+        if (unresolved.length) parts.push(`Unresolved errors: ${unresolved.map(e => e.title).join('; ')}`)
+      }
+    }
+
+    // Recent artifacts
+    if (task.artifacts?.length) {
+      const recent = task.artifacts.slice(-10)
+      parts.push(`Recent files touched: ${recent.map(a => `${a.action} ${a.filePath}`).join(', ')}`)
+    }
+
+    if (parts.length === 0) return ''
+    return parts.join('\n') + '\n\n'
+  }
+
   /**
    * Send a follow-up message via stream-json (--resume sessionId -p "msg").
    * Clean structured response — no TUI parsing needed.
@@ -346,8 +391,15 @@ export class AgentService extends EventEmitter {
       const project = this.getProject(agent.projectId)
       const workspacePath = project?.workspacePath || '~'
 
+      // Inject context recap on first message after resume so the model
+      // has a refresher even if its conversation context was compressed.
+      const contextPrefix = this.buildResumeContext(taskId)
+      const enrichedMessage = contextPrefix
+        ? `${contextPrefix}[User message]\n${message}`
+        : message
+
       const stream = await conn.spawnAgentStream(
-        agent.engine, workspacePath, message,
+        agent.engine, workspacePath, enrichedMessage,
         `msg-${taskId}-${Date.now()}`,
         agent.claudeSessionId
       )

@@ -446,6 +446,7 @@ async function writePhaseContext(taskId: string): Promise<void> {
 function initAgentService(): AgentService {
   if (agentService) return agentService
   agentService = new AgentService(connMgr, (pid) => dataStore.projectList().find(p => p.id === pid) || null)
+  agentService.getTaskData = (taskId) => dataStore.taskGet(taskId)
   setupAgentListeners(agentService)
   return agentService
 }
