@@ -287,6 +287,25 @@ export type ArtifactType =
   | 'code' | 'markdown' | 'yaml' | 'json'
   | 'image' | 'pdf' | 'text' | 'other'
 
+// ─── Multi-client Sync ───
+
+export type SyncEventType =
+  | 'entity_upsert'      // project/phase/task created or updated
+  | 'entity_delete'      // project/phase/task deleted
+  | 'task_log_append'    // new LogEntry[] appended to a task
+  | 'task_status'        // task status change
+  | 'task_artifact'      // new/updated artifact
+
+export interface SyncEvent {
+  seq: number              // server-assigned monotonic sequence
+  clientId: string         // originating client UUID
+  timestamp: string        // ISO 8601
+  type: SyncEventType
+  entityType: 'project' | 'phase' | 'task'
+  entityId: string
+  payload: any             // entity data, LogEntry[], status, artifact, etc.
+}
+
 // ─── IPC ───
 export interface IpcApi {
   // Project (대분류)
@@ -418,6 +437,9 @@ export interface IpcApi {
 
   // App lifecycle
   onAppSaving(cb: (saving: boolean) => void): () => void
+
+  // Multi-client sync
+  onSyncRefresh(cb: (data: { entityType: string; entityId: string; action: string }) => void): () => void
 }
 
 export interface DetachOptions {

@@ -338,9 +338,11 @@ ipcMain.handle('notify:send', async (_event, options: {
   return { success: true }
 })
 
-// ─── Connection + Agent Services ───
+// ─── Connection + Agent + Sync Services ───
 const connMgr = new ConnectionManager()
 let agentService: AgentService | null = null
+import { SyncService } from './services/SyncService'
+let syncService: SyncService | null = null
 const workflow = new WorkflowFileService(connMgr, (pid) =>
   dataStore.projectList().find(p => p.id === pid) || null,
 )
@@ -449,6 +451,49 @@ function initAgentService(): AgentService {
   agentService.getTaskData = (taskId) => dataStore.taskGet(taskId)
   setupAgentListeners(agentService)
   return agentService
+}
+
+async function initSyncService(conn: import('./services/ConnectionManager').AnyConnection): Promise<void> {
+  if (syncService) return
+  syncService = new SyncService()
+
+  // Wire DataStore changes → SyncService publish
+  dataStore.onChange((event) => {
+    if (!syncService) return
+    if (event.type === 'task_log_append') {
+      // Batch log appends for efficiency
+      syncService.bufferLogAppend(event.entityId, event.payload)
+    } else {
+      syncService.publishEvent(event.type, event.entityType, event.entityId, event.payload)
+    }
+  })
+
+  // Wire SyncService remote events → renderer broadcast
+  syncService.on('remote-event', (event: import('../../../shared/types').SyncEvent) => {
+    switch (event.type) {
+      case 'task_status':
+        broadcastToAll('task:status', { taskId: event.entityId, status: event.payload.status })
+        break
+      case 'task_log_append': {
+        const logs = event.payload as import('../../../shared/types').LogEntry[]
+        for (const log of logs) {
+          broadcastToAll('task:log', { taskId: event.entityId, log })
+        }
+        break
+      }
+      case 'task_artifact':
+        broadcastToAll('artifact:new', { taskId: event.entityId, artifact: event.payload })
+        break
+      case 'entity_upsert':
+      case 'entity_delete':
+        // Full state refresh for CRUD operations
+        broadcastToAll('sync:refresh', { entityType: event.entityType, entityId: event.entityId, action: event.type })
+        break
+    }
+  })
+
+  await syncService.initialize(conn, dataStore)
+  console.log('[SyncService] Ready')
 }
 
 function setupAgentListeners(agent: AgentService): void {
@@ -563,6 +608,7 @@ ipcMain.handle('project:connect', async (_event, projectId: string, appConfig?: 
 
     const conn = await connMgr.getConnection(project)
     initAgentService()
+    await initSyncService(conn).catch(err => console.error('[SyncService] Init failed:', err))
 
     const claude = await conn.checkClaude()
     return { success: true, claude }
@@ -591,6 +637,7 @@ ipcMain.handle('ssh:connect', async (_event, config: import('../../../shared/typ
     }
     const conn = await connMgr.getConnection(tempProject)
     initAgentService()
+    await initSyncService(conn).catch(err => console.error('[SyncService] Init failed:', err))
     const claude = await conn.checkClaude()
     return { success: true, claude }
   } catch (err) {
@@ -611,6 +658,7 @@ ipcMain.handle('local:connect', async (_event, appConfig?: import('../../../shar
     }
     const conn = await connMgr.getConnection(tempProject)
     initAgentService()
+    await initSyncService(conn).catch(err => console.error('[SyncService] Init failed:', err))
     const claude = await conn.checkClaude()
     return { success: true, claude }
   } catch (err) {
@@ -631,6 +679,7 @@ ipcMain.handle('remote:connect', async (_event, remoteLink: string, appConfig?: 
     }
     const conn = await connMgr.getConnection(tempProject)
     initAgentService()
+    await initSyncService(conn).catch(err => console.error('[SyncService] Init failed:', err))
     const claude = await conn.checkClaude()
     return { success: true, claude }
   } catch (err) {
@@ -639,6 +688,8 @@ ipcMain.handle('remote:connect', async (_event, remoteLink: string, appConfig?: 
 })
 
 ipcMain.handle('ssh:disconnect', async () => {
+  syncService?.stop()
+  syncService = null
   agentService?.removeAllListeners()
   connMgr.disconnectAll()
   agentService = null

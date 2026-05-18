@@ -175,6 +175,13 @@ const api: IpcApi = {
     ipcRenderer.on('app:saving', handler)
     return () => ipcRenderer.removeListener('app:saving', handler)
   },
+
+  // Multi-client sync: remote data changes
+  onSyncRefresh: (cb) => {
+    const handler = (_event: unknown, data: { entityType: string; entityId: string; action: string }) => cb(data)
+    ipcRenderer.on('sync:refresh', handler)
+    return () => ipcRenderer.removeListener('sync:refresh', handler)
+  },
 }
 
 contextBridge.exposeInMainWorld('api', api)

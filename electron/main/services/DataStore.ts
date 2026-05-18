@@ -1,5 +1,12 @@
 import { readFileSync, writeFileSync, existsSync } from 'fs'
-import type { Project, Phase, Task, SavedData, CreateProjectInput } from '../../../shared/types'
+import type { Project, Phase, Task, SavedData, CreateProjectInput, LogEntry, Artifact, SyncEventType } from '../../../shared/types'
+
+export interface DataChangeEvent {
+  type: SyncEventType
+  entityType: 'project' | 'phase' | 'task'
+  entityId: string
+  payload: any
+}
 
 /**
  * DataStore — Project/Phase/Task CRUD with JSON file persistence.
@@ -7,14 +14,93 @@ import type { Project, Phase, Task, SavedData, CreateProjectInput } from '../../
  * Single source of truth for all entity data.
  * Reads from / writes to a JSON file (dataPath).
  * All mutations persist immediately.
+ *
+ * onChange: called on every local mutation for SyncService to publish.
+ * applyRemote: applies remote events without triggering onChange (no echo).
  */
 export class DataStore {
   private projects: Project[] = []
   private phases: Phase[] = []
   private tasks: Task[] = []
   private loaded = false
+  private _suppressEvents = false
+  private _onChangeCallbacks: Array<(event: DataChangeEvent) => void> = []
 
   constructor(private dataPath: string) {}
+
+  onChange(cb: (event: DataChangeEvent) => void): void {
+    this._onChangeCallbacks.push(cb)
+  }
+
+  private emitChange(event: DataChangeEvent): void {
+    if (this._suppressEvents) return
+    for (const cb of this._onChangeCallbacks) cb(event)
+  }
+
+  // ─── Remote event application (no echo) ───
+
+  applyRemote(action: 'upsert' | 'delete', entityType: 'project' | 'phase' | 'task', data: any): void {
+    this._suppressEvents = true
+    try {
+      if (action === 'delete') {
+        switch (entityType) {
+          case 'project': this.projectDelete(data.id); break
+          case 'phase': this.phaseDelete(data.id); break
+          case 'task': this.taskDelete(data.id); break
+        }
+      } else {
+        switch (entityType) {
+          case 'project': {
+            const idx = this.projects.findIndex(p => p.id === data.id)
+            if (idx >= 0) this.projects[idx] = { ...this.projects[idx], ...data }
+            else this.projects.push(data)
+            break
+          }
+          case 'phase': {
+            const idx = this.phases.findIndex(ph => ph.id === data.id)
+            if (idx >= 0) this.phases[idx] = { ...this.phases[idx], ...data }
+            else this.phases.push(data)
+            break
+          }
+          case 'task': {
+            const idx = this.tasks.findIndex(t => t.id === data.id)
+            if (idx >= 0) this.tasks[idx] = { ...this.tasks[idx], ...data }
+            else this.tasks.push(data)
+            break
+          }
+        }
+        this.persist()
+      }
+    } finally {
+      this._suppressEvents = false
+    }
+  }
+
+  applyRemoteLogs(taskId: string, logs: LogEntry[]): void {
+    this._suppressEvents = true
+    try {
+      const task = this.tasks.find(t => t.id === taskId)
+      if (!task) return
+      const existingIds = new Set(task.logs.map(l => l.id))
+      const newLogs = logs.filter(l => !existingIds.has(l.id))
+      if (newLogs.length > 0) {
+        task.logs.push(...newLogs)
+        task.updatedAt = new Date().toISOString()
+        this.persist()
+      }
+    } finally {
+      this._suppressEvents = false
+    }
+  }
+
+  applyRemoteArtifact(taskId: string, artifact: Artifact): void {
+    this._suppressEvents = true
+    try {
+      this.taskAddArtifact(taskId, artifact)
+    } finally {
+      this._suppressEvents = false
+    }
+  }
 
   // ─── Lifecycle ───
 
@@ -72,6 +158,7 @@ export class DataStore {
     }
     this.projects.push(project)
     this.persist()
+    this.emitChange({ type: 'entity_upsert', entityType: 'project', entityId: project.id, payload: project })
     return project
   }
 
@@ -81,20 +168,20 @@ export class DataStore {
     this.projects[idx] = {
       ...this.projects[idx],
       ...patch,
-      id, // prevent id overwrite
+      id,
       updatedAt: new Date().toISOString(),
     }
     this.persist()
+    this.emitChange({ type: 'entity_upsert', entityType: 'project', entityId: id, payload: this.projects[idx] })
     return this.projects[idx]
   }
 
   projectDelete(id: string): void {
-    // Cascade: delete phases and tasks belonging to this project
-    const phaseIds = this.phases.filter(ph => ph.projectId === id).map(ph => ph.id)
     this.tasks = this.tasks.filter(t => t.projectId !== id)
     this.phases = this.phases.filter(ph => ph.projectId !== id)
     this.projects = this.projects.filter(p => p.id !== id)
     this.persist()
+    this.emitChange({ type: 'entity_delete', entityType: 'project', entityId: id, payload: null })
   }
 
   // ─── Phase CRUD ───
@@ -118,6 +205,7 @@ export class DataStore {
     }
     this.phases.push(phase)
     this.persist()
+    this.emitChange({ type: 'entity_upsert', entityType: 'phase', entityId: phase.id, payload: phase })
     return phase
   }
 
@@ -127,18 +215,19 @@ export class DataStore {
     this.phases[idx] = {
       ...this.phases[idx],
       ...patch,
-      id, // prevent id overwrite
+      id,
       updatedAt: new Date().toISOString(),
     }
     this.persist()
+    this.emitChange({ type: 'entity_upsert', entityType: 'phase', entityId: id, payload: this.phases[idx] })
     return this.phases[idx]
   }
 
   phaseDelete(id: string): void {
-    // Cascade: delete tasks belonging to this phase
     this.tasks = this.tasks.filter(t => t.phaseId !== id)
     this.phases = this.phases.filter(ph => ph.id !== id)
     this.persist()
+    this.emitChange({ type: 'entity_delete', entityType: 'phase', entityId: id, payload: null })
   }
 
   // ─── Task CRUD ───
@@ -171,6 +260,7 @@ export class DataStore {
     }
     this.tasks.push(task)
     this.persist()
+    this.emitChange({ type: 'entity_upsert', entityType: 'task', entityId: task.id, payload: task })
     return task
   }
 
@@ -184,27 +274,35 @@ export class DataStore {
       updatedAt: new Date().toISOString(),
     }
     this.persist()
+    // For status changes, emit a specific event type for efficiency
+    if (patch.status) {
+      this.emitChange({ type: 'task_status', entityType: 'task', entityId: id, payload: { status: patch.status } })
+    } else {
+      this.emitChange({ type: 'entity_upsert', entityType: 'task', entityId: id, payload: this.tasks[idx] })
+    }
     return this.tasks[idx]
   }
 
   taskDelete(id: string): void {
     this.tasks = this.tasks.filter(t => t.id !== id)
     this.persist()
+    this.emitChange({ type: 'entity_delete', entityType: 'task', entityId: id, payload: null })
   }
 
-  taskAddLog(taskId: string, log: import('../../../shared/types').LogEntry): void {
+  taskAddLog(taskId: string, log: LogEntry): void {
     const task = this.tasks.find(t => t.id === taskId)
     if (task) {
       task.logs.push(log)
       task.updatedAt = new Date().toISOString()
       this.persist()
+      // Log appends are high-volume — emit for SyncService to batch
+      this.emitChange({ type: 'task_log_append', entityType: 'task', entityId: taskId, payload: log })
     }
   }
 
-  taskAddArtifact(taskId: string, artifact: import('../../../shared/types').Artifact): void {
+  taskAddArtifact(taskId: string, artifact: Artifact): void {
     const task = this.tasks.find(t => t.id === taskId)
     if (task) {
-      // Update existing artifact for same filePath, or add new
       const idx = task.artifacts.findIndex(a => a.filePath === artifact.filePath)
       if (idx >= 0) {
         task.artifacts[idx] = { ...artifact, action: 'modified' }
@@ -213,6 +311,7 @@ export class DataStore {
       }
       task.updatedAt = new Date().toISOString()
       this.persist()
+      this.emitChange({ type: 'task_artifact', entityType: 'task', entityId: taskId, payload: artifact })
     }
   }
 

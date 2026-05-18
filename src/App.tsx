@@ -801,7 +801,20 @@ export default function App() {
       setIsSaving(saving)
     })
 
-    return () => { unsubStatus(); unsubLog(); unsubPlan(); unsubPermission(); unsubArtifact(); unsubConnStatus(); unsubSaving() }
+    // Multi-client sync: when another client creates/updates/deletes entities,
+    // reload the full state from DataStore to pick up changes.
+    const unsubSync = window.api.onSyncRefresh(async () => {
+      try {
+        const result = await window.api.dataLoad()
+        if (result.success && result.data) {
+          setProjects(result.data.projects || [])
+          setPhases(result.data.phases || [])
+          setTasks(result.data.tasks || [])
+        }
+      } catch { /* ignore */ }
+    })
+
+    return () => { unsubStatus(); unsubLog(); unsubPlan(); unsubPermission(); unsubArtifact(); unsubConnStatus(); unsubSaving(); unsubSync() }
   }, [])
 
   // Sync detached panels list
