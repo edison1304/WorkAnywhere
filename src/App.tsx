@@ -883,7 +883,9 @@ export default function App() {
     const task = tasks.find(t => t.id === taskId)
     if (!task) return
     const newTask = await window.api.taskCreate(task.phaseId, `${task.name} (fork)`, task.purpose || '', task.prompt)
-    setTasks(prev => [...prev, newTask])
+    const forked = { ...newTask, forkedFromId: taskId }
+    await window.api.taskUpdate(newTask.id, { forkedFromId: taskId })
+    setTasks(prev => [...prev, forked])
     setActiveTaskId(newTask.id)
     syncToServer()
   }, [tasks, syncToServer])
