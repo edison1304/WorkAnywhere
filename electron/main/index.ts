@@ -1403,6 +1403,18 @@ ipcMain.handle('task:run', async (_event, taskId: string) => {
     return { success: false, error: errMsg }
   }
 
+  // Evict oldest waiting agent if channels are near capacity.
+  // Waiting agents hold a sessionId for resume but aren't doing work —
+  // suspend them to make room for the new task.
+  const evicted = agentService!.evictOldestWaiting()
+  if (evicted) {
+    const evictedTask = dataStore.taskGet(evicted)
+    // Set to idle (not failed) — sessionId preserved for later resume
+    dataStore.taskUpdate(evicted, { status: 'idle' })
+    broadcastToAll('task:status', { evicted, status: 'idle' })
+    console.log(`[task:run] Evicted waiting agent ${evicted} (${evictedTask?.name || '?'}) to make room`)
+  }
+
   dataStore.taskUpdate(taskId, { status: 'running' })
   broadcastToAll('task:status', { taskId, status: 'running' })
 

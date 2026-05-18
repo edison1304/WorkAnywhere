@@ -37,6 +37,33 @@ export class AgentService extends EventEmitter {
    *   Phase 1: stream-json (structured output for Log tab, session_id extraction)
    *   Phase 2: interactive PTY resume (Terminal tab, follow-up messages)
    */
+  /**
+   * Evict the oldest waiting agent to free a channel slot.
+   * Waiting agents (streamHandle === null, no active channel) are idle —
+   * they hold a sessionId for later resume but aren't doing work.
+   * Returns the evicted taskId, or null if none available.
+   */
+  evictOldestWaiting(): string | null {
+    let oldest: { taskId: string; createdAt: number } | null = null
+    for (const [tid, agent] of this.agents) {
+      // Only evict agents that are truly idle (no stream, no PTY)
+      if (agent.streamHandle || agent.ptySession) continue
+      // Use Map insertion order as a proxy for age (oldest first)
+      if (!oldest) oldest = { taskId: tid, createdAt: 0 }
+    }
+    if (!oldest) return null
+
+    const agent = this.agents.get(oldest.taskId)!
+    console.log(`[AgentService] Evicting waiting agent ${oldest.taskId} (session=${agent.claudeSessionId?.slice(0, 12)}...) to free channel`)
+    // Don't mark as 'failed' — mark as 'idle' so UI shows it can be resumed
+    this.emit('task:status', { taskId: oldest.taskId, status: 'idle' })
+    this.emitLog(oldest.taskId, 'agent_end', 'Suspended — channel needed for new task (resume available)')
+    this.cleanupArtifacts(oldest.taskId)
+    resetPermissionDetector(oldest.taskId)
+    this.agents.delete(oldest.taskId)
+    return oldest.taskId
+  }
+
   async startAgent(
     projectId: string,
     phaseId: string,
