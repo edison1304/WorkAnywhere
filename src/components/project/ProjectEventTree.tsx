@@ -102,7 +102,7 @@ export function ProjectEventTree({ project, phases, tasks, onSelectTask }: Props
         {mode === 'attention' && (
           <AttentionBoard sections={sections} onSelectTask={onSelectTask} />
         )}
-        {mode === 'pulse'    && <ModePlaceholder label="Pulse"    hint="Layer 4 — Activity heatmap, 시간 bucket 가공" />}
+        {mode === 'pulse'    && <PulseMode sections={sections} onSelectTask={onSelectTask} />}
         {mode === 'timeline' && <TimelineMode sections={sections} onSelectTask={onSelectTask} />}
         {mode === 'flow'     && <ModePlaceholder label="Flow"     hint="Layer 5 — forkedFromId + 시퀀스 노드-엣지" />}
       </div>
@@ -474,6 +474,140 @@ function TimelineLane({
   )
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Mode A — Pulse (Activity heatmap)
+
+const PULSE_ZOOM_KEY = 'wa.tree.pulse.zoom'
+const LIVE_WINDOW_MS = 60_000 // <1m = "live" head dot
+
+function PulseMode({
+  sections,
+  onSelectTask,
+}: {
+  sections: Array<{ phase: Phase | null; tasks: Task[] }>
+  onSelectTask: (id: string) => void
+}) {
+  const [zoom, setZoom] = useState<Zoom>(() => {
+    if (typeof window === 'undefined') return 'day'
+    const v = window.localStorage?.getItem(PULSE_ZOOM_KEY)
+    if (v === 'day' || v === 'week' || v === 'month') return v
+    return 'day'
+  })
+  useEffect(() => {
+    try { window.localStorage?.setItem(PULSE_ZOOM_KEY, zoom) } catch { /* ignore */ }
+  }, [zoom])
+
+  const range = useMemo(() => {
+    const end = Date.now()
+    return { start: end - ZOOM_MS[zoom], end }
+  }, [zoom])
+
+  const ticks = useMemo(() => axisTicks(zoom), [zoom])
+  const bucketCount = ticks.length - 1
+
+  return (
+    <div className={styles.pulse}>
+      <div className={styles.zoomRow}>
+        <span className={styles.zoomLabel}>Zoom</span>
+        {(['day', 'week', 'month'] as Zoom[]).map(z => (
+          <button
+            key={z}
+            type="button"
+            className={`${styles.zoomBtn} ${z === zoom ? styles.zoomBtnActive : ''}`}
+            onClick={() => setZoom(z)}
+          >
+            {ZOOM_LABELS[z]}
+          </button>
+        ))}
+      </div>
+
+      <div className={styles.timelineAxis} role="presentation">
+        <div className={styles.timelineAxisHead} />
+        <div className={styles.timelineAxisTicks}>
+          {ticks.map((t, i) => (
+            <span
+              key={i}
+              className={styles.timelineTick}
+              style={{ left: `${t.left}%` }}
+            >
+              {t.label}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className={styles.timelineBody}>
+        {sections.map((sec, idx) => (
+          <section key={sec.phase?.id ?? `orphan-${idx}`} className={styles.timelinePhase}>
+            <div className={styles.timelinePhaseHeader}>
+              <span className={styles.phaseName}>{sec.phase?.name ?? '(Phase 없음)'}</span>
+              <span className={styles.phaseCount}>{sec.tasks.length} tasks</span>
+            </div>
+            <div className={styles.timelineLanes}>
+              {sec.tasks.map(task => (
+                <PulseLane
+                  key={task.id}
+                  task={task}
+                  range={range}
+                  bucketCount={bucketCount}
+                  onSelectTask={onSelectTask}
+                />
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function PulseLane({
+  task,
+  range,
+  bucketCount,
+  onSelectTask,
+}: {
+  task: Task
+  range: { start: number; end: number }
+  bucketCount: number
+  onSelectTask: (id: string) => void
+}) {
+  const buckets = logBuckets(task, range, bucketCount)
+  const lastTs = lastActivityTs(task)
+  const lastMs = lastTs ? new Date(lastTs).getTime() : NaN
+  const live = Number.isFinite(lastMs) && (Date.now() - lastMs) < LIVE_WINDOW_MS
+
+  return (
+    <div className={styles.timelineLane} data-status={task.status}>
+      <button
+        type="button"
+        className={styles.timelineLaneHead}
+        onClick={() => onSelectTask(task.id)}
+        title={task.name}
+      >
+        <StatusDot status={task.status} size={7} />
+        <span className={styles.timelineLaneName}>{task.name}</span>
+      </button>
+      <div className={`${styles.pulseTrack}`}>
+        {buckets.map((count, i) => (
+          <span
+            key={i}
+            className={styles.pulseBar}
+            data-level={pulseLevel(count)}
+            title={`${count} event${count === 1 ? '' : 's'}`}
+          />
+        ))}
+        <span
+          className={styles.pulseHead}
+          data-status={task.status}
+          data-live={live ? 'true' : 'false'}
+          aria-label={live ? 'live activity' : 'last activity'}
+        />
+      </div>
+    </div>
+  )
+}
+
 function ModePlaceholder({ label, hint }: { label: string; hint: string }) {
   return (
     <div className={styles.placeholder}>
@@ -567,6 +701,32 @@ function axisTicks(zoom: Zoom): Array<{ label: string; left: number }> {
     ticks.push({ label, left })
   }
   return ticks
+}
+
+function logBuckets(
+  task: Task,
+  range: { start: number; end: number },
+  count: number,
+): number[] {
+  const total = range.end - range.start
+  if (total <= 0 || count <= 0) return []
+  const bucketSize = total / count
+  const buckets = new Array<number>(count).fill(0)
+  for (const log of task.logs) {
+    if (!log.timestamp) continue
+    const ms = new Date(log.timestamp).getTime()
+    if (!Number.isFinite(ms) || ms < range.start || ms > range.end) continue
+    const idx = Math.min(Math.floor((ms - range.start) / bucketSize), count - 1)
+    buckets[idx]++
+  }
+  return buckets
+}
+
+function pulseLevel(count: number): 'zero' | 'lo' | 'mid' | 'hi' {
+  if (count <= 0) return 'zero'
+  if (count <= 1) return 'lo'
+  if (count <= 3) return 'mid'
+  return 'hi'
 }
 
 function compactedDots(task: Task): Array<{ kind: DotKind; ts?: string }> {
