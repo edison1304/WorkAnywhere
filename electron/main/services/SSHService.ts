@@ -174,6 +174,11 @@ export class SSHService extends EventEmitter {
     if (next) next()
   }
 
+  /** How many dedicated channel slots are available right now. */
+  get availableChannels(): number {
+    return this.MAX_CHANNELS - this.activeChannels
+  }
+
   // ─── Persistent Shell management ───
 
   private async getOrCreateShell(): Promise<PersistentShell> {

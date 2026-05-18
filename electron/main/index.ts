@@ -677,12 +677,22 @@ ipcMain.handle('ssh:exec', async (_event, command: string, projectId?: string) =
   }
 })
 
-/** Run a Claude prompt on a project's server and return raw output */
+/** Run a Claude prompt on a project's server and return raw output.
+ *  This is a background operation (summaries, compacts, schedules) —
+ *  it should NOT compete with agent channels. Skips if channels are
+ *  too scarce (< 3 free slots). */
 async function runClaudeOnProject(projectId: string, prompt: string): Promise<string> {
   const project = dataStore.projectList().find(p => p.id === projectId)
   if (!project) throw new Error('Project not found')
-  console.log(`[runClaude] projectId=${projectId}`)
   const conn = await connMgr.getConnection(project)
+
+  // Reserve channels for agents — background ops only run when there's headroom.
+  // Need at least 3 free: 1 for this call + 2 reserved for new agent starts.
+  if (conn.availableChannels < 3) {
+    console.log(`[runClaude] Skipped — only ${conn.availableChannels} channels free (need 3)`)
+    throw new Error('Channels busy — background operation skipped')
+  }
+  console.log(`[runClaude] projectId=${projectId}, channels=${conn.availableChannels} free`)
   const engine = project.settings?.agentEngine || 'claude'
   const prefix = conn.getShellPrefix(engine)
   const cwd = project.workspacePath

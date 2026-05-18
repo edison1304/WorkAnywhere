@@ -151,6 +151,8 @@ export class RemoteControlService extends EventEmitter {
     return String(resp.content || '')
   }
 
+  get availableChannels(): number { return Infinity }
+
   // Remote mode has no channel limits — alias to exec()
   async execChannel(command: string): Promise<string> {
     return this.exec(command)

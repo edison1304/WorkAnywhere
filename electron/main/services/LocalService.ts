@@ -114,6 +114,8 @@ export class LocalService extends EventEmitter {
     })
   }
 
+  get availableChannels(): number { return Infinity }
+
   // Local mode has no channel limits — alias to exec()
   async execChannel(command: string, useLogin = false): Promise<string> {
     return this.exec(command, useLogin)
