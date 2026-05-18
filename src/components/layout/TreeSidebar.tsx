@@ -1,6 +1,5 @@
-import { useState, useCallback, useEffect, useRef, Component, type ReactNode } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef, Component, type ReactNode } from 'react'
 import type { Project, Phase, Task } from '../../../shared/types'
-import { StatusDot } from '../job/StatusDot'
 import styles from './TreeSidebar.module.css'
 
 export type SidebarView = 'monitor' | 'manage' | 'both'
@@ -112,27 +111,185 @@ function isAttentionTask(task: Task): boolean {
   return task.status === 'waiting' || task.status === 'review'
 }
 
+function attentionGlyph(task: Task): string {
+  return task.status === 'waiting' ? '⌛' : task.status === 'review' ? '✋' : ''
+}
+
+function attentionTitle(task: Task): string {
+  return task.status === 'waiting' ? '사용자 입력 대기' : task.status === 'review' ? '검토 필요' : ''
+}
+
+// ─── Progress (Layer 4) ───
+// A task counts as "done" for progress purposes when it's completed.
+function progressOf(tasks: Task[]): { done: number; total: number } {
+  if (tasks.length === 0) return { done: 0, total: 0 }
+  const done = tasks.filter(t => t.status === 'completed').length
+  return { done, total: tasks.length }
+}
+
+// ─── Project emblem (Layer 5) ───
+// HSL hue is hashed from the project name. Saturation + lightness are fixed so
+// every emblem stays readable on the dark canvas, even with 10+ projects.
+function hashHue(name: string): number {
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0
+  return h % 360
+}
+
+function emblemBg(project: Project): string {
+  const hue = hashHue(project.name || project.id)
+  // 48% saturation, 38% lightness — sits quietly on --canvas without going gray.
+  return `hsl(${hue}, 48%, 38%)`
+}
+
+function emblemInitial(project: Project): string {
+  const trimmed = (project.name || '').trim()
+  if (!trimmed) return '·'
+  // Take the first non-whitespace character — works for Latin & Hangul alike.
+  return trimmed[0].toUpperCase()
+}
+
+// Connection-type 1-char tag (kept from Layer 1, just moved into a small chip
+// so the emblem owns the "which project" cue and the tag tells you "where it lives").
+function connTag(p: Project): string {
+  return p.connection.type === 'ssh' ? 'S' : p.connection.type === 'remote' ? 'R' : 'L'
+}
+
+// ─── Phase progress bar ───
+function PhaseProgress({ tasks }: { tasks: Task[] }) {
+  const { done, total } = progressOf(tasks)
+  if (total === 0) return null
+  const pct = Math.round((done / total) * 100)
+  const complete = pct === 100
+  return (
+    <div className={styles.phaseProgressBar} title={`${done} / ${total} 완료`}>
+      <div
+        className={`${styles.phaseProgressFill} ${complete ? styles.complete : ''}`}
+        style={{ width: `${pct}%` }}
+      />
+    </div>
+  )
+}
+
+// ─── Project progress bar + count ───
+function ProjectProgress({ tasks }: { tasks: Task[] }) {
+  const { done, total } = progressOf(tasks)
+  if (total === 0) return null
+  const pct = Math.round((done / total) * 100)
+  const complete = pct === 100
+  return (
+    <span className={styles.projectProgress} title={`${done} / ${total} 완료`}>
+      <span className={styles.projectProgressBar}>
+        <span
+          className={`${styles.projectProgressFill} ${complete ? styles.complete : ''}`}
+          style={{ width: `${pct}%` }}
+        />
+      </span>
+      <span>{done}/{total}</span>
+    </span>
+  )
+}
+
+// ─── Project emblem (image or HSL-hashed initial) ───
+function ProjectEmblem({ project }: { project: Project }) {
+  if (project.iconPath) {
+    return (
+      <span className={styles.projectEmblem}>
+        <img src={project.iconPath} alt="" />
+      </span>
+    )
+  }
+  return (
+    <span className={styles.projectEmblem} style={{ background: emblemBg(project) }}>
+      {emblemInitial(project)}
+    </span>
+  )
+}
+
+// ─── Attention count badge (children waiting/review count) ───
+function AttentionBadge({ count }: { count: number }) {
+  if (count <= 0) return null
+  return (
+    <span className={styles.attentionBadge} title={`주목 필요 ${count}개`}>
+      <span className={styles.attentionBadgeGlyph}>✋</span>{count}
+    </span>
+  )
+}
+
 // ─── Task Item with pin/ack/context menu/drag ───
-function TaskItemMonitor({ task, isActive, onSelect, onAcknowledge, onPin, onDelete, onContextMenu, onDragStart }: {
+function TaskItemMonitor({
+  task, isActive, isFirst, isLast,
+  originTask, blockers,
+  onSelect, onAcknowledge, onPin, onDelete, onContextMenu, onDragStart,
+  onHoverLineage, onHoverBlocker, hoveredAsDep
+}: {
   task: Task; isActive: boolean
+  isFirst?: boolean; isLast?: boolean
+  originTask?: Task | null
+  blockers?: Task[]
   onSelect: () => void; onAcknowledge: () => void; onPin: () => void
   onDelete?: () => void
   onContextMenu?: (e: React.MouseEvent) => void
   onDragStart?: (e: React.DragEvent) => void
+  onHoverLineage?: (originId: string | null) => void
+  onHoverBlocker?: (blockerIds: string[] | null) => void
+  hoveredAsDep?: boolean
 }) {
   const canDelete = onDelete && task.status !== 'running'
+  const attention = isAttentionTask(task)
+  const blockedByOpen = (blockers ?? []).filter(b =>
+    b.status === 'waiting' || b.status === 'review' || b.status === 'running' || b.status === 'queued'
+  )
   return (
     <div
-      className={`${styles.treeItem} ${styles.taskLevel} ${isActive ? styles.active : ''}`}
+      className={
+        [
+          styles.treeItem,
+          styles.taskLevel,
+          isActive ? styles.active : '',
+          attention ? styles.attention : '',
+          isFirst ? styles.firstTask : '',
+          isLast ? styles.lastTask : '',
+          hoveredAsDep ? styles.depHover : '',
+        ].filter(Boolean).join(' ')
+      }
       onClick={onSelect}
       onContextMenu={onContextMenu}
       draggable
       onDragStart={e => { e.dataTransfer.setData('task-id', task.id); onDragStart?.(e) }}
       role="button"
       tabIndex={0}
+      data-task-id={task.id}
     >
-      {isAttentionTask(task) && <StatusDot status={task.status} size={7} />}
+      {attention && (
+        <span className={styles.attentionGlyph} title={attentionTitle(task)}>
+          {attentionGlyph(task)}
+        </span>
+      )}
       <span className={styles.taskName}>{task.name}</span>
+      {originTask && (
+        <span
+          className={styles.lineageChip}
+          onMouseEnter={() => onHoverLineage?.(originTask.id)}
+          onMouseLeave={() => onHoverLineage?.(null)}
+          onClick={e => e.stopPropagation()}
+          title={`Forked from "${originTask.name}"`}
+        >
+          <span className={styles.lineageGlyph}>↳</span>
+          {originTask.name}
+        </span>
+      )}
+      {blockedByOpen.length > 0 && (
+        <span
+          className={styles.blockedChip}
+          onMouseEnter={() => onHoverBlocker?.(blockedByOpen.map(b => b.id))}
+          onMouseLeave={() => onHoverBlocker?.(null)}
+          onClick={e => e.stopPropagation()}
+          title={`막힘: ${blockedByOpen.map(b => b.name).join(', ')}`}
+        >
+          ⇠ 막힘
+        </span>
+      )}
       <span
         className={`${styles.pinBtn} ${task.pinned ? styles.pinned : ''}`}
         onClick={e => { e.stopPropagation(); onPin() }}
@@ -169,7 +326,9 @@ function MonitorUnified({
   projects, phases, allTasks, activeProjectId, activePhaseId, activeTaskId,
   collapsed, toggle, onSelectProject, onSelectPhase, onSelectTask, onAcknowledgeTask, onPinTask,
   onDeleteTask, onDeletePhase, onDeleteProject,
-  onTaskContext, onProjectContext, onPhaseContext
+  onTaskContext, onProjectContext, onPhaseContext,
+  taskById, depHover, onHoverLineage, onHoverBlocker,
+  expandedPhaseDeps, togglePhaseDeps
 }: {
   projects: Project[]; phases: Phase[]; allTasks: Task[]
   activeProjectId: string | null; activePhaseId: string | null; activeTaskId: string | null
@@ -183,6 +342,12 @@ function MonitorUnified({
   onTaskContext?: (e: React.MouseEvent, taskId: string) => void
   onProjectContext?: (e: React.MouseEvent, projectId: string, name: string) => void
   onPhaseContext?: (e: React.MouseEvent, phaseId: string, name: string) => void
+  taskById: Map<string, Task>
+  depHover: Set<string>
+  onHoverLineage: (id: string | null) => void
+  onHoverBlocker: (ids: string[] | null) => void
+  expandedPhaseDeps: Record<string, boolean>
+  togglePhaseDeps: (phaseId: string) => void
 }) {
   return (
     <>
@@ -193,20 +358,31 @@ function MonitorUnified({
         const visibleTasks = allTasks.filter(t => t.projectId === project.id).filter(isVisibleInMonitor)
         if (visibleTasks.length === 0) return null
         const projectHasRunning = allTasks.some(t => t.projectId === project.id && t.status === 'running')
+        const projectAttentionCount = visibleTasks.filter(isAttentionTask).length
+        const allProjectTasks = allTasks.filter(t => t.projectId === project.id)
+        const projectIsAttention = projectAttentionCount > 0
 
         return (
           <div key={project.id} className={styles.treeNode}>
             <div
-              className={`${styles.treeItem} ${styles.projectLevel} ${project.id === activeProjectId ? styles.active : ''}`}
+              className={
+                [
+                  styles.treeItem, styles.projectLevel,
+                  project.id === activeProjectId ? styles.active : '',
+                  projectIsAttention ? styles.attention : '',
+                ].filter(Boolean).join(' ')
+              }
               onClick={() => { onSelectProject(project.id); toggle(projectKey) }}
               onContextMenu={e => onProjectContext?.(e, project.id, project.name)}
               role="button"
               tabIndex={0}
             >
               <span className={styles.chevron}>{isCollapsed ? '▸' : '▾'}</span>
-              <span className={styles.nodeIcon}>{project.connection.type === 'ssh' ? 'S' : project.connection.type === 'remote' ? 'R' : 'L'}</span>
+              <ProjectEmblem project={project} />
+              <span className={styles.connTag}>{connTag(project)}</span>
               <span className={styles.nodeName}>{project.name}</span>
-              <span className={styles.activeBadge}>{visibleTasks.length}</span>
+              <AttentionBadge count={projectAttentionCount} />
+              <ProjectProgress tasks={allProjectTasks} />
               {onDeleteProject && !projectHasRunning && (
                 <span
                   className={styles.removeBtn}
@@ -225,14 +401,25 @@ function MonitorUnified({
             {!isCollapsed && projectPhases.map(phase => {
               const phaseKey = `mon-phase-${phase.id}`
               const phaseCollapsed = collapsed[phaseKey]
-              const phaseTasks = allTasks.filter(t => t.phaseId === phase.id).filter(isVisibleInMonitor).sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+              const phaseTasksAll = allTasks.filter(t => t.phaseId === phase.id).sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+              const phaseTasks = phaseTasksAll.filter(isVisibleInMonitor)
               if (phaseTasks.length === 0) return null
               const phaseHasRunning = allTasks.some(t => t.phaseId === phase.id && t.status === 'running')
+              const phaseAttentionCount = phaseTasks.filter(isAttentionTask).length
+              const phaseDeps = phase.summary?.dependencies ?? []
+              const depsExpanded = expandedPhaseDeps[phase.id]
+              const phaseIsAttention = phaseAttentionCount > 0
 
               return (
                 <div key={phase.id} className={styles.indent1}>
                   <div
-                    className={`${styles.treeItem} ${styles.phaseLevel} ${phase.id === activePhaseId ? styles.active : ''}`}
+                    className={
+                      [
+                        styles.treeItem, styles.phaseLevel,
+                        phase.id === activePhaseId ? styles.active : '',
+                        phaseIsAttention ? styles.attention : '',
+                      ].filter(Boolean).join(' ')
+                    }
                     onClick={() => { onSelectPhase(phase.id); toggle(phaseKey) }}
                     onContextMenu={e => onPhaseContext?.(e, phase.id, phase.name)}
                     role="button"
@@ -243,7 +430,9 @@ function MonitorUnified({
                       {phase.status === 'active' ? '▶' : phase.status === 'paused' ? '⏸' : '✓'}
                     </span>
                     <span className={styles.nodeName}>{phase.name}</span>
+                    <AttentionBadge count={phaseAttentionCount} />
                     <span className={styles.taskCountBadge}>{phaseTasks.length}</span>
+                    <PhaseProgress tasks={phaseTasksAll} />
                     {onDeletePhase && !phaseHasRunning && (
                       <span
                         className={styles.removeBtn}
@@ -259,16 +448,42 @@ function MonitorUnified({
                     )}
                   </div>
 
-                  {!phaseCollapsed && phaseTasks.map(task => (
-                    <TaskItemMonitor
-                      key={task.id} task={task} isActive={task.id === activeTaskId}
-                      onSelect={() => onSelectTask(task.id)}
-                      onAcknowledge={() => onAcknowledgeTask(task.id)}
-                      onPin={() => onPinTask(task.id)}
-                      onDelete={onDeleteTask ? () => onDeleteTask(task.id) : undefined}
-                      onContextMenu={e => onTaskContext?.(e, task.id)}
-                    />
-                  ))}
+                  {!phaseCollapsed && phaseDeps.length > 0 && (
+                    <>
+                      <div
+                        className={styles.phaseDepsHint}
+                        onClick={e => { e.stopPropagation(); togglePhaseDeps(phase.id) }}
+                      >
+                        <span className={styles.phaseDepsHintChevron}>{depsExpanded ? '▾' : '▸'}</span>
+                        <span>의존성 {phaseDeps.length}개</span>
+                      </div>
+                      {depsExpanded && (
+                        <ul className={styles.phaseDepsList}>
+                          {phaseDeps.map((d, i) => <li key={i}>{d}</li>)}
+                        </ul>
+                      )}
+                    </>
+                  )}
+
+                  {!phaseCollapsed && phaseTasks.map((task, idx) => {
+                    const originTask = task.forkedFromId ? taskById.get(task.forkedFromId) ?? null : null
+                    const blockers = (task.dependsOn ?? []).map(id => taskById.get(id)).filter((t): t is Task => !!t)
+                    return (
+                      <TaskItemMonitor
+                        key={task.id} task={task} isActive={task.id === activeTaskId}
+                        isFirst={idx === 0} isLast={idx === phaseTasks.length - 1}
+                        originTask={originTask} blockers={blockers}
+                        onSelect={() => onSelectTask(task.id)}
+                        onAcknowledge={() => onAcknowledgeTask(task.id)}
+                        onPin={() => onPinTask(task.id)}
+                        onDelete={onDeleteTask ? () => onDeleteTask(task.id) : undefined}
+                        onContextMenu={e => onTaskContext?.(e, task.id)}
+                        onHoverLineage={onHoverLineage}
+                        onHoverBlocker={onHoverBlocker}
+                        hoveredAsDep={depHover.has(task.id)}
+                      />
+                    )
+                  })}
                 </div>
               )
             })}
@@ -281,18 +496,43 @@ function MonitorUnified({
 
 // ─── Monitor: split view (active / done) ───
 function MonitorSplit({
-  allTasks, activeTaskId, onSelectTask, onAcknowledgeTask, onPinTask, onDeleteTask, onTaskContext
+  allTasks, activeTaskId, onSelectTask, onAcknowledgeTask, onPinTask, onDeleteTask, onTaskContext,
+  taskById, depHover, onHoverLineage, onHoverBlocker
 }: {
   allTasks: Task[]; activeTaskId: string | null
   onSelectTask: (id: string | null) => void
   onAcknowledgeTask: (id: string) => void; onPinTask: (id: string) => void
   onDeleteTask?: (id: string) => void
   onTaskContext?: (e: React.MouseEvent, taskId: string) => void
+  taskById: Map<string, Task>
+  depHover: Set<string>
+  onHoverLineage: (id: string | null) => void
+  onHoverBlocker: (ids: string[] | null) => void
 }) {
   const visible = allTasks.filter(isVisibleInMonitor)
   const active = visible.filter(isActiveTask)
   const done = visible.filter(isDoneTask)
   const pinned = visible.filter(t => t.pinned && !isActiveTask(t) && !isDoneTask(t))
+
+  const renderTask = (task: Task, idx: number, last: number) => {
+    const originTask = task.forkedFromId ? taskById.get(task.forkedFromId) ?? null : null
+    const blockers = (task.dependsOn ?? []).map(id => taskById.get(id)).filter((t): t is Task => !!t)
+    return (
+      <TaskItemMonitor
+        key={task.id} task={task} isActive={task.id === activeTaskId}
+        isFirst={idx === 0} isLast={idx === last}
+        originTask={originTask} blockers={blockers}
+        onSelect={() => onSelectTask(task.id)}
+        onAcknowledge={() => onAcknowledgeTask(task.id)}
+        onPin={() => onPinTask(task.id)}
+        onDelete={onDeleteTask ? () => onDeleteTask(task.id) : undefined}
+        onContextMenu={e => onTaskContext?.(e, task.id)}
+        onHoverLineage={onHoverLineage}
+        onHoverBlocker={onHoverBlocker}
+        hoveredAsDep={depHover.has(task.id)}
+      />
+    )
+  }
 
   return (
     <>
@@ -303,16 +543,7 @@ function MonitorSplit({
             <span>In Progress</span>
             <span className={styles.splitCount}>{active.length}</span>
           </div>
-          {active.map(task => (
-            <TaskItemMonitor
-              key={task.id} task={task} isActive={task.id === activeTaskId}
-              onSelect={() => onSelectTask(task.id)}
-              onAcknowledge={() => onAcknowledgeTask(task.id)}
-              onPin={() => onPinTask(task.id)}
-              onDelete={onDeleteTask ? () => onDeleteTask(task.id) : undefined}
-              onContextMenu={e => onTaskContext?.(e, task.id)}
-            />
-          ))}
+          {active.map((t, i) => renderTask(t, i, active.length - 1))}
         </div>
       )}
       {done.length > 0 && (
@@ -321,16 +552,7 @@ function MonitorSplit({
             <span>Completed / Failed</span>
             <span className={styles.splitCount}>{done.length}</span>
           </div>
-          {done.map(task => (
-            <TaskItemMonitor
-              key={task.id} task={task} isActive={task.id === activeTaskId}
-              onSelect={() => onSelectTask(task.id)}
-              onAcknowledge={() => onAcknowledgeTask(task.id)}
-              onPin={() => onPinTask(task.id)}
-              onDelete={onDeleteTask ? () => onDeleteTask(task.id) : undefined}
-              onContextMenu={e => onTaskContext?.(e, task.id)}
-            />
-          ))}
+          {done.map((t, i) => renderTask(t, i, done.length - 1))}
         </div>
       )}
       {pinned.length > 0 && (
@@ -339,16 +561,7 @@ function MonitorSplit({
             <span>Pinned</span>
             <span className={styles.splitCount}>{pinned.length}</span>
           </div>
-          {pinned.map(task => (
-            <TaskItemMonitor
-              key={task.id} task={task} isActive={task.id === activeTaskId}
-              onSelect={() => onSelectTask(task.id)}
-              onAcknowledge={() => onAcknowledgeTask(task.id)}
-              onPin={() => onPinTask(task.id)}
-              onDelete={onDeleteTask ? () => onDeleteTask(task.id) : undefined}
-              onContextMenu={e => onTaskContext?.(e, task.id)}
-            />
-          ))}
+          {pinned.map((t, i) => renderTask(t, i, pinned.length - 1))}
         </div>
       )}
 
@@ -716,6 +929,7 @@ function useReorderDrag<T extends { id: string }>(
 // ─── Project picker (dropdown) for Manage view ───
 function ProjectPicker({
   projects, activeProjectId, projectHasRunning, onSelect, onDelete, onContextMenu,
+  projectAttentionCount, projectProgressTasks,
 }: {
   projects: Project[]
   activeProjectId: string | null
@@ -723,6 +937,8 @@ function ProjectPicker({
   onSelect: (id: string) => void
   onDelete?: (id: string, name: string) => void
   onContextMenu?: (e: React.MouseEvent, id: string, name: string) => void
+  projectAttentionCount: number
+  projectProgressTasks: Task[]
 }) {
   const [open, setOpen] = useState(false)
   const activeProject = activeProjectId ? projects.find(p => p.id === activeProjectId) : null
@@ -733,8 +949,6 @@ function ProjectPicker({
     window.addEventListener('click', handler)
     return () => window.removeEventListener('click', handler)
   }, [open])
-
-  const connIcon = (t: string) => t === 'ssh' ? 'S' : t === 'remote' ? 'R' : 'L'
 
   return (
     <div className={styles.projectPickerWrapper} onClick={e => e.stopPropagation()}>
@@ -748,8 +962,11 @@ function ProjectPicker({
       >
         {activeProject ? (
           <>
-            <span className={styles.nodeIcon}>{connIcon(activeProject.connection.type)}</span>
+            <ProjectEmblem project={activeProject} />
+            <span className={styles.connTag}>{connTag(activeProject)}</span>
             <span className={styles.nodeName}>{activeProject.name}</span>
+            <AttentionBadge count={projectAttentionCount} />
+            <ProjectProgress tasks={projectProgressTasks} />
           </>
         ) : (
           <span className={styles.nodeName} style={{ color: 'var(--text-muted)' }}>Select project…</span>
@@ -781,7 +998,8 @@ function ProjectPicker({
               role="button"
               tabIndex={0}
             >
-              <span className={styles.nodeIcon}>{connIcon(p.connection.type)}</span>
+              <ProjectEmblem project={p} />
+              <span className={styles.connTag}>{connTag(p)}</span>
               <span className={styles.nodeName}>{p.name}</span>
               {p.id === activeProjectId && <span className={styles.projectDropdownCheck}>✓</span>}
             </div>
@@ -797,7 +1015,9 @@ function ManageView({
   projects, phases, allTasks, activeProjectId, activePhaseId, activeTaskId,
   collapsed, toggle, onSelectProject, onSelectPhase, onSelectTask, onTaskContext, onPhaseContext, onProjectContext, onPhaseDrop, dragOverPhase,
   onCreatePhase, onCreateTask, onReorderTasks, onReorderPhases,
-  onDeleteTask, onDeletePhase, onDeleteProject
+  onDeleteTask, onDeletePhase, onDeleteProject,
+  taskById, depHover, onHoverLineage, onHoverBlocker,
+  expandedPhaseDeps, togglePhaseDeps
 }: {
   projects: Project[]; phases: Phase[]; allTasks: Task[]
   activeProjectId: string | null; activePhaseId: string | null; activeTaskId: string | null
@@ -816,6 +1036,12 @@ function ManageView({
   onDeleteTask?: (id: string) => void
   onDeletePhase?: (id: string) => void
   onDeleteProject?: (id: string) => void
+  taskById: Map<string, Task>
+  depHover: Set<string>
+  onHoverLineage: (id: string | null) => void
+  onHoverBlocker: (ids: string[] | null) => void
+  expandedPhaseDeps: Record<string, boolean>
+  togglePhaseDeps: (phaseId: string) => void
 }) {
   const projectPhases = phases.filter(ph => ph.projectId === activeProjectId).sort((a, b) => a.order - b.order)
   const projectHasRunning = activeProjectId
@@ -828,6 +1054,9 @@ function ManageView({
     'phase-id'
   )
 
+  const activeProjectTasks = activeProjectId ? allTasks.filter(t => t.projectId === activeProjectId) : []
+  const projectAttentionCount = activeProjectTasks.filter(isAttentionTask).length
+
   return (
     <>
       {/* Project picker — always visible so user can switch projects */}
@@ -838,6 +1067,8 @@ function ManageView({
         onSelect={onSelectProject}
         onDelete={onDeleteProject ? (id) => onDeleteProject(id) : undefined}
         onContextMenu={onProjectContext}
+        projectAttentionCount={projectAttentionCount}
+        projectProgressTasks={activeProjectTasks}
       />
       {!activeProjectId && (
         <div className={styles.emptyHint}>Select a project above</div>
@@ -875,6 +1106,10 @@ function ManageView({
         const phaseTasks = allTasks.filter(t => t.phaseId === phase.id).sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
         const isPhaseDropIndicator = phaseDrag.dragOverId === phase.id && phaseDrag.dragId !== phase.id
         const phaseHasRunning = phaseTasks.some(t => t.status === 'running')
+        const phaseAttentionCount = phaseTasks.filter(isAttentionTask).length
+        const phaseIsAttention = phaseAttentionCount > 0
+        const phaseDeps = phase.summary?.dependencies ?? []
+        const depsExpanded = expandedPhaseDeps[phase.id]
 
         return (
           <div
@@ -894,7 +1129,14 @@ function ManageView({
               <div className={styles.dropIndicator} />
             )}
             <div
-              className={`${styles.managePhaseHeader} ${phase.id === activePhaseId ? styles.active : ''} ${phaseDrag.dragId === phase.id ? styles.dragging : ''}`}
+              className={
+                [
+                  styles.managePhaseHeader,
+                  phase.id === activePhaseId ? styles.active : '',
+                  phaseDrag.dragId === phase.id ? styles.dragging : '',
+                  phaseIsAttention ? styles.attention : '',
+                ].filter(Boolean).join(' ')
+              }
               onClick={() => { onSelectPhase(phase.id); toggle(phaseKey) }}
               onContextMenu={e => onPhaseContext?.(e, phase.id, phase.name)}
               draggable
@@ -909,7 +1151,9 @@ function ManageView({
                 {phase.status === 'active' ? '▶' : phase.status === 'paused' ? '⏸' : '✓'}
               </span>
               <span className={styles.nodeName}>{phase.name}</span>
+              <AttentionBadge count={phaseAttentionCount} />
               <span className={styles.taskCountBadge}>{phaseTasks.length}</span>
+              <PhaseProgress tasks={phaseTasks} />
               {onDeletePhase && !phaseHasRunning && (
                 <span
                   className={styles.removeBtn}
@@ -927,6 +1171,22 @@ function ManageView({
             {isPhaseDropIndicator && phaseDrag.dragOverHalf === 'bottom' && (
               <div className={styles.dropIndicator} />
             )}
+            {!isCollapsed && phaseDeps.length > 0 && (
+              <>
+                <div
+                  className={styles.phaseDepsHint}
+                  onClick={e => { e.stopPropagation(); togglePhaseDeps(phase.id) }}
+                >
+                  <span className={styles.phaseDepsHintChevron}>{depsExpanded ? '▾' : '▸'}</span>
+                  <span>의존성 {phaseDeps.length}개</span>
+                </div>
+                {depsExpanded && (
+                  <ul className={styles.phaseDepsList}>
+                    {phaseDeps.map((d, i) => <li key={i}>{d}</li>)}
+                  </ul>
+                )}
+              </>
+            )}
             {!isCollapsed && (
               <ManageTaskList
                 tasks={phaseTasks}
@@ -939,6 +1199,10 @@ function ManageView({
                 onReorderTasks={onReorderTasks}
                 onPhaseDrop={onPhaseDrop}
                 onDeleteTask={onDeleteTask}
+                taskById={taskById}
+                depHover={depHover}
+                onHoverLineage={onHoverLineage}
+                onHoverBlocker={onHoverBlocker}
               />
             )}
           </div>
@@ -951,7 +1215,8 @@ function ManageView({
 
 // ─── Task list within a phase (with drag reorder) ───
 function ManageTaskList({
-  tasks, phaseId, activeTaskId, onSelectPhase, onSelectTask, onTaskContext, onCreateTask, onReorderTasks, onPhaseDrop, onDeleteTask
+  tasks, phaseId, activeTaskId, onSelectPhase, onSelectTask, onTaskContext, onCreateTask, onReorderTasks, onPhaseDrop, onDeleteTask,
+  taskById, depHover, onHoverLineage, onHoverBlocker
 }: {
   tasks: Task[]; phaseId: string; activeTaskId: string | null
   onSelectPhase: (id: string) => void; onSelectTask: (id: string | null) => void
@@ -960,6 +1225,10 @@ function ManageTaskList({
   onReorderTasks?: (phaseId: string, orderedIds: string[]) => void
   onPhaseDrop?: (e: React.DragEvent, phaseId: string) => void
   onDeleteTask?: (id: string) => void
+  taskById: Map<string, Task>
+  depHover: Set<string>
+  onHoverLineage: (id: string | null) => void
+  onHoverBlocker: (ids: string[] | null) => void
 }) {
   const taskDrag = useReorderDrag(
     tasks,
@@ -969,15 +1238,33 @@ function ManageTaskList({
 
   return (
     <div className={styles.manageTaskList}>
-      {tasks.map(task => {
+      {tasks.map((task, idx) => {
         const isDropIndicator = taskDrag.dragOverId === task.id && taskDrag.dragId !== task.id
+        const attention = isAttentionTask(task)
+        const isFirst = idx === 0
+        const isLast = idx === tasks.length - 1
+        const originTask = task.forkedFromId ? taskById.get(task.forkedFromId) ?? null : null
+        const blockers = (task.dependsOn ?? []).map(id => taskById.get(id)).filter((t): t is Task => !!t)
+        const blockedByOpen = blockers.filter(b =>
+          b.status === 'waiting' || b.status === 'review' || b.status === 'running' || b.status === 'queued'
+        )
         return (
           <div key={task.id}>
             {isDropIndicator && taskDrag.dragOverHalf === 'top' && (
               <div className={styles.dropIndicator} />
             )}
             <div
-              className={`${styles.manageTaskItem} ${task.id === activeTaskId ? styles.active : ''} ${taskDrag.dragId === task.id ? styles.dragging : ''}`}
+              className={
+                [
+                  styles.manageTaskItem,
+                  task.id === activeTaskId ? styles.active : '',
+                  taskDrag.dragId === task.id ? styles.dragging : '',
+                  attention ? styles.attention : '',
+                  isFirst ? styles.firstTask : '',
+                  isLast ? styles.lastTask : '',
+                  depHover.has(task.id) ? styles.depHover : '',
+                ].filter(Boolean).join(' ')
+              }
               onClick={() => onSelectTask(task.id)}
               onContextMenu={e => onTaskContext?.(e, task.id)}
               draggable
@@ -996,10 +1283,38 @@ function ManageTaskList({
               }}
               onDragEnd={taskDrag.handleDragEnd}
               role="button"
+              data-task-id={task.id}
             >
               <span className={styles.dragHandle}>⠿</span>
-              {isAttentionTask(task) && <StatusDot status={task.status} size={7} />}
+              {attention && (
+                <span className={styles.attentionGlyph} title={attentionTitle(task)}>
+                  {attentionGlyph(task)}
+                </span>
+              )}
               <span className={styles.taskName}>{task.name}</span>
+              {originTask && (
+                <span
+                  className={styles.lineageChip}
+                  onMouseEnter={() => onHoverLineage(originTask.id)}
+                  onMouseLeave={() => onHoverLineage(null)}
+                  onClick={e => e.stopPropagation()}
+                  title={`Forked from "${originTask.name}"`}
+                >
+                  <span className={styles.lineageGlyph}>↳</span>
+                  {originTask.name}
+                </span>
+              )}
+              {blockedByOpen.length > 0 && (
+                <span
+                  className={styles.blockedChip}
+                  onMouseEnter={() => onHoverBlocker(blockedByOpen.map(b => b.id))}
+                  onMouseLeave={() => onHoverBlocker(null)}
+                  onClick={e => e.stopPropagation()}
+                  title={`막힘: ${blockedByOpen.map(b => b.name).join(', ')}`}
+                >
+                  ⇠ 막힘
+                </span>
+              )}
               <span className={styles.manageTaskStatus}>{task.status}</span>
               {onDeleteTask && task.status !== 'running' && (
                 <span
@@ -1046,10 +1361,32 @@ export function TreeSidebar(props: Props) {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [entityMenu, setEntityMenu] = useState<EntityContextMenuState | null>(null)
   const [dragOverPhase, setDragOverPhase] = useState<string | null>(null)
+  const [expandedPhaseDeps, setExpandedPhaseDeps] = useState<Record<string, boolean>>({})
+  // depHover = set of task ids that should render the dotted underline because
+  // user is hovering a lineage/blocked chip pointing at them.
+  const [depHover, setDepHover] = useState<Set<string>>(() => new Set())
+
+  const taskById = useMemo(() => {
+    const m = new Map<string, Task>()
+    for (const t of props.allTasks) m.set(t.id, t)
+    return m
+  }, [props.allTasks])
 
   const toggle = (key: string) => {
     setCollapsed(prev => ({ ...prev, [key]: !prev[key] }))
   }
+
+  const togglePhaseDeps = useCallback((phaseId: string) => {
+    setExpandedPhaseDeps(prev => ({ ...prev, [phaseId]: !prev[phaseId] }))
+  }, [])
+
+  const handleHoverLineage = useCallback((originId: string | null) => {
+    setDepHover(originId ? new Set([originId]) : new Set())
+  }, [])
+
+  const handleHoverBlocker = useCallback((blockerIds: string[] | null) => {
+    setDepHover(blockerIds ? new Set(blockerIds) : new Set())
+  }, [])
 
   const handleTaskContext = useCallback((e: React.MouseEvent, taskId: string) => {
     e.preventDefault()
@@ -1189,6 +1526,12 @@ export function TreeSidebar(props: Props) {
                 onDeleteTask={props.onDeleteTask}
                 onDeletePhase={props.onDeletePhase}
                 onDeleteProject={props.onDeleteProject}
+                taskById={taskById}
+                depHover={depHover}
+                onHoverLineage={handleHoverLineage}
+                onHoverBlocker={handleHoverBlocker}
+                expandedPhaseDeps={expandedPhaseDeps}
+                togglePhaseDeps={togglePhaseDeps}
               />
             ) : (
               <MonitorSplit
@@ -1196,6 +1539,10 @@ export function TreeSidebar(props: Props) {
                 onSelectTask={props.onSelectTask} onAcknowledgeTask={props.onAcknowledgeTask}
                 onPinTask={props.onPinTask} onTaskContext={handleTaskContext}
                 onDeleteTask={props.onDeleteTask}
+                taskById={taskById}
+                depHover={depHover}
+                onHoverLineage={handleHoverLineage}
+                onHoverBlocker={handleHoverBlocker}
               />
             )}
           </div>
@@ -1227,6 +1574,12 @@ export function TreeSidebar(props: Props) {
               onDeleteTask={props.onDeleteTask}
               onDeletePhase={props.onDeletePhase}
               onDeleteProject={props.onDeleteProject}
+              taskById={taskById}
+              depHover={depHover}
+              onHoverLineage={handleHoverLineage}
+              onHoverBlocker={handleHoverBlocker}
+              expandedPhaseDeps={expandedPhaseDeps}
+              togglePhaseDeps={togglePhaseDeps}
             />
             {/* File explorer — collapsible */}
             {props.workspacePath && (

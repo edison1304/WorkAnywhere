@@ -260,10 +260,12 @@
   flex-direction: column;
 }
 
-/* Indentation levels */
+/* Indentation levels — containment guide (project ⊃ phase ⊃ tasks).
+   Stays at --hairline so it reads as quieter than the sibling sequence
+   line that .taskLevel carries (Layer 3-1). */
 .indent1 {
   padding-left: 20px;
-  border-left: 1px solid var(--border-subtle);
+  border-left: 1px solid var(--hairline);
   margin-left: 12px;
 }
 
@@ -293,11 +295,53 @@
   left: 0;
   top: 0;
   bottom: 0;
-  width: 3px;
+  width: var(--tree-bar-width);
   background: var(--hairline);
   opacity: 0.15;
   pointer-events: none;
   transition: opacity 0.15s, background 0.15s, width 0.15s;
+}
+
+/* Layer 2 — attention bar (waiting / review). Amber, full opacity, gentle pulse.
+   Only attention rows get color in the tree. */
+.treeItem.attention::before,
+.managePhaseHeader.attention::before,
+.manageTaskItem.attention::before {
+  background: var(--status-attention);
+  opacity: 1;
+  animation: tree-attention-pulse 2s ease-in-out infinite;
+}
+
+@keyframes tree-attention-pulse {
+  0%, 100% { background: var(--status-attention); }
+  50%      { background: var(--status-attention-strong); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .treeItem.attention::before,
+  .managePhaseHeader.attention::before,
+  .manageTaskItem.attention::before {
+    animation: none;
+  }
+}
+
+/* Layer 6 — selected row bar (lavender). Wins over attention only on the
+   selected row, by reading higher specificity (.active comes after). */
+.treeItem.active::before,
+.managePhaseHeader.active::before,
+.manageTaskItem.active::before {
+  background: var(--primary);
+  opacity: 1;
+  width: var(--tree-bar-width-selected);
+  animation: none;
+}
+
+/* Attention + selected — keep amber but widen so user still sees both. */
+.treeItem.attention.active::before,
+.managePhaseHeader.attention.active::before,
+.manageTaskItem.attention.active::before {
+  background: var(--status-attention);
+  width: var(--tree-bar-width-selected);
 }
 
 .treeItem:hover { background: var(--bg-hover); color: var(--text-primary); }
@@ -380,9 +424,10 @@
   flex-shrink: 0;
 }
 
-/* Task level — leaf hierarchy, quiet by default
-   NOTE: border-left here will be reclaimed by Layer 3-1 as the sequence
-   guide. Kept as `--border-subtle` for now to preserve current visual. */
+/* Task level — leaf hierarchy, quiet by default.
+   Layer 3-1: the border-left now carries the sequence guide (one step brighter
+   than --hairline). First/last task in a sibling group get rounded caps via
+   ::firstTask / ::lastTask state classes. */
 .taskLevel {
   font-size: var(--tree-font-task);
   font-weight: 400;
@@ -390,11 +435,22 @@
   line-height: 1.3;
   padding: 4px 8px 4px 11px;
   margin-left: 24px;
-  border-left: 1px solid var(--border-subtle);
+  border-left: 1.5px solid var(--tree-sequence);
   border-radius: 0 5px 5px 0;
 }
 .taskLevel:hover,
 .taskLevel.active { color: var(--text-primary); font-weight: 500; }
+
+/* First / last task in a sibling group — soften the sequence line so it reads
+   as a flow (not a continuous wall). */
+.taskLevel.firstTask {
+  border-top-left-radius: 4px;
+  margin-top: 1px;
+}
+.taskLevel.lastTask {
+  border-bottom-left-radius: 4px;
+  margin-bottom: 1px;
+}
 
 .taskName {
   overflow: hidden;
@@ -570,10 +626,13 @@
 .managePhaseHeader:hover { background: var(--bg-hover); color: var(--text-primary); }
 .managePhaseHeader.active { background: var(--bg-tertiary); color: var(--text-primary); }
 
+/* Manage view task list — this single border-left carries BOTH containment
+   and sequence (because manageTaskItem rows have no left border of their own).
+   Uses --tree-sequence so it reads as a flow. */
 .manageTaskList {
   padding-left: 20px;
   margin-left: 12px;
-  border-left: 1px solid var(--border-subtle);
+  border-left: 1.5px solid var(--tree-sequence);
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -808,4 +867,209 @@
   font-size: 12px;
   font-family: inherit;
   outline: none;
+}
+
+/* ─── Layer 2 — attention glyph (⌛ waiting / ✋ review) ─── */
+.attentionGlyph {
+  font-size: 11px;
+  flex-shrink: 0;
+  width: 14px;
+  text-align: center;
+  color: var(--status-attention-strong);
+  line-height: 1;
+}
+
+/* Attention count badge — shown on phase/project rows that contain
+   waiting/review descendants. */
+.attentionBadge {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--status-attention-strong);
+  background: rgba(216, 160, 80, 0.12);
+  border: 1px solid rgba(216, 160, 80, 0.35);
+  padding: 1px 6px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  line-height: 1.3;
+}
+.attentionBadge .attentionBadgeGlyph {
+  font-size: 9px;
+}
+
+/* ─── Layer 3-2 — phase dependency hint line ─── */
+.phaseDepsHint {
+  margin: 2px 0 4px 38px;
+  font-size: 10.5px;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  transition: color 0.12s, background 0.12s;
+}
+.phaseDepsHint:hover { color: var(--text-secondary); background: var(--bg-hover); }
+.phaseDepsHintChevron {
+  font-size: 8px;
+  color: var(--text-muted);
+}
+.phaseDepsList {
+  margin: 0 0 6px 50px;
+  padding: 4px 8px;
+  font-size: 10.5px;
+  color: var(--text-secondary);
+  background: var(--surface-2);
+  border-left: 2px solid var(--hairline);
+  border-radius: 0 3px 3px 0;
+}
+.phaseDepsList li {
+  list-style: none;
+  padding: 1.5px 0;
+  line-height: 1.4;
+}
+.phaseDepsList li::before {
+  content: '·';
+  margin-right: 6px;
+  color: var(--text-muted);
+}
+
+/* ─── Layer 3-3 — fork lineage chip (↳ from "...") ─── */
+.lineageChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  padding: 0 5px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.lineageChip:hover { color: var(--text-secondary); border-color: var(--hairline-strong); }
+.lineageChip .lineageGlyph { color: var(--text-muted); font-size: 11px; }
+
+/* Highlighted as the origin of a hovered lineage chip — soft amber underline. */
+.lineageOrigin {
+  box-shadow: inset 2px 0 0 var(--status-attention);
+}
+
+/* ─── Layer 3-4 — depends-on (blocked) chip + hover spotlight ─── */
+.blockedChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  color: var(--status-attention-strong);
+  background: rgba(216, 160, 80, 0.10);
+  border: 1px solid rgba(216, 160, 80, 0.30);
+  padding: 0 5px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  line-height: 1.5;
+  cursor: help;
+}
+.blockedChip:hover { background: rgba(216, 160, 80, 0.18); }
+
+/* Row outlined while user hovers a blockedChip pointing at it or a lineage chip. */
+.depHover {
+  text-decoration: underline dotted var(--status-attention);
+  text-underline-offset: 3px;
+}
+
+/* ─── Layer 4 — progress bars ─── */
+.phaseProgressBar {
+  width: 36px;
+  height: 3px;
+  background: var(--surface-3);
+  border-radius: 2px;
+  overflow: hidden;
+  flex-shrink: 0;
+  margin-left: auto;
+  position: relative;
+}
+.phaseProgressFill {
+  height: 100%;
+  background: var(--ink-tertiary);
+  border-radius: 2px;
+  transition: width 0.3s ease-out, background 0.3s;
+}
+.phaseProgressFill.complete {
+  background: var(--success);
+}
+
+.projectProgress {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.projectProgressBar {
+  width: 48px;
+  height: 3px;
+  background: var(--surface-3);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.projectProgressFill {
+  height: 100%;
+  background: var(--ink-subtle);
+  border-radius: 2px;
+  transition: width 0.3s ease-out, background 0.3s;
+}
+.projectProgressFill.complete {
+  background: var(--success);
+}
+
+/* ─── Layer 5 — project emblem (image or HSL-hashed initial) ─── */
+.projectEmblem {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.92);
+  text-transform: uppercase;
+  letter-spacing: -0.5px;
+  line-height: 1;
+  overflow: hidden;
+}
+.projectEmblem img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Connection-type tag — small uppercase glyph next to the emblem to keep the
+   ssh/remote/local cue from Layer 1 readable. */
+.connTag {
+  font-size: 8.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface-3);
+  border: 1px solid var(--hairline);
+  padding: 0 4px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  letter-spacing: 0.3px;
+  line-height: 1.4;
 }

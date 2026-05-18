@@ -82,6 +82,21 @@
   --tree-font-project: 13px;
   --tree-font-phase: 12.5px;
   --tree-font-task: 12px;
+
+  /* ─── Tree attention channel (Layer 2) — amber.
+   * waiting + review are the only loud signal in TreeSidebar. Color is paired
+   * with a glyph (⌛ / ✋) and bar width so color-blind users still parse it. */
+  --status-attention: #d8a050;
+  --status-attention-strong: #f0b870;
+
+  /* ─── Tree sequence guide (Layer 3-1) — replaces the indent border-left.
+   * One step brighter than --hairline so sibling task order reads as a flow,
+   * not a wall. */
+  --tree-sequence: #2e3036;
+
+  /* ─── Tree row left bar (Layer 6) — selection / attention slot widths. */
+  --tree-bar-width: 3px;
+  --tree-bar-width-selected: 6px;
 }
 
 * {
