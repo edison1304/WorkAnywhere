@@ -1636,10 +1636,13 @@ ipcMain.handle('ssh:read-file', async (_event, filePath: string) => {
   const conn = getAnyConn()
   if (!conn) return { success: false, error: 'Not connected' }
   try {
-    // Check file size first (limit 2MB for text, 5MB for binary)
-    const statOut = await conn.exec(`stat -c '%s' ${JSON.stringify(filePath)} 2>/dev/null || echo '-1'`)
-    const fileSize = parseInt(statOut.trim(), 10)
-    console.log(`[read-file] path=${filePath}, statOut="${statOut.trim()}", fileSize=${fileSize}`)
+    // Check file exists and get size. Use test+wc instead of stat -c '%s'
+    // because stat's format string can conflict with PersistentShell's
+    // printf markers, and wc -c is more portable.
+    const fp = JSON.stringify(filePath)
+    const checkOut = await conn.exec(`test -f ${fp} && wc -c < ${fp} || echo '-1'`)
+    const fileSize = parseInt(checkOut.trim(), 10)
+    console.log(`[read-file] path=${filePath}, checkOut="${checkOut.trim()}", fileSize=${fileSize}`)
     if (fileSize < 0 || isNaN(fileSize)) return { success: false, error: `File not found: ${filePath}` }
 
     const ext = filePath.split('.').pop()?.toLowerCase() || ''
