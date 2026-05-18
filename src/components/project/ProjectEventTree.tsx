@@ -85,9 +85,19 @@ export function ProjectEventTree({ project, phases, tasks, onSelectTask }: Props
     )
   }
 
+  const projectTasks = useMemo(
+    () => (project ? tasks.filter(t => t.projectId === project.id) : []),
+    [project, tasks],
+  )
+
   return (
     <div className={styles.page}>
       <Header project={project} mode={mode} onChangeMode={setMode} />
+      <AttentionPinBar
+        tasks={projectTasks}
+        phases={phases}
+        onSelectTask={onSelectTask}
+      />
       <div className={styles.body}>
         {mode === 'attention' && (
           <AttentionBoard sections={sections} onSelectTask={onSelectTask} />
@@ -264,6 +274,66 @@ function TaskCard({
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+function AttentionPinBar({
+  tasks,
+  phases,
+  onSelectTask,
+}: {
+  tasks: Task[]
+  phases: Phase[]
+  onSelectTask: (id: string) => void
+}) {
+  const attn = tasks.filter(isAttentionTask)
+  if (attn.length === 0) return null
+
+  const sorted = [...attn].sort((a, b) => {
+    const aTs = lastActivityTs(a)
+    const bTs = lastActivityTs(b)
+    return bTs.localeCompare(aTs)
+  })
+
+  const MAX = 6
+  const visible = sorted.slice(0, MAX)
+  const more = sorted.length - visible.length
+
+  return (
+    <div className={styles.attnPin} role="region" aria-label="Attention tasks">
+      <div className={styles.attnPinHead}>
+        <span className={styles.attnPinHeadDot} aria-hidden="true" />
+        지금 손이 필요한 곳
+        <span className={styles.attnPinHint}>
+          — {attn.length} task{attn.length > 1 ? 's' : ''} · 페이즈 무관
+        </span>
+      </div>
+      <div className={styles.attnPinList}>
+        {visible.map(task => {
+          const phase = phases.find(p => p.id === task.phaseId) ?? null
+          const glyph = task.status === 'review' ? '✋' : '⌛'
+          const ago = relativeFromNow(lastActivityTs(task))
+          return (
+            <button
+              key={task.id}
+              type="button"
+              className={styles.attnChip}
+              onClick={() => onSelectTask(task.id)}
+              title={task.name}
+            >
+              <span className={styles.attnChipGlyph}>{glyph}</span>
+              <span className={styles.attnChipName}>{task.name}</span>
+              <span className={styles.attnChipMeta}>
+                {task.status} · {phase?.name ?? '—'}{ago ? ` · ${ago}` : ''}
+              </span>
+            </button>
+          )
+        })}
+        {more > 0 && (
+          <div className={styles.attnChipMore} title={`${more}개 더`}>+{more}</div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function ModePlaceholder({ label, hint }: { label: string; hint: string }) {
   return (
     <div className={styles.placeholder}>
@@ -281,6 +351,26 @@ function isAttentionTask(t: Task): boolean {
 }
 
 type DotKind = 'completed' | 'detour' | 'error'
+
+function lastActivityTs(task: Task): string {
+  const last = task.logs[task.logs.length - 1]
+  return last?.timestamp ?? task.updatedAt ?? task.createdAt ?? ''
+}
+
+function relativeFromNow(iso: string): string {
+  if (!iso) return ''
+  const ms = Date.now() - new Date(iso).getTime()
+  if (!Number.isFinite(ms) || ms < 0) return ''
+  const s = Math.floor(ms / 1000)
+  if (s < 45) return 'now'
+  const m = Math.floor(s / 60)
+  if (m < 60) return `${m}m`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h`
+  const d = Math.floor(h / 24)
+  if (d < 7) return `${d}d`
+  return `${Math.floor(d / 7)}w`
+}
 
 function compactedDots(task: Task): Array<{ kind: DotKind; ts?: string }> {
   if (!task.compacted) return []

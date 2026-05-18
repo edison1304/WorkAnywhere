@@ -101,6 +101,95 @@
   color: var(--ink);
 }
 
+/* ─── Attention pin bar (mode-agnostic, top of body region) ─── */
+.attnPin {
+  margin: var(--space-md) var(--space-xl) 0;
+  padding: 10px 12px 12px;
+  background: linear-gradient(180deg, rgba(216, 160, 80, 0.06) 0%, transparent 100%);
+  border: 1px solid rgba(216, 160, 80, 0.22);
+  border-radius: var(--radius-md);
+}
+.attnPinHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-xs);
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--status-attention-strong);
+}
+.attnPinHeadDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--status-attention);
+  animation: wa-tree-pulse 2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+.attnPinHint {
+  margin-left: 2px;
+  color: var(--ink-tertiary);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.attnPinList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+.attnChip {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 6px 10px 6px 8px;
+  background: var(--surface-2);
+  border: 1px solid rgba(216, 160, 80, 0.32);
+  border-left: 3px solid var(--status-attention);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--ink);
+  cursor: pointer;
+  max-width: 320px;
+  transition: background 0.12s, border-color 0.12s;
+}
+.attnChip:hover {
+  background: var(--surface-3);
+  border-color: rgba(216, 160, 80, 0.5);
+}
+.attnChipGlyph {
+  font-size: 12px;
+  color: var(--status-attention-strong);
+  flex-shrink: 0;
+}
+.attnChipName {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.attnChipMeta {
+  font-size: 10.5px;
+  color: var(--ink-tertiary);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.attnChipMore {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  background: var(--surface-1);
+  border: 1px dashed var(--hairline-strong);
+  border-radius: var(--radius-sm);
+  font-size: 11.5px;
+  color: var(--ink-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
 /* ─── Body ─── */
 .body {
   flex: 1;
@@ -229,14 +318,21 @@
 .cardMuted .cardName  { color: var(--ink-subtle); }
 .cardMuted .cardLine2 { color: var(--ink-tertiary); }
 
-/* Attention (waiting / review) — Layer 1 에선 amber bar + glyph 정도만.
- * 펄스 / 외곽 그라데이션 / amber border 강화는 Layer 2 에서. */
+/* Attention (waiting / review) — Layer 2: amber bar pulse + tinted gradient.
+ * Color encoding stacks 4 channels: color + glyph + bar width + outer tint
+ * → meets a11y for color-blind viewers. */
+.cardAttn {
+  border-color: rgba(216, 160, 80, 0.4);
+  background: linear-gradient(180deg, rgba(216, 160, 80, 0.06) 0%, var(--surface-2) 70%);
+}
+.cardAttn:hover {
+  background: linear-gradient(180deg, rgba(216, 160, 80, 0.1) 0%, var(--surface-3) 70%);
+  border-color: rgba(216, 160, 80, 0.55);
+}
 .cardAttn::before {
   background: var(--status-attention);
   width: 4px;
-}
-.cardAttn {
-  border-color: rgba(216, 160, 80, 0.32);
+  animation: wa-tree-pulse 2s ease-in-out infinite;
 }
 
 .cardLine1 {
@@ -329,4 +425,17 @@
   font-size: 12px;
   color: var(--ink-tertiary);
   text-align: center;
+}
+
+/* ─── Animations + reduced-motion guard ─── */
+@keyframes wa-tree-pulse {
+  0%, 100% { background: var(--status-attention); }
+  50%      { background: var(--status-attention-strong); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cardAttn::before,
+  .attnPinHeadDot {
+    animation: none;
+  }
 }
