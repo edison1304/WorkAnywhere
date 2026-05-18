@@ -29,6 +29,13 @@ export class SSHService extends EventEmitter {
   private sessions = new Map<string, SSHSession>()
   private persistentShell: PersistentShell | null = null
   private shellReconnecting = false
+  // Track open dedicated channels (agents, PTYs, execChannel calls).
+  // PersistentShell's single channel is NOT counted here.
+  private activeChannels = 0
+  private channelWaiters: Array<() => void> = []
+  // Conservative limit — SSH default MaxSessions is 10. Reserve slots
+  // for PersistentShell(1) + headroom(1).
+  private readonly MAX_CHANNELS = 8
   public engines: Record<string, EngineExecConfig> = {
     claude: { command: 'claude', args: [], env: {}, setupScript: '' },
     opencode: { command: 'opencode', args: [], env: {}, setupScript: '' },
@@ -134,6 +141,10 @@ export class SSHService extends EventEmitter {
       session.close()
     }
     this.sessions.clear()
+    this.activeChannels = 0
+    // Wake all waiters so they can fail gracefully
+    for (const w of this.channelWaiters) w()
+    this.channelWaiters = []
     this.client?.end()
     this.client = null
     this.connected = false
@@ -141,6 +152,26 @@ export class SSHService extends EventEmitter {
 
   isConnected(): boolean {
     return this.connected
+  }
+
+  // ─── Channel semaphore ───
+  // Waits until a channel slot is available, then increments the counter.
+  private async acquireChannel(): Promise<void> {
+    if (this.activeChannels < this.MAX_CHANNELS) {
+      this.activeChannels++
+      return
+    }
+    // Wait for a slot to free up
+    console.log(`[SSH] Channel limit reached (${this.activeChannels}/${this.MAX_CHANNELS}), waiting...`)
+    await new Promise<void>(resolve => this.channelWaiters.push(resolve))
+    this.activeChannels++
+  }
+
+  private releaseChannel(): void {
+    this.activeChannels = Math.max(0, this.activeChannels - 1)
+    // Wake up next waiter if any
+    const next = this.channelWaiters.shift()
+    if (next) next()
   }
 
   // ─── Persistent Shell management ───
@@ -195,61 +226,67 @@ export class SSHService extends EventEmitter {
   // Execute a command via a dedicated SSH channel.
   // Use this for long-running commands (e.g. claude CLI) that would block the
   // persistent shell queue. Also used as fallback when the persistent shell fails.
+  // Respects the channel semaphore to avoid exceeding MaxSessions.
   async execChannel(command: string, useLogin = false): Promise<string> {
     if (!this.client || !this.connected) throw new Error('Not connected')
     const finalCmd = useLogin ? `bash -lc ${JSON.stringify(command)}` : command
 
-    const MAX_RETRIES = 4
-    const RETRY_DELAYS = [1000, 2000, 4000, 8000]
+    await this.acquireChannel()
 
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      try {
-        return await new Promise<string>((resolve, reject) => {
-          this.client!.exec(finalCmd, (err, stream) => {
-            if (err) return reject(err)
-            let output = ''
-            let settled = false
-            const settle = (fn: () => void) => { if (!settled) { settled = true; fn() } }
-            // StringDecoder handles multi-byte UTF-8 chars split across chunks
-            const decoder = new StringDecoder('utf8')
-            const decoderErr = new StringDecoder('utf8')
+    try {
+      return await new Promise<string>((resolve, reject) => {
+        this.client!.exec(finalCmd, (err, stream) => {
+          if (err) {
+            this.releaseChannel()
+            return reject(err)
+          }
+          let output = ''
+          let settled = false
+          const settle = (fn: () => void) => { if (!settled) { settled = true; fn() } }
+          // StringDecoder handles multi-byte UTF-8 chars split across chunks
+          const decoder = new StringDecoder('utf8')
+          const decoderErr = new StringDecoder('utf8')
 
-            stream.on('data', (data: Buffer) => { output += decoder.write(data) })
-            stream.stderr.on('data', (data: Buffer) => { output += decoderErr.write(data) })
-            stream.on('error', (e: Error) => {
+          stream.on('data', (data: Buffer) => { output += decoder.write(data) })
+          stream.stderr.on('data', (data: Buffer) => { output += decoderErr.write(data) })
+          stream.on('error', (e: Error) => {
+            stream.destroy()
+            this.releaseChannel()
+            settle(() => reject(e))
+          })
+          stream.on('close', () => {
+            output += decoder.end()
+            output += decoderErr.end()
               stream.destroy()
-              settle(() => reject(e))
-            })
-            stream.on('close', () => {
-              output += decoder.end()
-              output += decoderErr.end()
-              stream.destroy()
+              this.releaseChannel()
               settle(() => resolve(output))
             })
           })
         })
       } catch (err: any) {
+        // acquireChannel already released on exec error/stream error above.
+        // Only retry on Channel open failure — other errors propagate.
         const msg = err?.message || String(err)
-        if (msg.includes('Channel open failure') && attempt < MAX_RETRIES) {
-          console.log(`[SSH execChannel] Channel open failure, retry ${attempt + 1}/${MAX_RETRIES} in ${RETRY_DELAYS[attempt]}ms`)
-          await new Promise(r => setTimeout(r, RETRY_DELAYS[attempt]))
-          continue
+        if (msg.includes('Channel open failure')) {
+          console.log(`[SSH execChannel] Channel open failure (should not happen with semaphore)`)
         }
         throw err
       }
     }
-    throw new Error('Unreachable')
+    throw new Error('Unreachable') // satisfy TS
   }
 
   // Spawn an interactive PTY session (for xterm.js)
   async spawnPTY(command: string, sessionId: string, cols = 120, rows = 30): Promise<SSHSession> {
     if (!this.client || !this.connected) throw new Error('Not connected')
 
+    await this.acquireChannel()
+
     return new Promise((resolve, reject) => {
       this.client!.shell(
         { term: 'xterm-256color', cols, rows },
         (err, stream) => {
-          if (err) return reject(err)
+          if (err) { this.releaseChannel(); return reject(err) }
 
           const dataCallbacks: Array<(data: string) => void> = []
           const closeCallbacks: Array<() => void> = []
@@ -263,12 +300,14 @@ export class SSHService extends EventEmitter {
             console.error(`[PTY ${sessionId}] stream error:`, err.message)
             this.sessions.delete(sessionId)
             stream.destroy()
+            this.releaseChannel()
             for (const cb of closeCallbacks) cb()
           })
 
           stream.on('close', () => {
             this.sessions.delete(sessionId)
             stream.destroy()
+            this.releaseChannel()
             for (const cb of closeCallbacks) cb()
           })
 
@@ -307,6 +346,8 @@ export class SSHService extends EventEmitter {
   }> {
     if (!this.client || !this.connected) throw new Error('Not connected')
 
+    await this.acquireChannel()
+
     return new Promise((resolve, reject) => {
       const prefix = this.getShellPrefix(engine)
       let agentCmd: string
@@ -328,7 +369,10 @@ export class SSHService extends EventEmitter {
       this.emit('debug', { engine, prefix, agentCmd, innerCmd, cmd })
 
       this.client!.exec(cmd, (err, stream) => {
-        if (err) return reject(err)
+        if (err) {
+          this.releaseChannel()
+          return reject(err)
+        }
 
         const eventCallbacks: Array<(event: ClaudeStreamEvent) => void> = []
         const closeCallbacks: Array<(code: number) => void> = []
@@ -360,6 +404,7 @@ export class SSHService extends EventEmitter {
           if (!closed) {
             closed = true
             stream.destroy()
+            this.releaseChannel()
             for (const cb of closeCallbacks) cb(-1)
           }
         })
@@ -368,6 +413,7 @@ export class SSHService extends EventEmitter {
           if (!closed) {
             closed = true
             stream.destroy()
+            this.releaseChannel()
             for (const cb of closeCallbacks) cb(code)
           }
         })
