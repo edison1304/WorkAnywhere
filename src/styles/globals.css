@@ -77,6 +77,11 @@
   --sidebar-width: 260px;
   --rail-width: 300px;
   --titlebar-height: 34px;
+
+  /* ─── Tree typography hierarchy (TreeSidebar) ─── */
+  --tree-font-project: 13px;
+  --tree-font-phase: 12.5px;
+  --tree-font-task: 12px;
 }
 
 * {

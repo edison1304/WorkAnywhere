@@ -268,10 +268,11 @@
 }
 
 .treeItem {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 8px;
+  padding: 5px 8px 5px 11px;
   border: none;
   background: transparent;
   color: var(--text-secondary);
@@ -281,6 +282,22 @@
   width: 100%;
   font-size: 13px;
   transition: background 0.1s, color 0.1s;
+}
+
+/* Left status bar slot — Layer 1 baseline opacity ~0.15 (faint hairline).
+   Layer 2 lights this up amber for waiting/review. Layer 6 lights it
+   lavender-blue for the selected row. */
+.treeItem::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--hairline);
+  opacity: 0.15;
+  pointer-events: none;
+  transition: opacity 0.15s, background 0.15s, width 0.15s;
 }
 
 .treeItem:hover { background: var(--bg-hover); color: var(--text-primary); }
@@ -294,10 +311,15 @@
   text-align: center;
 }
 
-/* Project level */
+/* Project level — top of containment hierarchy */
 .projectLevel {
-  font-weight: 500;
-  padding: 6px 8px;
+  font-size: var(--tree-font-project);
+  font-weight: 700;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  line-height: 1.4;
+  padding: 6px 8px 6px 11px;
 }
 
 .nodeIcon {
@@ -324,25 +346,30 @@
 .activeBadge {
   font-size: 10px;
   font-weight: 600;
-  color: var(--accent);
-  background: rgba(99, 102, 241, 0.15);
+  color: var(--text-secondary);
+  background: var(--surface-3);
   padding: 1px 6px;
   border-radius: 8px;
   flex-shrink: 0;
 }
 
-/* Phase level */
-.phaseLevel { font-size: 12px; }
+/* Phase level — mid-tier hierarchy */
+.phaseLevel {
+  font-size: var(--tree-font-phase);
+  font-weight: 600;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
 
+/* Phase status glyph — Layer 1 keeps the ▶ ⏸ ✓ symbol but drops the color
+   tint. Color signaling is reserved for the attention channel (Layer 2). */
 .phaseStatus {
   font-size: 9px;
   flex-shrink: 0;
   width: 14px;
   text-align: center;
+  color: var(--text-muted);
 }
-.phaseStatus[data-status="active"] { color: var(--success); }
-.phaseStatus[data-status="paused"] { color: var(--warning); }
-.phaseStatus[data-status="completed"] { color: var(--text-muted); }
 
 .taskCountBadge {
   font-size: 10px;
@@ -353,14 +380,21 @@
   flex-shrink: 0;
 }
 
-/* Task level in monitor tree — extra indent */
+/* Task level — leaf hierarchy, quiet by default
+   NOTE: border-left here will be reclaimed by Layer 3-1 as the sequence
+   guide. Kept as `--border-subtle` for now to preserve current visual. */
 .taskLevel {
-  font-size: 12px;
-  padding: 4px 8px;
+  font-size: var(--tree-font-task);
+  font-weight: 400;
+  color: var(--text-muted);
+  line-height: 1.3;
+  padding: 4px 8px 4px 11px;
   margin-left: 24px;
   border-left: 1px solid var(--border-subtle);
   border-radius: 0 5px 5px 0;
 }
+.taskLevel:hover,
+.taskLevel.active { color: var(--text-primary); font-weight: 500; }
 
 .taskName {
   overflow: hidden;
@@ -503,24 +537,38 @@
 }
 
 .managePhaseHeader {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 10px;
+  padding: 8px 10px 8px 13px;
   border: none;
   background: transparent;
-  color: var(--text-primary);
+  color: var(--text-secondary);
   border-radius: 6px;
   cursor: pointer;
   text-align: left;
   width: 100%;
-  font-size: 13px;
-  font-weight: 500;
-  transition: background 0.1s;
+  font-size: var(--tree-font-phase);
+  font-weight: 600;
+  line-height: 1.35;
+  transition: background 0.1s, color 0.1s;
+}
+.managePhaseHeader::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--hairline);
+  opacity: 0.15;
+  pointer-events: none;
+  transition: opacity 0.15s, background 0.15s, width 0.15s;
 }
 
-.managePhaseHeader:hover { background: var(--bg-hover); }
-.managePhaseHeader.active { background: var(--bg-tertiary); }
+.managePhaseHeader:hover { background: var(--bg-hover); color: var(--text-primary); }
+.managePhaseHeader.active { background: var(--bg-tertiary); color: var(--text-primary); }
 
 .manageTaskList {
   padding-left: 20px;
@@ -532,23 +580,38 @@
 }
 
 .manageTaskItem {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
+  padding: 6px 10px 6px 13px;
   border: none;
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   border-radius: 0 5px 5px 0;
   cursor: pointer;
   text-align: left;
   width: 100%;
-  font-size: 12px;
+  font-size: var(--tree-font-task);
+  font-weight: 400;
+  line-height: 1.3;
   transition: background 0.1s, color 0.1s;
 }
+.manageTaskItem::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--hairline);
+  opacity: 0.15;
+  pointer-events: none;
+  transition: opacity 0.15s, background 0.15s, width 0.15s;
+}
 
-.manageTaskItem:hover { background: var(--bg-hover); color: var(--text-primary); }
-.manageTaskItem.active { background: var(--bg-tertiary); color: var(--text-primary); }
+.manageTaskItem:hover { background: var(--bg-hover); color: var(--text-primary); font-weight: 500; }
+.manageTaskItem.active { background: var(--bg-tertiary); color: var(--text-primary); font-weight: 500; }
 
 .manageTaskStatus {
   font-size: 10px;

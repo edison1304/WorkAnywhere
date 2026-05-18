@@ -107,6 +107,11 @@ function isDoneTask(task: Task): boolean {
   return task.status === 'completed' || task.status === 'failed'
 }
 
+// Human-needed signal — the only loud channel in the tree. See PLAN.md.
+function isAttentionTask(task: Task): boolean {
+  return task.status === 'waiting' || task.status === 'review'
+}
+
 // ─── Task Item with pin/ack/context menu/drag ───
 function TaskItemMonitor({ task, isActive, onSelect, onAcknowledge, onPin, onDelete, onContextMenu, onDragStart }: {
   task: Task; isActive: boolean
@@ -126,7 +131,7 @@ function TaskItemMonitor({ task, isActive, onSelect, onAcknowledge, onPin, onDel
       role="button"
       tabIndex={0}
     >
-      <StatusDot status={task.status} size={7} />
+      {isAttentionTask(task) && <StatusDot status={task.status} size={7} />}
       <span className={styles.taskName}>{task.name}</span>
       <span
         className={`${styles.pinBtn} ${task.pinned ? styles.pinned : ''}`}
@@ -143,9 +148,6 @@ function TaskItemMonitor({ task, isActive, onSelect, onAcknowledge, onPin, onDel
           title="Mark as reviewed"
           role="button"
         >✓</span>
-      )}
-      {task.status === 'failed' && !task.acknowledgedAt && (
-        <span className={styles.unreadDot} />
       )}
       {canDelete && (
         <span
@@ -996,7 +998,7 @@ function ManageTaskList({
               role="button"
             >
               <span className={styles.dragHandle}>⠿</span>
-              <StatusDot status={task.status} size={7} />
+              {isAttentionTask(task) && <StatusDot status={task.status} size={7} />}
               <span className={styles.taskName}>{task.name}</span>
               <span className={styles.manageTaskStatus}>{task.status}</span>
               {onDeleteTask && task.status !== 'running' && (
