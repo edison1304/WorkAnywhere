@@ -1639,7 +1639,8 @@ ipcMain.handle('ssh:read-file', async (_event, filePath: string) => {
     // Check file size first (limit 2MB for text, 5MB for binary)
     const statOut = await conn.exec(`stat -c '%s' ${JSON.stringify(filePath)} 2>/dev/null || echo '-1'`)
     const fileSize = parseInt(statOut.trim(), 10)
-    if (fileSize < 0) return { success: false, error: 'File not found' }
+    console.log(`[read-file] path=${filePath}, statOut="${statOut.trim()}", fileSize=${fileSize}`)
+    if (fileSize < 0 || isNaN(fileSize)) return { success: false, error: `File not found: ${filePath}` }
 
     const ext = filePath.split('.').pop()?.toLowerCase() || ''
     const binaryExts = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg', 'pdf', 'ico']
