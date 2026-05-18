@@ -1645,13 +1645,17 @@ ipcMain.handle('ssh:read-file', async (_event, filePath: string) => {
     const escaped = filePath.replace(/'/g, "'\\''")
     const sq = `'${escaped}'`
 
+    console.log(`[read-file] path=${filePath}, isBinary=${isBinary}, sq=${sq}`)
+
     if (isBinary) {
       const content = await conn.exec(`base64 ${sq}`)
+      console.log(`[read-file] binary result length=${content.length}, empty=${!content.trim()}`)
       if (!content.trim()) return { success: false, error: `File not found or empty: ${filePath}` }
       return { success: true, content: content.replace(/\n/g, ''), encoding: 'base64' as const, size: content.length }
     } else {
       // Use cat with an exit-code check — cat returns 1 for missing files
       const result = await conn.exec(`cat ${sq} && echo '<<<WA_FILE_OK>>>' || echo '<<<WA_FILE_ERR>>>'`)
+      console.log(`[read-file] text result length=${result.length}, hasOK=${result.includes('<<<WA_FILE_OK>>>')}`)
       if (result.includes('<<<WA_FILE_ERR>>>') || (!result.includes('<<<WA_FILE_OK>>>') && !result.trim())) {
         return { success: false, error: `File not found: ${filePath}` }
       }
