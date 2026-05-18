@@ -608,7 +608,8 @@ ipcMain.handle('project:connect', async (_event, projectId: string, appConfig?: 
 
     const conn = await connMgr.getConnection(project)
     initAgentService()
-    await initSyncService(conn).catch(err => console.error('[SyncService] Init failed:', err))
+    // Init sync in background — don't block connection
+    initSyncService(conn).catch(err => console.error('[SyncService] Init failed:', err))
 
     const claude = await conn.checkClaude()
     return { success: true, claude }
@@ -637,7 +638,8 @@ ipcMain.handle('ssh:connect', async (_event, config: import('../../../shared/typ
     }
     const conn = await connMgr.getConnection(tempProject)
     initAgentService()
-    await initSyncService(conn).catch(err => console.error('[SyncService] Init failed:', err))
+    // Init sync in background — don't block connection
+    initSyncService(conn).catch(err => console.error('[SyncService] Init failed:', err))
     const claude = await conn.checkClaude()
     return { success: true, claude }
   } catch (err) {
@@ -658,7 +660,7 @@ ipcMain.handle('local:connect', async (_event, appConfig?: import('../../../shar
     }
     const conn = await connMgr.getConnection(tempProject)
     initAgentService()
-    await initSyncService(conn).catch(err => console.error('[SyncService] Init failed:', err))
+    initSyncService(conn).catch(err => console.error('[SyncService] Init failed:', err))
     const claude = await conn.checkClaude()
     return { success: true, claude }
   } catch (err) {
@@ -679,7 +681,7 @@ ipcMain.handle('remote:connect', async (_event, remoteLink: string, appConfig?: 
     }
     const conn = await connMgr.getConnection(tempProject)
     initAgentService()
-    await initSyncService(conn).catch(err => console.error('[SyncService] Init failed:', err))
+    initSyncService(conn).catch(err => console.error('[SyncService] Init failed:', err))
     const claude = await conn.checkClaude()
     return { success: true, claude }
   } catch (err) {
