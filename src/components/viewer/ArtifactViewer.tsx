@@ -46,8 +46,8 @@ export function ArtifactViewer({ artifact, workspacePath }: Props) {
     return () => { cancelled = true }
   }, [fullPath])
 
-  const fileName = artifact.filePath.split('/').pop() || artifact.filePath
-  const ext = fileName.split('.').pop()?.toLowerCase() || ''
+  const fileName = artifact.filePath.trim().split('/').pop() || artifact.filePath.trim()
+  const ext = fileName.split('.').pop()?.toLowerCase().trim() || ''
 
   if (state.status === 'loading') {
     return (

@@ -1676,12 +1676,14 @@ ipcMain.handle('ssh:list-dir', async (_event, dirPath: string) => {
     const output = await conn.exec(
       `ls -1pa ${JSON.stringify(dirPath)} 2>/dev/null | head -100`
     )
-    const entries = output.trim().split('\n').filter(Boolean).map(name => {
+    const entries = output.trim().split('\n').filter(Boolean).map(raw => {
+      const name = raw.trim()  // strip \r and whitespace from ls output
       const isDir = name.endsWith('/')
+      const clean = isDir ? name.slice(0, -1) : name
       return {
-        name: isDir ? name.slice(0, -1) : name,
+        name: clean,
         isDir,
-        path: dirPath.replace(/\/$/, '') + '/' + (isDir ? name.slice(0, -1) : name)
+        path: dirPath.replace(/\/$/, '') + '/' + clean
       }
     })
     // Sort: dirs first, then files
