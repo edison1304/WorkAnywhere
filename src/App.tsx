@@ -7,6 +7,7 @@ import { CompactDialog } from './components/timeline/CompactDialog'
 import { ConnectionStatus, type ConnState } from './components/connection/ConnectionStatus'
 import type { Project, Phase, Task, ConnectionConfig, LogEntry, Artifact, TaskSummary, CompactedSession } from '../shared/types'
 import type { SidebarView } from './components/layout/TreeSidebar'
+import { applyDemoLineage } from './lib/demoLineage'
 
 export default function App() {
   // Check if this is a detached window
@@ -145,7 +146,7 @@ export default function App() {
     if (result.success && result.data) {
       if (result.data.projects?.length) setProjects(result.data.projects)
       if (result.data.phases?.length) setPhases(result.data.phases)
-      if (result.data.tasks?.length) setTasks(result.data.tasks)
+      if (result.data.tasks?.length) setTasks(applyDemoLineage(result.data.tasks, result.data.phases ?? []))
       if (result.data.projects?.length) {
         setActiveProjectId(result.data.projects[0].id)
       }
@@ -155,7 +156,7 @@ export default function App() {
       if (local.success && local.data) {
         if (local.data.projects?.length) setProjects(local.data.projects)
         if (local.data.phases?.length) setPhases(local.data.phases)
-        if (local.data.tasks?.length) setTasks(local.data.tasks)
+        if (local.data.tasks?.length) setTasks(applyDemoLineage(local.data.tasks, local.data.phases ?? []))
         if (local.data.projects?.length) {
           setActiveProjectId(local.data.projects[0].id)
         }
@@ -580,7 +581,7 @@ export default function App() {
     if (result.success && result.data) {
       setProjects(result.data.projects || [])
       setPhases(result.data.phases || [])
-      setTasks(result.data.tasks || [])
+      setTasks(applyDemoLineage(result.data.tasks || [], result.data.phases || []))
       setActiveProjectId(projectId)
       const firstPhase = (result.data.phases || []).find(
         (ph: Phase) => ph.projectId === projectId
@@ -604,7 +605,7 @@ export default function App() {
       // Don't overwrite anything the user already loaded via reconnect
       setProjects(prev => prev.length ? prev : (data.projects || []))
       setPhases(prev => prev.length ? prev : (data.phases || []))
-      setTasks(prev => prev.length ? prev : (data.tasks || []))
+      setTasks(prev => prev.length ? prev : applyDemoLineage(data.tasks || [], data.phases || []))
       if (data.projects?.length) {
         setActiveProjectId(prev => prev ?? data.projects[0].id)
       }
