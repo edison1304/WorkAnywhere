@@ -723,7 +723,7 @@ function FileTree({ rootPath, onOpenFile }: { rootPath: string; onOpenFile?: (pa
     if (result.success && result.entries) {
       setEntries(prev => ({
         ...prev,
-        [dirPath]: result.entries!.filter(e => !e.name.startsWith('.')),
+        [dirPath]: result.entries!.filter(e => e.name !== '.' && e.name !== '..'),
       }))
     }
   }, [entries, loading])
@@ -736,7 +736,7 @@ function FileTree({ rootPath, onOpenFile }: { rootPath: string; onOpenFile?: (pa
     if (result.success && result.entries) {
       setEntries(prev => ({
         ...prev,
-        [dirPath]: result.entries!.filter(e => !e.name.startsWith('.')),
+        [dirPath]: result.entries!.filter(e => e.name !== '.' && e.name !== '..'),
       }))
     }
   }, [])
