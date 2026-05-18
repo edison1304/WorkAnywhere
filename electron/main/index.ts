@@ -109,13 +109,17 @@ function createWindow(): void {
         const b64 = Buffer.from(json, 'utf-8').toString('base64')
         const remotePath = '~/.workanywhere/data.json'
         const tmpPath = '~/.workanywhere/.data.json.tmp'
-        await conn.execChannel(`mkdir -p ~/.workanywhere && rm -f ${tmpPath}`)
+        // Use exec() (PersistentShell) instead of execChannel() —
+        // the shell is already open so it doesn't need a new channel.
+        // execChannel would fail with Channel open failure if agents
+        // are holding all available channels.
+        await conn.exec(`mkdir -p ~/.workanywhere && rm -f ${tmpPath}`)
         const CHUNK = 60000
         for (let i = 0; i < b64.length; i += CHUNK) {
           const chunk = b64.slice(i, i + CHUNK)
-          await conn.execChannel(`printf '%s' '${chunk}' >> ${tmpPath}`)
+          await conn.exec(`printf '%s' '${chunk}' >> ${tmpPath}`)
         }
-        await conn.execChannel(`base64 -d ${tmpPath} > ${remotePath} && rm -f ${tmpPath}`)
+        await conn.exec(`base64 -d ${tmpPath} > ${remotePath} && rm -f ${tmpPath}`)
         console.log(`[close] Flushed ${b64.length} chars to server`)
       } catch (err) {
         console.error('[close] Flush failed:', err)
@@ -185,19 +189,17 @@ app.on('before-quit', async (event) => {
     const data = dataStore.getAll()
     const json = JSON.stringify(data)
     const b64 = Buffer.from(json, 'utf-8').toString('base64')
-    // Use execChannel (dedicated SSH channel) to avoid PersistentShell
-    // which may already be dead during shutdown.
+    // Use exec() (PersistentShell) — already open, no new channel needed.
     // Chunk the base64 to avoid ARG_MAX shell limits (~128KB-2MB).
-    // Large task logs can easily push the payload beyond that.
     const remotePath = '~/.workanywhere/data.json'
     const tmpPath = '~/.workanywhere/.data.json.tmp'
-    await conn.execChannel(`mkdir -p ~/.workanywhere && rm -f ${tmpPath}`)
+    await conn.exec(`mkdir -p ~/.workanywhere && rm -f ${tmpPath}`)
     const CHUNK = 60000
     for (let i = 0; i < b64.length; i += CHUNK) {
       const chunk = b64.slice(i, i + CHUNK)
-      await conn.execChannel(`printf '%s' '${chunk}' >> ${tmpPath}`)
+      await conn.exec(`printf '%s' '${chunk}' >> ${tmpPath}`)
     }
-    await conn.execChannel(`base64 -d ${tmpPath} > ${remotePath} && rm -f ${tmpPath}`)
+    await conn.exec(`base64 -d ${tmpPath} > ${remotePath} && rm -f ${tmpPath}`)
     console.log(`[before-quit] Flushed ${b64.length} chars to server`)
   } catch (err) {
     console.error('[before-quit] Flush failed:', err)
