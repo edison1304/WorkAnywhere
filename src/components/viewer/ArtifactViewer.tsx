@@ -4,6 +4,7 @@ import { CodeViewer } from './CodeViewer'
 import { MarkdownViewer } from './MarkdownViewer'
 import { ImageViewer } from './ImageViewer'
 import { PdfViewer } from './PdfViewer'
+import { HtmlViewer } from './HtmlViewer'
 import styles from './ArtifactViewer.module.css'
 
 interface Props {
@@ -81,6 +82,10 @@ export function ArtifactViewer({ artifact, workspacePath }: Props) {
 
   if (['md', 'markdown'].includes(ext) && encoding === 'utf8') {
     return <MarkdownViewer content={content} />
+  }
+
+  if (['html', 'htm'].includes(ext) && encoding === 'utf8') {
+    return <HtmlViewer content={content} fileName={fileName} />
   }
 
   // Everything else as code/text
