@@ -1632,11 +1632,12 @@ ipcMain.handle('descriptor:import', async (_event, descriptor: import('../../../
 })
 
 // ─── Remote file read ───
-ipcMain.handle('ssh:read-file', async (_event, filePath: string) => {
+ipcMain.handle('ssh:read-file', async (_event, rawPath: string) => {
   const conn = getAnyConn()
   if (!conn) return { success: false, error: 'Not connected' }
   try {
-    const ext = filePath.split('.').pop()?.toLowerCase() || ''
+    const filePath = rawPath.trim()
+    const ext = filePath.split('.').pop()?.toLowerCase().trim() || ''
     const binaryExts = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg', 'pdf', 'ico']
     const isBinary = binaryExts.includes(ext)
 
