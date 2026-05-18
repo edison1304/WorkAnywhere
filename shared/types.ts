@@ -8,6 +8,8 @@ export interface Project {
   summary?: ProjectSummary
   /** Top-level plan — vision + milestones. Optional. */
   plan?: Plan
+  /** Optional emblem image for multi-project disambiguation in TreeSidebar. */
+  iconPath?: string
   createdAt: string
   updatedAt: string
 }
@@ -122,6 +124,11 @@ export interface Task {
 
   /** Compacted session — produced when user marks task complete. Drives Timeline. */
   compacted?: CompactedSession
+
+  /** Lineage — id of the task this was forked from. UI shows ↳ chip + hover spotlight. */
+  forkedFromId?: string
+  /** Ids of tasks this task depends on. UI shows "⇠ 막힘" chip when blockers are not done. */
+  dependsOn?: string[]
 
   createdAt: string
   updatedAt: string
@@ -387,7 +394,7 @@ export interface IpcApi {
   sshHome(): Promise<{ success: boolean; home?: string; error?: string }>
 
   // Summarize (Claude CLI)
-  taskSummarize(taskId: string): Promise<{ success: boolean; summary?: TaskSummary; error?: string }>
+  taskSummarize(taskId: string): Promise<{ success: boolean; summary?: TaskSummary; compacted?: CompactedSession; error?: string }>
   phaseSummarize(phaseId: string): Promise<{ success: boolean; summary?: PhaseSummary; error?: string }>
   projectSummarize(projectId: string): Promise<{ success: boolean; summary?: ProjectSummary; error?: string }>
 

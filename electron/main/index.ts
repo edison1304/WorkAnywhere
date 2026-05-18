@@ -895,10 +895,9 @@ Rules:
     // Persist summary + compacted + update phase context
     dataStore.taskUpdate(taskId, { summary, compacted: mergedCompacted })
     broadcastToAll('task:status', { taskId, status: task.status })
-    broadcastToAll('task:compact', { taskId, compacted: mergedCompacted })
     writePhaseContext(taskId).catch(() => {})
 
-    return { success: true, summary }
+    return { success: true, summary, compacted: mergedCompacted }
   } catch (err) {
     return { success: false, error: String(err) }
   }

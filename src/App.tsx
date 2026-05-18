@@ -80,7 +80,11 @@ export default function App() {
     window.api.taskSummarize(taskId).then(result => {
       if (result.success && result.summary) {
         setTasks(prev => prev.map(t =>
-          t.id === taskId ? { ...t, summary: result.summary! } : t
+          t.id === taskId ? {
+            ...t,
+            summary: result.summary!,
+            ...(result.compacted ? { compacted: result.compacted } : {}),
+          } : t
         ))
         syncToServer()
       }
@@ -471,7 +475,11 @@ export default function App() {
     const result = await window.api.taskSummarize(taskId)
     if (result.success && result.summary) {
       setTasks(prev => prev.map(t =>
-        t.id === taskId ? { ...t, summary: result.summary } : t
+        t.id === taskId ? {
+          ...t,
+          summary: result.summary,
+          ...(result.compacted ? { compacted: result.compacted } : {}),
+        } : t
       ))
     } else {
       setTasks(prev => prev.map(t =>
