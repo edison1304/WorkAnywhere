@@ -69,6 +69,7 @@ interface Props {
   onStopAgent?: (taskId: string) => void
   onResumeAgent?: (taskId: string) => void
   onMarkCompleted?: (taskId: string) => void
+  onCompleteAndDismiss?: (taskId: string) => void
   onSummarize?: (taskId: string) => void
   onRestartFresh?: (taskId: string) => void
   onSendMessage?: (taskId: string, message: string) => void
@@ -103,7 +104,7 @@ interface Props {
 
 export function MainPanel({
   activeTask, activePhase, sshConnected, sshConnecting, sshError, workspacePath,
-  onRunAgent, onStopAgent, onResumeAgent, onMarkCompleted, onSummarize, onRestartFresh, onSendMessage, onSSHConnect, onLocalConnect, onRemoteConnect, onOpenSSH,
+  onRunAgent, onStopAgent, onResumeAgent, onMarkCompleted, onCompleteAndDismiss, onSummarize, onRestartFresh, onSendMessage, onSSHConnect, onLocalConnect, onRemoteConnect, onOpenSSH,
   onCreateProject, onCreatePhase, onCreateTask,
   hasProjects, hasPhases, activeProjectName,
   showCreateProject, onCancelCreateProject,
@@ -424,6 +425,22 @@ export function MainPanel({
               onClick={() => onRunAgent?.(activeTask.id)}
             >
               Re-run
+            </button>
+          )}
+          {!isDone && (
+            <button
+              className={styles.actionBtn}
+              data-variant="complete"
+              onClick={() => {
+                if ((isRunning || isWaiting) &&
+                    !window.confirm('실행 중인 에이전트를 중지하고 이 task 를 완료 처리합니다. 작업큐에서도 제거됩니다. 계속할까요?')) {
+                  return
+                }
+                onCompleteAndDismiss?.(activeTask.id)
+              }}
+              title="완료 처리하고 작업큐에서 제거"
+            >
+              완료
             </button>
           )}
         </div>

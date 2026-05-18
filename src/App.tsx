@@ -440,6 +440,25 @@ export default function App() {
     setCompactDialogTaskId(null)
   }, [compactDialogTaskId, completeTaskInternal])
 
+  // Quick "완료" — mark task completed and immediately remove from the work
+  // queue (TreeSidebar). Stops the agent if still running. acknowledgedAt set
+  // to epoch so the 2-hour grace window in isVisibleInMonitor is already past.
+  const handleCompleteAndDismiss = useCallback(async (taskId: string) => {
+    const task = tasks.find(t => t.id === taskId)
+    if (!task) return
+    if (task.status === 'running' || task.status === 'waiting') {
+      try { await window.api?.taskStop(taskId) } catch {}
+    }
+    const acknowledgedAt = new Date(0).toISOString()
+    setTasks(prev => prev.map(t =>
+      t.id === taskId
+        ? { ...t, status: 'completed' as const, acknowledgedAt, pinned: false }
+        : t
+    ))
+    window.api?.taskUpdate(taskId, { status: 'completed', acknowledgedAt, pinned: false })
+    syncToServer()
+  }, [tasks, syncToServer])
+
   const handleSummarize = useCallback(async (taskId: string) => {
     if (!window.api) return
     // Show loading state in summary
@@ -1026,6 +1045,7 @@ export default function App() {
         onStopAgent={handleStopAgent}
         onResumeAgent={handleResumeAgent}
         onMarkCompleted={handleMarkCompleted}
+        onCompleteAndDismiss={handleCompleteAndDismiss}
         onSummarize={handleSummarize}
         onRestartFresh={handleRestartFresh}
         onSendMessage={handleSendMessage}

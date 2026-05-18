@@ -43,6 +43,7 @@ interface Props {
   onStopAgent: (taskId: string) => void
   onResumeAgent?: (taskId: string) => void
   onMarkCompleted?: (taskId: string) => void
+  onCompleteAndDismiss?: (taskId: string) => void
   onSummarize?: (taskId: string) => void
   onRestartFresh?: (taskId: string) => void
   onSendMessage: (taskId: string, message: string) => void
@@ -78,7 +79,7 @@ export function CommandCenter({
   sshConnected, sshConnecting, sshError, claudeVersion, connectionStatus,
   onSidebarViewChange,
   onSelectProject, onSelectPhase, onSelectTask, onAcknowledgeTask, onPinTask, onDeleteTask, onDeletePhase, onDeleteProject, onForkTask, onMoveTask, onReorderTasks, onReorderPhases,
-  onDetach, onReattach, onRunAgent, onStopAgent, onResumeAgent, onMarkCompleted, onSummarize, onRestartFresh, onSendMessage, onSSHConnect, onLocalConnect, onRemoteConnect, onOpenSSH, onDisconnectSSH,
+  onDetach, onReattach, onRunAgent, onStopAgent, onResumeAgent, onMarkCompleted, onCompleteAndDismiss, onSummarize, onRestartFresh, onSendMessage, onSSHConnect, onLocalConnect, onRemoteConnect, onOpenSSH, onDisconnectSSH,
   onCreateProject, onRequestCreateProject, showCreateProject, onCancelCreateProject, onCreatePhase, onCreateTask, onImportProject, onOpenFile, openFilePath,
   onPhaseSummarize, onProjectSummarize,
   pendingPermission, onRespondPermission,
@@ -437,6 +438,7 @@ export function CommandCenter({
           onStopAgent={onStopAgent}
           onResumeAgent={onResumeAgent}
           onMarkCompleted={onMarkCompleted}
+          onCompleteAndDismiss={onCompleteAndDismiss}
           onSummarize={onSummarize}
           onRestartFresh={onRestartFresh}
           onSendMessage={onSendMessage}

@@ -238,6 +238,14 @@
 }
 .actionBtn[data-variant="primary"]:hover { background: var(--accent-hover); }
 .actionBtn[data-variant="danger"]:hover { border-color: var(--error); color: var(--error); }
+.actionBtn[data-variant="complete"] {
+  border-color: var(--success, #2ea043);
+  color: var(--success, #2ea043);
+}
+.actionBtn[data-variant="complete"]:hover {
+  background: var(--success, #2ea043);
+  color: white;
+}
 
 /* Summary panel */
 .summaryPanel {
