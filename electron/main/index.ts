@@ -1636,27 +1636,27 @@ ipcMain.handle('ssh:read-file', async (_event, filePath: string) => {
   const conn = getAnyConn()
   if (!conn) return { success: false, error: 'Not connected' }
   try {
-    // Check file exists and get size. Use test+wc instead of stat -c '%s'
-    // because stat's format string can conflict with PersistentShell's
-    // printf markers, and wc -c is more portable.
-    const fp = JSON.stringify(filePath)
-    const checkOut = await conn.exec(`test -f ${fp} && wc -c < ${fp} || echo '-1'`)
-    const fileSize = parseInt(checkOut.trim(), 10)
-    console.log(`[read-file] path=${filePath}, checkOut="${checkOut.trim()}", fileSize=${fileSize}`)
-    if (fileSize < 0 || isNaN(fileSize)) return { success: false, error: `File not found: ${filePath}` }
-
     const ext = filePath.split('.').pop()?.toLowerCase() || ''
     const binaryExts = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg', 'pdf', 'ico']
     const isBinary = binaryExts.includes(ext)
 
+    // Shell-safe quoting: use $'...' with escaped single quotes to avoid
+    // issues with double-quote interpretation in nested shells.
+    const escaped = filePath.replace(/'/g, "'\\''")
+    const sq = `'${escaped}'`
+
     if (isBinary) {
-      if (fileSize > 5 * 1024 * 1024) return { success: false, error: 'File too large (>5MB)' }
-      const content = await conn.exec(`base64 ${JSON.stringify(filePath)}`)
-      return { success: true, content: content.replace(/\n/g, ''), encoding: 'base64' as const, size: fileSize }
+      const content = await conn.exec(`base64 ${sq}`)
+      if (!content.trim()) return { success: false, error: `File not found or empty: ${filePath}` }
+      return { success: true, content: content.replace(/\n/g, ''), encoding: 'base64' as const, size: content.length }
     } else {
-      if (fileSize > 2 * 1024 * 1024) return { success: false, error: 'File too large (>2MB)' }
-      const content = await conn.exec(`cat ${JSON.stringify(filePath)}`)
-      return { success: true, content, encoding: 'utf8' as const, size: fileSize }
+      // Use cat with an exit-code check — cat returns 1 for missing files
+      const result = await conn.exec(`cat ${sq} && echo '<<<WA_FILE_OK>>>' || echo '<<<WA_FILE_ERR>>>'`)
+      if (result.includes('<<<WA_FILE_ERR>>>') || (!result.includes('<<<WA_FILE_OK>>>') && !result.trim())) {
+        return { success: false, error: `File not found: ${filePath}` }
+      }
+      const content = result.replace('<<<WA_FILE_OK>>>', '').trimEnd()
+      return { success: true, content, encoding: 'utf8' as const, size: Buffer.byteLength(content, 'utf8') }
     }
   } catch (err) {
     return { success: false, error: String(err) }
