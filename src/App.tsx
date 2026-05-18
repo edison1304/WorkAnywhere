@@ -726,15 +726,10 @@ export default function App() {
       }
       // Auto-summarize at every turn boundary so EventCard + Tree stay
       // current without manual button presses (throttled inside).
+      // Summary now also produces compacted timeline data (merged),
+      // so a separate auto-compact call is no longer needed.
       if (status === 'waiting' || status === 'review' || status === 'completed') {
         scheduleAutoSummary(taskId, 5_000)
-      }
-      // Auto-compact at every turn boundary so the EventTree accumulates
-      // events as the task progresses. Handler merges (dedup by title) so
-      // re-running is additive, not replace.
-      if (status === 'waiting' || status === 'review' || status === 'completed') {
-        // Slight delay so the turn's final logs land in DataStore first.
-        setTimeout(() => triggerAutoCompact(taskId), 3_000)
       }
     })
 

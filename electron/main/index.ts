@@ -760,14 +760,15 @@ ipcMain.handle('task:summarize', async (_event, taskId: string) => {
       ? `\nSuccess criteria (the task is "done" only when this holds): ${task.intentLock.successCriteria}`
       : ''
 
-    const prompt = `You are a task progress analyzer. You produce THREE views of the same session in one JSON object:
-  (A) a checklist-shaped progress view (currentStep/completedSteps/nextSteps/issues/progress)
-  (B) an event-shaped judgment trace (problem/cause/response/reason/residualRisk/humanNeeded/nextPrompt)
-  (C) a SEMANTIC alignment score (alignment/alignmentScore/alignmentReason) — does what THIS session actually did still match the task's purpose + locked scope?
+    const prompt = `You are a task progress analyzer. Produce ONE JSON object combining:
+  (A) Progress view: currentStep/completedSteps/nextSteps/issues/progress
+  (B) Judgment trace: problem/cause/response/reason/residualRisk/humanNeeded/nextPrompt
+  (C) Alignment score: alignment/alignmentScore/alignmentReason
+  (D) Timeline events: headline + 3-bucket history (completed/detours/errors)
 
-(B) is for a UI that helps the user re-take the steering wheel after stepping away. It must capture WHY decisions were made, not just WHAT happened. If the logs don't show a real problem-and-response arc this session, leave (B) fields as null — do NOT invent one.
-
-(C) is the "drift detection" the user sees as a small badge. It is NOT about token usage — it is purely about whether the agent's actual work this session is still on-target relative to the locked-in purpose and out-of-scope items above. Distinct from token/context drift.
+(B) captures WHY decisions were made. If no problem-and-response arc, leave fields null.
+(C) is drift detection vs the task's purpose. Not about tokens — about scope.
+(D) is a curated history for the Timeline view. Group related steps into arcs.
 
 Task name: ${task.name}
 Task prompt: ${task.prompt}
@@ -785,31 +786,32 @@ Respond with ONLY a JSON object (no markdown, no backticks). Use the same langua
   "issues": ["any errors or problems found"],
   "progress": "one-line overall progress summary",
 
-  "problem": "the most salient problem the agent hit or worked around this session, 1 sentence — or null if none",
-  "cause": "the agent's stated/implied diagnosis of WHY the problem occurred — or null",
-  "response": "what the agent actually did about it — or null",
-  "reason": "WHY the agent chose that response over alternatives (the judgment, not the action) — or null",
-  "residualRisk": "what's still unresolved, deferred, or only patched (e.g. workaround vs root fix) — or null",
-  "humanNeeded": "where a single human input would unblock or massively speed up the agent (e.g. 'API response example', 'token storage policy') — or null if agent is fully unblocked",
-  "nextPrompt": "a concrete, ready-to-paste prompt the user can give the agent next, respecting the out-of-scope list and success criteria above — or null if no clear next step",
+  "problem": "most salient problem this session — or null",
+  "cause": "WHY the problem occurred — or null",
+  "response": "what the agent did about it — or null",
+  "reason": "WHY that response over alternatives — or null",
+  "residualRisk": "what's unresolved or only patched — or null",
+  "humanNeeded": "where human input would unblock the agent — or null",
+  "nextPrompt": "ready-to-paste prompt for the user, respecting out-of-scope — or null",
 
   "alignment": "aligned" | "mild-drift" | "severe-drift" | null,
-  "alignmentScore": 0-100 integer (100 = perfectly on the original purpose, 0 = totally off-track) — or null if no purpose/IntentLock context to judge against,
-  "alignmentReason": "one short sentence (Korean if Korean logs) explaining the alignment judgment, e.g. '목표는 로그인 API 검증이었으나 현재 OAuth 확장으로 확장 중' — or null"
+  "alignmentScore": 0-100 | null,
+  "alignmentReason": "one sentence explaining drift judgment — or null",
+
+  "headline": "one line summarizing this session",
+  "completed": [{"title": "verb-led summary", "detail": "optional how/what"}],
+  "detours": [{"title": "the deviation", "reason": "WHY"}],
+  "errors": [{"title": "the problem", "cause": "root cause", "fix": "how fixed, or 미해결"}]
 }
 
-Rules for (B):
+Rules:
 - Use null (not empty string) when a field doesn't apply.
-- nextPrompt must NOT propose anything that touches the out-of-scope items.
-- residualRisk must explicitly call out workaround-vs-root-fix when applicable.
-- Don't restate the original task prompt. Speak about THIS session's events.
-
-Rules for (C):
-- If purpose is missing AND IntentLock is empty, set alignment/alignmentScore/alignmentReason to null — there's nothing to align against.
-- "aligned" (score ≥ 80): session work is squarely inside the stated purpose + respects out-of-scope.
-- "mild-drift" (score 50-79): adjacent expansion — work is related but starting to widen scope or graze an out-of-scope item.
-- "severe-drift" (score < 50): clearly off — touching out-of-scope items, or pursuing a different goal than the stated purpose.
-- alignmentReason must be specific (cite WHAT shifted), not generic ("작업이 잘 진행되고 있음" is forbidden).`
+- nextPrompt must NOT touch out-of-scope items.
+- residualRisk: call out workaround-vs-root-fix.
+- alignment: ≥80 aligned, 50-79 mild-drift, <50 severe-drift. null if no purpose.
+- alignmentReason must be specific, not generic.
+- Timeline buckets can be empty arrays. Don't invent facts.
+- Group related steps into arcs. Focus on substance, not lifecycle.`
 
     console.log(`[Summarize] calling runClaudeOnProject, prompt length=${prompt.length}`)
     const rawOutput = await runClaudeOnProject(task.projectId, prompt)
@@ -864,9 +866,36 @@ Rules for (C):
       updatedAt: new Date().toISOString(),
     }
 
-    // Persist summary + update phase context
-    dataStore.taskUpdate(taskId, { summary })
+    // Build compacted session from the same response (D section)
+    const mkId = (prefix: string, i: number) => `${taskId}-${prefix}-${Date.now()}-${i}`
+    const compacted: import('../../../shared/types').CompactedSession = {
+      compactedAt: new Date().toISOString(),
+      headline: optStr(parsed.headline) || '',
+      completed: Array.isArray(parsed.completed) ? parsed.completed.map((it: any, i: number) => ({
+        id: mkId('done', i),
+        title: String(it.title || ''),
+        detail: it.detail ? String(it.detail) : undefined,
+      })) : [],
+      detours: Array.isArray(parsed.detours) ? parsed.detours.map((it: any, i: number) => ({
+        id: mkId('det', i),
+        title: String(it.title || ''),
+        reason: String(it.reason || '이유 명시되지 않음'),
+      })) : [],
+      errors: Array.isArray(parsed.errors) ? parsed.errors.map((it: any, i: number) => ({
+        id: mkId('err', i),
+        title: String(it.title || ''),
+        cause: String(it.cause || '원인 명시되지 않음'),
+        fix: String(it.fix || '미해결'),
+      })) : [],
+    }
+
+    // Merge with existing compacted data (accumulate across calls)
+    const mergedCompacted = mergeCompactedSession(task.compacted, compacted)
+
+    // Persist summary + compacted + update phase context
+    dataStore.taskUpdate(taskId, { summary, compacted: mergedCompacted })
     broadcastToAll('task:status', { taskId, status: task.status })
+    broadcastToAll('task:compact', { taskId, compacted: mergedCompacted })
     writePhaseContext(taskId).catch(() => {})
 
     return { success: true, summary }
