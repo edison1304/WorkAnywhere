@@ -818,10 +818,14 @@ ipcMain.handle('task:summarize', async (_event, taskId: string) => {
   (B) Judgment trace: problem/cause/response/reason/residualRisk/humanNeeded/nextPrompt
   (C) Alignment score: alignment/alignmentScore/alignmentReason
   (D) Timeline events: headline + 3-bucket history (completed/detours/errors)
+  (E) Scope split detection: did the user pile unrelated work into this one task?
 
 (B) captures WHY decisions were made. If no problem-and-response arc, leave fields null.
 (C) is drift detection vs the task's purpose. Not about tokens — about scope.
 (D) is a curated history for the Timeline view. Group related steps into arcs.
+(E) detects when the user gave the agent multiple UNRELATED jobs in one session.
+    Only suggest splits for genuinely distinct work streams — NOT for sub-steps of the same goal.
+    Example: "Fix login bug" + "Add dark mode" = split. "Fix login bug" + "Write login tests" = no split.
 
 Task name: ${task.name}
 Task prompt: ${task.prompt}
@@ -854,7 +858,9 @@ Respond with ONLY a JSON object (no markdown, no backticks). Use the same langua
   "headline": "one line summarizing this session",
   "completed": [{"title": "verb-led summary", "detail": "optional how/what"}],
   "detours": [{"title": "the deviation", "reason": "WHY"}],
-  "errors": [{"title": "the problem", "cause": "root cause", "fix": "how fixed, or 미해결"}]
+  "errors": [{"title": "the problem", "cause": "root cause", "fix": "how fixed, or 미해결"}],
+
+  "splits": [{"name": "short task name", "purpose": "what this split is about", "prompt": "concrete prompt for the new task"}] | null
 }
 
 Rules:
@@ -864,7 +870,8 @@ Rules:
 - alignment: ≥80 aligned, 50-79 mild-drift, <50 severe-drift. null if no purpose.
 - alignmentReason must be specific, not generic.
 - Timeline buckets can be empty arrays. Don't invent facts.
-- Group related steps into arcs. Focus on substance, not lifecycle.`
+- Group related steps into arcs. Focus on substance, not lifecycle.
+- splits: null if all work fits the original task purpose. Only populate when 2+ genuinely distinct work streams are detected. Each split should be a standalone task.`
 
     console.log(`[Summarize] calling runClaudeOnProject, prompt length=${prompt.length}`)
     const rawOutput = await runClaudeOnProject(task.projectId, prompt)
@@ -950,7 +957,31 @@ Rules:
     broadcastToAll('task:status', { taskId, status: task.status })
     writePhaseContext(taskId).catch(() => {})
 
-    return { success: true, summary, compacted: mergedCompacted }
+    // (E) Auto-split: if the analyzer detected multiple unrelated work
+    // streams in this task, create new tasks for each split.
+    const createdSplits: string[] = []
+    if (Array.isArray(parsed.splits) && parsed.splits.length > 0) {
+      console.log(`[Summarize] Detected ${parsed.splits.length} scope splits`)
+      for (const split of parsed.splits) {
+        if (!split.name || !split.prompt) continue
+        const newTask = dataStore.taskCreate(
+          task.phaseId,
+          String(split.name),
+          String(split.purpose || ''),
+          String(split.prompt),
+        )
+        // Link back to the original task
+        dataStore.taskUpdate(newTask.id, { forkedFromId: taskId })
+        createdSplits.push(newTask.id)
+        console.log(`[Summarize] Created split task: ${newTask.name} (${newTask.id})`)
+      }
+      if (createdSplits.length > 0) {
+        // Notify renderer to refresh task list
+        broadcastToAll('sync:refresh', { entityType: 'task', entityId: taskId, action: 'split' })
+      }
+    }
+
+    return { success: true, summary, compacted: mergedCompacted, splits: createdSplits }
   } catch (err) {
     return { success: false, error: String(err) }
   }
