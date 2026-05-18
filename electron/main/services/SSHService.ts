@@ -159,17 +159,18 @@ export class SSHService extends EventEmitter {
   private async acquireChannel(): Promise<void> {
     if (this.activeChannels < this.MAX_CHANNELS) {
       this.activeChannels++
+      console.log(`[SSH] Channel acquired (${this.activeChannels}/${this.MAX_CHANNELS})`)
       return
     }
-    // Wait for a slot to free up
     console.log(`[SSH] Channel limit reached (${this.activeChannels}/${this.MAX_CHANNELS}), waiting...`)
     await new Promise<void>(resolve => this.channelWaiters.push(resolve))
     this.activeChannels++
+    console.log(`[SSH] Channel acquired after wait (${this.activeChannels}/${this.MAX_CHANNELS})`)
   }
 
   private releaseChannel(): void {
     this.activeChannels = Math.max(0, this.activeChannels - 1)
-    // Wake up next waiter if any
+    console.log(`[SSH] Channel released (${this.activeChannels}/${this.MAX_CHANNELS})`)
     const next = this.channelWaiters.shift()
     if (next) next()
   }
