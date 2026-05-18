@@ -1,19 +1,30 @@
-import { useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import type { Project, Phase, Task } from '../../../shared/types'
-import { EventTreePanel } from '../layout/EventTreePanel'
 import { StatusDot } from '../job/StatusDot'
 import styles from './ProjectEventTree.module.css'
 
 /**
- * ProjectEventTree — project-wide swimlane view of task event arcs.
+ * ProjectEventTree — 4-mode 관제 뷰.
  *
- * y-axis = task (grouped by phase), x-axis = time order.
- * Each lane reuses EventTreePanel (variant="detailed") so the per-task
- * horizontal card flow stays identical to the in-task Tree tab.
+ *   Attention (default) — 어디서 멈춰 있고 누가 손대야 하나
+ *   Pulse              — 지금 얼마나 살아있고 어디가 시끄러운가
+ *   Timeline           — 병렬 task들이 시간상 어떻게 겹쳤나
+ *   Flow               — task들이 어떻게 분기/의존/이어지나
  *
- * v1: lanes scroll independently (no shared time axis). Cards order
- * left→right by timestamp, leftmost = oldest, rightmost = current/live.
+ * Layer 1 = mode shell + Attention 베이스 (카드 그리드 + phase collapse).
+ * 다른 모드는 placeholder. (L2~L5에서 채움)
  */
+
+type TreeMode = 'attention' | 'pulse' | 'timeline' | 'flow'
+const MODE_KEY = 'wa.tree.mode'
+const DEFAULT_MODE: TreeMode = 'attention'
+
+const MODES: { id: TreeMode; label: string; shortcut: string }[] = [
+  { id: 'attention', label: 'Attention', shortcut: 'B' },
+  { id: 'pulse',     label: 'Pulse',     shortcut: 'P' },
+  { id: 'timeline',  label: 'Timeline',  shortcut: 'T' },
+  { id: 'flow',      label: 'Flow',      shortcut: 'F' },
+]
 
 interface Props {
   project: Project | null
@@ -23,13 +34,23 @@ interface Props {
 }
 
 export function ProjectEventTree({ project, phases, tasks, onSelectTask }: Props) {
+  const [mode, setMode] = useState<TreeMode>(() => {
+    if (typeof window === 'undefined') return DEFAULT_MODE
+    const v = window.localStorage?.getItem(MODE_KEY)
+    if (v === 'attention' || v === 'pulse' || v === 'timeline' || v === 'flow') return v
+    return DEFAULT_MODE
+  })
+
+  useEffect(() => {
+    try { window.localStorage?.setItem(MODE_KEY, mode) } catch { /* ignore */ }
+  }, [mode])
+
   const sections = useMemo<Array<{ phase: Phase | null; tasks: Task[] }>>(() => {
     if (!project) return []
     const projectTasks = tasks.filter(t => t.projectId === project.id)
     const projectPhases = phases
       .filter(p => p.projectId === project.id)
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-
     const grouped: Array<{ phase: Phase | null; tasks: Task[] }> = projectPhases
       .map(phase => ({
         phase: phase as Phase | null,
@@ -38,13 +59,8 @@ export function ProjectEventTree({ project, phases, tasks, onSelectTask }: Props
           .sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
       }))
       .filter(g => g.tasks.length > 0)
-
-    const orphanTasks = projectTasks.filter(
-      t => !projectPhases.some(p => p.id === t.phaseId),
-    )
-    if (orphanTasks.length > 0) {
-      grouped.push({ phase: null, tasks: orphanTasks })
-    }
+    const orphans = projectTasks.filter(t => !projectPhases.some(p => p.id === t.phaseId))
+    if (orphans.length) grouped.push({ phase: null, tasks: orphans })
     return grouped
   }, [project, phases, tasks])
 
@@ -59,83 +75,219 @@ export function ProjectEventTree({ project, phases, tasks, onSelectTask }: Props
 
   if (sections.length === 0) {
     return (
-      <div className={styles.empty}>
-        <div className={styles.emptyTitle}>{project.name} — task 없음</div>
-        <div className={styles.emptyHint}>task를 만들면 여기 swimlane으로 표시됩니다.</div>
+      <div className={styles.page}>
+        <Header project={project} mode={mode} onChangeMode={setMode} />
+        <div className={styles.empty}>
+          <div className={styles.emptyTitle}>{project.name} — task 없음</div>
+          <div className={styles.emptyHint}>좌측 사이드바에서 task를 추가하세요.</div>
+        </div>
       </div>
     )
   }
 
   return (
     <div className={styles.page}>
-      <div className={styles.header}>
-        <div className={styles.title}>Project Tree</div>
-        <div className={styles.subtitle}>
-          <span className={styles.scopeName}>{project.name}</span>
-          <span className={styles.scopeMeta}>
-            · 가로축 = 시간 흐름 (왼쪽이 과거, 오른쪽이 현재)
-          </span>
-        </div>
-      </div>
-
+      <Header project={project} mode={mode} onChangeMode={setMode} />
       <div className={styles.body}>
-        {sections.map((section, idx) => (
-          <section
-            key={section.phase?.id ?? `orphan-${idx}`}
-            className={styles.phaseSection}
-          >
-            <div className={styles.phaseHeader}>
-              <span className={styles.phaseName}>
-                {section.phase?.name ?? '(Phase 없음)'}
-              </span>
-              <span className={styles.phaseCount}>
-                {section.tasks.length}개 task
-              </span>
-            </div>
-
-            <div className={styles.lanes}>
-              {section.tasks.map(task => (
-                <Swimlane
-                  key={task.id}
-                  task={task}
-                  onSelectTask={onSelectTask}
-                />
-              ))}
-            </div>
-          </section>
-        ))}
+        {mode === 'attention' && (
+          <AttentionBoard sections={sections} onSelectTask={onSelectTask} />
+        )}
+        {mode === 'pulse'    && <ModePlaceholder label="Pulse"    hint="Layer 4 — Activity heatmap, 시간 bucket 가공" />}
+        {mode === 'timeline' && <ModePlaceholder label="Timeline" hint="Layer 3 — 공유 horizontal time axis (Gantt-ish)" />}
+        {mode === 'flow'     && <ModePlaceholder label="Flow"     hint="Layer 5 — forkedFromId + 시퀀스 노드-엣지" />}
       </div>
     </div>
   )
 }
 
-function Swimlane({
+// ─────────────────────────────────────────────────────────────────────────────
+
+function Header({
+  project,
+  mode,
+  onChangeMode,
+}: {
+  project: Project
+  mode: TreeMode
+  onChangeMode: (m: TreeMode) => void
+}) {
+  return (
+    <header className={styles.header}>
+      <div className={styles.titleRow}>
+        <div>
+          <div className={styles.title}>Project Tree</div>
+          <div className={styles.subtitle}>
+            <span className={styles.scopeName}>{project.name}</span>
+          </div>
+        </div>
+        <nav className={styles.modeTabs} aria-label="View mode">
+          {MODES.map(m => (
+            <button
+              key={m.id}
+              type="button"
+              className={`${styles.modeTab} ${m.id === mode ? styles.modeTabActive : ''}`}
+              onClick={() => onChangeMode(m.id)}
+              title={`${m.label} mode`}
+            >
+              {m.label}
+            </button>
+          ))}
+        </nav>
+      </div>
+    </header>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+function AttentionBoard({
+  sections,
+  onSelectTask,
+}: {
+  sections: Array<{ phase: Phase | null; tasks: Task[] }>
+  onSelectTask: (id: string) => void
+}) {
+  return (
+    <div className={styles.board}>
+      {sections.map((sec, idx) => (
+        <PhaseSection
+          key={sec.phase?.id ?? `orphan-${idx}`}
+          phase={sec.phase}
+          tasks={sec.tasks}
+          onSelectTask={onSelectTask}
+        />
+      ))}
+    </div>
+  )
+}
+
+function PhaseSection({
+  phase,
+  tasks,
+  onSelectTask,
+}: {
+  phase: Phase | null
+  tasks: Task[]
+  onSelectTask: (id: string) => void
+}) {
+  const attnCount = tasks.filter(isAttentionTask).length
+  const completedCount = tasks.filter(t => t.status === 'completed').length
+  const total = tasks.length
+  const completedPct = total > 0 ? Math.round((completedCount / total) * 100) : 0
+  const [collapsed, setCollapsed] = useState(attnCount === 0)
+
+  return (
+    <section className={styles.phaseSection} data-collapsed={collapsed ? 'true' : 'false'}>
+      <button
+        type="button"
+        className={styles.phaseHeader}
+        onClick={() => setCollapsed(c => !c)}
+        aria-expanded={!collapsed}
+      >
+        <span className={styles.phaseCaret} aria-hidden="true">
+          {collapsed ? '▸' : '▾'}
+        </span>
+        <span className={styles.phaseName}>{phase?.name ?? '(Phase 없음)'}</span>
+        <span className={styles.phaseCount}>{total} tasks</span>
+        <span className={styles.phaseSpacer} />
+        {attnCount > 0 && (
+          <span className={styles.phaseAttnBadge}>
+            ⌛ {attnCount}
+          </span>
+        )}
+        <span className={styles.phaseBar} aria-label={`${completedCount} of ${total} done`}>
+          <span className={styles.phaseBarTrack}>
+            <span className={styles.phaseBarFill} style={{ width: `${completedPct}%` }} />
+          </span>
+          {completedCount}/{total} done
+        </span>
+      </button>
+
+      {!collapsed && (
+        <div className={styles.cardGrid}>
+          {tasks.map(task => (
+            <TaskCard key={task.id} task={task} onSelectTask={onSelectTask} />
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+function TaskCard({
   task,
   onSelectTask,
 }: {
   task: Task
   onSelectTask: (id: string) => void
 }) {
+  const attn = isAttentionTask(task)
+  const hasFork = Boolean(task.forkedFromId)
+  const glyph = task.status === 'review' ? '✋' : task.status === 'waiting' ? '⌛' : ''
+  const summaryLine = task.summary?.currentStep ?? task.summary?.progress ?? ''
+  const dots = useMemo(() => compactedDots(task), [task.compacted])
+
   return (
-    <div className={styles.lane} data-status={task.status}>
-      <button
-        className={styles.laneHeader}
-        onClick={() => onSelectTask(task.id)}
-        title={`Open ${task.name}`}
-      >
-        <StatusDot status={task.status} />
-        <span className={styles.laneName}>{task.name}</span>
-        <span className={styles.laneStatus}>{task.status}</span>
-      </button>
-      <div className={styles.laneFlow}>
-        <EventTreePanel
-          task={task}
-          variant="detailed"
-          hideHeader
-          hideLegend
-          compactEmpty
-        />
+    <button
+      type="button"
+      className={`${styles.card} ${attn ? styles.cardAttn : ''} ${!attn && task.status === 'completed' ? styles.cardMuted : ''}`}
+      data-status={task.status}
+      onClick={() => onSelectTask(task.id)}
+      title={task.name}
+    >
+      <div className={styles.cardLine1}>
+        {!attn && <StatusDot status={task.status} size={7} />}
+        <span className={styles.cardName}>{task.name}</span>
+        {hasFork && <span className={styles.cardForkChip} title="forked task">↳</span>}
+        {attn && <span className={styles.cardGlyph}>{glyph}</span>}
       </div>
+
+      {summaryLine && <div className={styles.cardLine2}>{summaryLine}</div>}
+
+      {dots.length > 0 && (
+        <div className={styles.cardLine3}>
+          {dots.map((d, i) => (
+            <span
+              key={i}
+              className={`${styles.cardDot} ${i === dots.length - 1 ? styles.cardDotLast : ''}`}
+              data-kind={d.kind}
+            />
+          ))}
+          <span className={styles.cardDotLabel}>{dots.length} 이벤트</span>
+        </div>
+      )}
+    </button>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ModePlaceholder({ label, hint }: { label: string; hint: string }) {
+  return (
+    <div className={styles.placeholder}>
+      <div className={styles.placeholderTitle}>{label} mode</div>
+      <div className={styles.placeholderHint}>{hint}</div>
     </div>
   )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// helpers
+
+function isAttentionTask(t: Task): boolean {
+  return t.status === 'waiting' || t.status === 'review'
+}
+
+type DotKind = 'completed' | 'detour' | 'error'
+
+function compactedDots(task: Task): Array<{ kind: DotKind; ts?: string }> {
+  if (!task.compacted) return []
+  const events: Array<{ kind: DotKind; ts?: string }> = [
+    ...task.compacted.completed.map(c => ({ kind: 'completed' as const, ts: c.timestamp })),
+    ...task.compacted.detours  .map(d => ({ kind: 'detour'    as const, ts: d.timestamp })),
+    ...task.compacted.errors   .map(e => ({ kind: 'error'     as const, ts: e.timestamp })),
+  ].sort((a, b) => (a.ts ?? '').localeCompare(b.ts ?? ''))
+  return events.slice(-6)
 }

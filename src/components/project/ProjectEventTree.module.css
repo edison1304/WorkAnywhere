@@ -1,9 +1,7 @@
-/* ProjectEventTree — project-wide swimlane view.
+/* ProjectEventTree — 4-mode 관제 뷰.
  *
- * Page chrome (header / empty / scope) mirrors TimelineView so the two
- * sibling pages (Timeline, Tree) feel coherent. The lane area is the
- * unique part: each task is a row, with sticky left header and a
- * horizontal-scrolling EventTreePanel-detailed flow on the right.
+ * Layer 1: mode shell + Attention 베이스 (카드 그리드 + phase collapse).
+ * 다른 모드는 placeholder. 색 강조(attention 펄스/외곽/글리프)는 Layer 2.
  */
 
 .page {
@@ -37,10 +35,16 @@
   color: var(--ink-tertiary);
 }
 
-/* ─── Header ─── */
+/* ─── Header (title + mode tabs) ─── */
 .header {
   padding: var(--space-lg) var(--space-xl) var(--space-md);
   border-bottom: 1px solid var(--hairline);
+}
+.titleRow {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-lg);
 }
 .title {
   font-family: var(--font-display);
@@ -60,9 +64,41 @@
   color: var(--ink);
   font-weight: 500;
 }
-.scopeMeta {
-  color: var(--ink-tertiary);
+
+/* Mode tabs */
+.modeTabs {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 3px;
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+}
+.modeTab {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px;
+  border-radius: 4px;
   font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-subtle);
+  transition: background 0.12s, color 0.12s;
+}
+.modeTab:hover {
+  background: var(--surface-2);
+  color: var(--ink-muted);
+}
+.modeTabActive {
+  background: var(--surface-3);
+  color: var(--ink);
+  box-shadow: inset 0 -2px 0 0 var(--primary);
+}
+.modeTabActive:hover {
+  background: var(--surface-3);
+  color: var(--ink);
 }
 
 /* ─── Body ─── */
@@ -70,6 +106,9 @@
   flex: 1;
   overflow-y: auto;
   padding: var(--space-md) var(--space-xl) var(--space-xl);
+}
+
+.board {
   display: flex;
   flex-direction: column;
   gap: var(--space-xl);
@@ -82,11 +121,21 @@
   gap: var(--space-sm);
 }
 .phaseHeader {
+  all: unset;
+  cursor: pointer;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--space-xs);
-  padding-bottom: var(--space-xxs);
+  padding: 0 0 var(--space-xxs);
   border-bottom: 1px solid var(--hairline);
+}
+.phaseHeader:hover { color: var(--ink); }
+.phaseCaret {
+  display: inline-flex;
+  width: 12px;
+  font-size: 10px;
+  color: var(--ink-tertiary);
+  font-variant-numeric: tabular-nums;
 }
 .phaseName {
   font-size: 11px;
@@ -100,94 +149,184 @@
   color: var(--ink-tertiary);
   font-variant-numeric: tabular-nums;
 }
-
-/* ─── Lanes ─── */
-.lanes {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
+.phaseSpacer { flex: 1; }
+.phaseAttnBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  background: rgba(216, 160, 80, 0.16);
+  color: var(--status-attention-strong);
+  font-size: 10.5px;
+  font-weight: 600;
+  border: 1px solid rgba(216, 160, 80, 0.3);
+  font-variant-numeric: tabular-nums;
 }
-
-.lane {
-  display: grid;
-  grid-template-columns: 200px 1fr;
-  gap: var(--space-sm);
-  align-items: stretch;
-  background: var(--surface-1);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-sm);
-  min-height: 64px;
+.phaseBar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  color: var(--ink-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.phaseBarTrack {
+  width: 48px;
+  height: 3px;
+  background: var(--surface-3);
+  border-radius: 2px;
   overflow: hidden;
 }
+.phaseBarFill {
+  display: block;
+  height: 100%;
+  background: var(--ink-subtle);
+  border-radius: 2px;
+  transition: width 0.2s ease;
+}
 
-/* Left edge accent — status color so a row of lanes reads at a glance */
-.lane[data-status="running"]   { border-left: 2px solid var(--primary); }
-.lane[data-status="waiting"],
-.lane[data-status="review"]    { border-left: 2px solid var(--warning); }
-.lane[data-status="completed"] { border-left: 2px solid var(--success); }
-.lane[data-status="failed"]    { border-left: 2px solid var(--error); }
+/* ─── Card grid ─── */
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-xs);
+}
 
-/* Lane header (sticky-feeling left column) */
-.laneHeader {
+.card {
   all: unset;
+  position: relative;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px 10px 14px;
   cursor: pointer;
+  overflow: hidden;
+  transition: background 0.12s, border-color 0.12s;
+  min-height: 60px;
+  box-sizing: border-box;
+}
+.card:hover {
+  background: var(--surface-3);
+}
+.card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--hairline);
+}
+.card[data-status='running']::before   { background: var(--primary); }
+.card[data-status='completed']::before { background: var(--success); opacity: 0.55; }
+.card[data-status='failed']::before    { background: var(--error); }
+
+/* Non-attention completed/failed: muted (Layer 1 핵심: 신호/소음 비) */
+.cardMuted {
+  opacity: 0.55;
+}
+.cardMuted .cardName  { color: var(--ink-subtle); }
+.cardMuted .cardLine2 { color: var(--ink-tertiary); }
+
+/* Attention (waiting / review) — Layer 1 에선 amber bar + glyph 정도만.
+ * 펄스 / 외곽 그라데이션 / amber border 강화는 Layer 2 에서. */
+.cardAttn::before {
+  background: var(--status-attention);
+  width: 4px;
+}
+.cardAttn {
+  border-color: rgba(216, 160, 80, 0.32);
+}
+
+.cardLine1 {
   display: flex;
   align-items: center;
-  gap: var(--space-xs);
-  padding: var(--space-sm) var(--space-sm);
-  border-right: 1px solid var(--hairline);
-  background: var(--surface-1);
+  gap: 7px;
+  margin-bottom: 5px;
   min-width: 0;
 }
-.laneHeader:hover {
-  background: var(--surface-2);
-}
-.laneName {
-  font-size: 13px;
+.cardName {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
   font-weight: 500;
   color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  flex: 1;
-  min-width: 0;
 }
-.laneStatus {
+.cardGlyph {
+  font-size: 12px;
+  color: var(--status-attention-strong);
+  flex-shrink: 0;
+}
+.cardForkChip {
   font-size: 10px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: var(--ink-tertiary);
-  font-variant-numeric: tabular-nums;
+  padding: 0 5px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
+  line-height: 14px;
+  flex-shrink: 0;
 }
-
-/* Right column = the per-task event flow.
- * EventTreePanel[data-variant="detailed"] sets `height: 100%` and its
- * own padding, so we just give it a constrained box to live in. The
- * inner list handles horizontal scroll on its own. */
-.laneFlow {
-  min-width: 0;
+.cardLine2 {
+  font-size: 11.5px;
+  color: var(--ink-muted);
   overflow: hidden;
-  display: flex;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.45;
 }
-.laneFlow > * {
-  flex: 1;
-  min-width: 0;
-}
-
-/* Tighten EventTreePanel's detailed padding for swimlane context — its
- * default 16/20/24 padding is sized for a full Tree tab. We target via
- * data attributes (not the hashed CSS-module class) so this still works
- * across the module boundary. */
-.laneFlow [data-variant="detailed"] {
-  padding: var(--space-xs) var(--space-sm);
-  background: transparent;
-  height: 100%;
-  overflow: visible;
-}
-.laneFlow [data-compact-empty="true"] {
-  padding: var(--space-xs) var(--space-sm);
-  border: none;
-  background: transparent;
+.cardLine3 {
   display: flex;
   align-items: center;
+  gap: 4px;
+  margin-top: 7px;
+}
+.cardDot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--ink-tertiary);
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+.cardDotLast {
+  background: var(--ink-muted);
+  opacity: 0.9;
+}
+.cardDot[data-kind='detour'] { background: var(--warning); opacity: 0.7; }
+.cardDot[data-kind='error']  { background: var(--error);   opacity: 0.75; }
+.cardDotLabel {
+  margin-left: 6px;
+  font-size: 10px;
+  color: var(--ink-tertiary);
+}
+
+/* ─── Placeholder (Pulse / Timeline / Flow modes — Layer 3~5) ─── */
+.placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  padding: var(--space-xxl) var(--space-md);
+  border: 1px dashed var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  color: var(--ink-subtle);
+  min-height: 240px;
+}
+.placeholderTitle {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--ink-muted);
+  letter-spacing: -0.2px;
+}
+.placeholderHint {
+  font-size: 12px;
+  color: var(--ink-tertiary);
+  text-align: center;
 }
