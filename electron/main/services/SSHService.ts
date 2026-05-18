@@ -243,7 +243,6 @@ export class SSHService extends EventEmitter {
           let output = ''
           let settled = false
           const settle = (fn: () => void) => { if (!settled) { settled = true; fn() } }
-          // StringDecoder handles multi-byte UTF-8 chars split across chunks
           const decoder = new StringDecoder('utf8')
           const decoderErr = new StringDecoder('utf8')
 
@@ -257,23 +256,19 @@ export class SSHService extends EventEmitter {
           stream.on('close', () => {
             output += decoder.end()
             output += decoderErr.end()
-              stream.destroy()
-              this.releaseChannel()
-              settle(() => resolve(output))
-            })
+            stream.destroy()
+            this.releaseChannel()
+            settle(() => resolve(output))
           })
         })
-      } catch (err: any) {
-        // acquireChannel already released on exec error/stream error above.
-        // Only retry on Channel open failure — other errors propagate.
-        const msg = err?.message || String(err)
-        if (msg.includes('Channel open failure')) {
-          console.log(`[SSH execChannel] Channel open failure (should not happen with semaphore)`)
-        }
-        throw err
+      })
+    } catch (err: any) {
+      const msg = err?.message || String(err)
+      if (msg.includes('Channel open failure')) {
+        console.log(`[SSH execChannel] Channel open failure (should not happen with semaphore)`)
       }
+      throw err
     }
-    throw new Error('Unreachable') // satisfy TS
   }
 
   // Spawn an interactive PTY session (for xterm.js)
