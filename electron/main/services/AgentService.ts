@@ -368,8 +368,39 @@ export class AgentService extends EventEmitter {
    * Clean structured response — no TUI parsing needed.
    */
   async sendMessage(taskId: string, message: string): Promise<void> {
-    const agent = this.agents.get(taskId)
-    if (!agent) return
+    let agent = this.agents.get(taskId)
+
+    // Agent not in memory (e.g. after app restart) — auto-resume if
+    // the task has a sessionId in DataStore.
+    if (!agent) {
+      if (!this.getTaskData) {
+        this.emitLog(taskId, 'error', 'Agent not found — cannot send message')
+        return
+      }
+      const task = this.getTaskData(taskId)
+      if (!task?.sessionId) {
+        this.emitLog(taskId, 'error', 'No agent session — run the task first')
+        return
+      }
+      // Auto-resume: register the agent with its saved sessionId
+      console.log(`[AgentService] Auto-resuming agent ${taskId} (session=${task.sessionId.slice(0, 12)}...)`)
+      try {
+        const conn = await this.getConn(task.projectId)
+        const project = this.getProject(task.projectId)
+        const agentInstance: AgentInstance = {
+          taskId, projectId: task.projectId, phaseId: task.phaseId,
+          engine: project?.settings?.agentEngine || 'claude',
+          conn, ptySession: null, streamHandle: null,
+          claudeSessionId: task.sessionId, messageQueue: [],
+        }
+        this.agents.set(taskId, agentInstance)
+        agent = agentInstance
+        this.emitLog(taskId, 'text', 'Session resumed automatically')
+      } catch (err) {
+        this.emitLog(taskId, 'error', `Auto-resume failed: ${err}`)
+        return
+      }
+    }
 
     // If still processing (stream or PTY active), queue
     if (agent.streamHandle) {
