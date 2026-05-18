@@ -1,0 +1,24 @@
+{
+  "name": "@workanywhere/gateway",
+  "version": "0.1.0",
+  "private": true,
+  "description": "API Gateway for WorkAnywhere mobile clients",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "ws": "^8.18.0",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/ws": "^8.5.13",
+    "@types/cors": "^2.8.17",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0"
+  }
+}

@@ -9,10 +9,34 @@ export interface DataChangeEvent {
 }
 
 /**
+ * IPersistence — abstraction for DataStore storage.
+ * Desktop uses FsPersistence (Node fs), Gateway uses FilePersistence (same server fs).
+ * Allows DataStore to be reused across Electron and Gateway without code changes.
+ */
+export interface IPersistence {
+  read(): string | null
+  write(json: string): void
+}
+
+/** Default persistence using Node.js fs — used by Electron desktop. */
+export class FsPersistence implements IPersistence {
+  constructor(private filePath: string) {}
+  read(): string | null {
+    try {
+      if (existsSync(this.filePath)) return readFileSync(this.filePath, 'utf-8')
+    } catch { /* corrupt or missing */ }
+    return null
+  }
+  write(json: string): void {
+    writeFileSync(this.filePath, json)
+  }
+}
+
+/**
  * DataStore — Project/Phase/Task CRUD with JSON file persistence.
  *
  * Single source of truth for all entity data.
- * Reads from / writes to a JSON file (dataPath).
+ * Reads from / writes to a JSON file via IPersistence.
  * All mutations persist immediately.
  *
  * onChange: called on every local mutation for SyncService to publish.
@@ -25,8 +49,15 @@ export class DataStore {
   private loaded = false
   private _suppressEvents = false
   private _onChangeCallbacks: Array<(event: DataChangeEvent) => void> = []
+  private persistence: IPersistence
 
-  constructor(private dataPath: string) {}
+  constructor(dataPathOrPersistence: string | IPersistence) {
+    if (typeof dataPathOrPersistence === 'string') {
+      this.persistence = new FsPersistence(dataPathOrPersistence)
+    } else {
+      this.persistence = dataPathOrPersistence
+    }
+  }
 
   onChange(cb: (event: DataChangeEvent) => void): void {
     this._onChangeCallbacks.push(cb)
@@ -107,8 +138,9 @@ export class DataStore {
   load(): SavedData {
     if (!this.loaded) {
       try {
-        if (existsSync(this.dataPath)) {
-          const raw: SavedData = JSON.parse(readFileSync(this.dataPath, 'utf-8'))
+        const raw_str = this.persistence.read()
+        if (raw_str) {
+          const raw: SavedData = JSON.parse(raw_str)
           this.projects = raw.projects || []
           this.phases = raw.phases || []
           // Reset active tasks to idle on startup (agent processes don't survive restart)
@@ -133,8 +165,7 @@ export class DataStore {
   }
 
   private persist(): void {
-    writeFileSync(
-      this.dataPath,
+    this.persistence.write(
       JSON.stringify({ projects: this.projects, phases: this.phases, tasks: this.tasks }, null, 2)
     )
   }
