@@ -136,6 +136,7 @@ export class AgentService extends EventEmitter {
       })
 
     } catch (err) {
+      console.error(`[startAgent ${taskId}] FAILED:`, err)
       this.emitStatus(taskId, 'failed')
       this.emitLog(taskId, 'error', `Failed to start agent: ${err}`)
       this.agents.delete(taskId)
