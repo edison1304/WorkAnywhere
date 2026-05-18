@@ -862,6 +862,59 @@ Rules for (C):
   }
 })
 
+// Merge a freshly-produced CompactedSession into the previous one so the
+// EventTree accumulates across compact calls instead of being overwritten.
+// Dedup is by normalized title within each bucket; errors additionally
+// upgrade their fix when a prior "미해결" becomes resolved.
+function mergeCompactedSession(
+  prev: import('../../../shared/types').CompactedSession | undefined,
+  next: import('../../../shared/types').CompactedSession,
+): import('../../../shared/types').CompactedSession {
+  if (!prev) return next
+  const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ')
+
+  const mergeByTitle = <T extends { title: string }>(oldItems: T[], newItems: T[]): T[] => {
+    const seen = new Set(oldItems.map(x => norm(x.title)))
+    const out = [...oldItems]
+    for (const item of newItems) {
+      const key = norm(item.title)
+      if (!seen.has(key)) {
+        out.push(item)
+        seen.add(key)
+      }
+    }
+    return out
+  }
+
+  const errors = [...prev.errors]
+  const errorIdx = new Map<string, number>()
+  errors.forEach((e, i) => errorIdx.set(norm(e.title), i))
+  for (const item of next.errors) {
+    const key = norm(item.title)
+    const idx = errorIdx.get(key)
+    if (idx === undefined) {
+      errors.push(item)
+      errorIdx.set(key, errors.length - 1)
+    } else {
+      const old = errors[idx]
+      const oldUnresolved = !old.fix || old.fix === '미해결'
+      const newResolved = item.fix && item.fix !== '미해결'
+      if (oldUnresolved && newResolved) {
+        errors[idx] = { ...old, fix: item.fix }
+      }
+    }
+  }
+
+  return {
+    compactedAt: next.compactedAt,
+    focusInstructions: next.focusInstructions ?? prev.focusInstructions,
+    headline: next.headline || prev.headline,
+    completed: mergeByTitle(prev.completed, next.completed),
+    detours: mergeByTitle(prev.detours, next.detours),
+    errors,
+  }
+}
+
 // ─── Task Compact (Timeline용 — 3-bucket 정리) ───
 ipcMain.handle('task:compact', async (_event, taskId: string, focusInstructions?: string) => {
   const task = dataStore.taskGet(taskId)
@@ -979,8 +1032,9 @@ Rules:
       })) : [],
     }
 
-    dataStore.taskUpdate(taskId, { compacted })
-    return { success: true, compacted }
+    const merged = mergeCompactedSession(task.compacted, compacted)
+    dataStore.taskUpdate(taskId, { compacted: merged })
+    return { success: true, compacted: merged }
   } catch (err) {
     return { success: false, error: String(err) }
   }

@@ -44,7 +44,8 @@ export default function App() {
     summaryInFlight:  new Set<string>(),
     summaryTimers:    new Map<string, ReturnType<typeof setTimeout>>(),
     compactInFlight:  new Set<string>(),
-    compactDone:      new Set<string>(),
+    compactAt:        new Map<string, number>(),
+    compactLogCount:  new Map<string, number>(),
   })
 
   // Debounced save to server — called after data changes
@@ -101,20 +102,28 @@ export default function App() {
     ops.summaryTimers.set(taskId, t)
   }, [triggerAutoSummary])
 
-  // Run task:compact silently when a task hits review/completed. Fills the
-  // 3-bucket structure that drives the Timeline + Tree without the user
-  // having to open the CompactDialog.
+  // Run task:compact silently at each turn boundary so the EventTree
+  // accumulates over the task's lifetime. The main-process handler merges
+  // each new 3-bucket payload into the existing one (dedup by title), so
+  // re-running is safe and additive — old events stay, new ones append.
+  // Throttle: ≥60s + ≥4 new logs between runs.
   const triggerAutoCompact = useCallback((taskId: string) => {
     if (!window.api) return
     const ops = autoOpsRef.current
-    if (ops.compactInFlight.has(taskId) || ops.compactDone.has(taskId)) return
+    if (ops.compactInFlight.has(taskId)) return
     const task = tasksRef.current.find(t => t.id === taskId)
-    if (!task || task.compacted || task.logs.length === 0) return
+    if (!task || task.logs.length === 0) return
+    const now = Date.now()
+    const last = ops.compactAt.get(taskId) ?? 0
+    const lastLogs = ops.compactLogCount.get(taskId) ?? 0
+    const newLogs = task.logs.length - lastLogs
+    if (last > 0 && (now - last < 60_000 || newLogs < 4)) return
 
     ops.compactInFlight.add(taskId)
+    ops.compactAt.set(taskId, now)
+    ops.compactLogCount.set(taskId, task.logs.length)
     window.api.taskCompact(taskId).then(result => {
       if (result.success && result.compacted) {
-        ops.compactDone.add(taskId)
         setTasks(prev => prev.map(t =>
           t.id === taskId ? { ...t, compacted: result.compacted! } : t
         ))
@@ -701,10 +710,11 @@ export default function App() {
       if (status === 'waiting' || status === 'review' || status === 'completed') {
         scheduleAutoSummary(taskId, 5_000)
       }
-      // Auto-compact when the task is done (or under review) so the Tree
-      // shows the curated 3-bucket arc without the user opening the dialog.
-      if (status === 'review' || status === 'completed') {
-        // Slight delay so the final logs land in DataStore first.
+      // Auto-compact at every turn boundary so the EventTree accumulates
+      // events as the task progresses. Handler merges (dedup by title) so
+      // re-running is additive, not replace.
+      if (status === 'waiting' || status === 'review' || status === 'completed') {
+        // Slight delay so the turn's final logs land in DataStore first.
         setTimeout(() => triggerAutoCompact(taskId), 3_000)
       }
     })
