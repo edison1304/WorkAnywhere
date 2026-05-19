@@ -160,6 +160,14 @@
   background: var(--surface-3);
   border-color: rgba(216, 160, 80, 0.5);
 }
+/* Cross-project chip: subtle lavender hint on the right edge so the user
+ * registers "this jump leaves the active project". */
+.attnChipCrossProject {
+  box-shadow: inset -2px 0 0 0 rgba(94, 106, 210, 0.45);
+}
+.attnChipCrossProject .attnChipMeta {
+  color: var(--ink-subtle);
+}
 .attnChipGlyph {
   font-size: 12px;
   color: var(--status-attention-strong);

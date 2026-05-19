@@ -30,10 +30,12 @@ interface Props {
   project: Project | null
   phases: Phase[]
   tasks: Task[]
+  /** All projects — used by the cross-project Attention pin (Layer 7a). */
+  allProjects?: Project[]
   onSelectTask: (taskId: string) => void
 }
 
-export function ProjectEventTree({ project, phases, tasks, onSelectTask }: Props) {
+export function ProjectEventTree({ project, phases, tasks, allProjects, onSelectTask }: Props) {
   const [mode, setMode] = useState<TreeMode>(() => {
     if (typeof window === 'undefined') return DEFAULT_MODE
     const v = window.localStorage?.getItem(MODE_KEY)
@@ -85,17 +87,16 @@ export function ProjectEventTree({ project, phases, tasks, onSelectTask }: Props
     )
   }
 
-  const projectTasks = useMemo(
-    () => (project ? tasks.filter(t => t.projectId === project.id) : []),
-    [project, tasks],
-  )
-
+  // L7a: pin bar pulls from ALL projects so a user inside Project A can still
+  // see Project B's attention tasks. Body sections stay project-scoped.
   return (
     <div className={styles.page}>
       <Header project={project} mode={mode} onChangeMode={setMode} />
       <AttentionPinBar
-        tasks={projectTasks}
+        tasks={tasks}
         phases={phases}
+        projects={allProjects ?? (project ? [project] : [])}
+        activeProjectId={project?.id ?? null}
         onSelectTask={onSelectTask}
       />
       <div className={styles.body}>
@@ -337,10 +338,14 @@ function CardSparkline({
 function AttentionPinBar({
   tasks,
   phases,
+  projects,
+  activeProjectId,
   onSelectTask,
 }: {
   tasks: Task[]
   phases: Phase[]
+  projects: Project[]
+  activeProjectId: string | null
   onSelectTask: (id: string) => void
 }) {
   const attn = tasks.filter(isAttentionTask)
@@ -356,33 +361,42 @@ function AttentionPinBar({
   const visible = sorted.slice(0, MAX)
   const more = sorted.length - visible.length
 
+  const projectCount = new Set(attn.map(t => t.projectId)).size
+  const crossProject = projectCount > 1
+
   return (
     <div className={styles.attnPin} role="region" aria-label="Attention tasks">
       <div className={styles.attnPinHead}>
         <span className={styles.attnPinHeadDot} aria-hidden="true" />
         지금 손이 필요한 곳
         <span className={styles.attnPinHint}>
-          — {attn.length} task{attn.length > 1 ? 's' : ''} · 페이즈 무관
+          — {attn.length} task{attn.length > 1 ? 's' : ''}
+          {crossProject ? ` · ${projectCount} 프로젝트` : ' · 페이즈 무관'}
         </span>
       </div>
       <div className={styles.attnPinList}>
         {visible.map(task => {
           const phase = phases.find(p => p.id === task.phaseId) ?? null
+          const proj  = projects.find(p => p.id === task.projectId) ?? null
+          const otherProject = proj && proj.id !== activeProjectId
           const glyph = task.status === 'review' ? '✋' : '⌛'
           const ago = relativeFromNow(lastActivityTs(task))
+          const meta = [
+            task.status,
+            otherProject && proj ? proj.name : phase?.name ?? '—',
+            ago,
+          ].filter(Boolean).join(' · ')
           return (
             <button
               key={task.id}
               type="button"
-              className={styles.attnChip}
+              className={`${styles.attnChip} ${otherProject ? styles.attnChipCrossProject : ''}`}
               onClick={() => onSelectTask(task.id)}
-              title={task.name}
+              title={otherProject && proj ? `${proj.name} — ${task.name}` : task.name}
             >
               <span className={styles.attnChipGlyph}>{glyph}</span>
               <span className={styles.attnChipName}>{task.name}</span>
-              <span className={styles.attnChipMeta}>
-                {task.status} · {phase?.name ?? '—'}{ago ? ` · ${ago}` : ''}
-              </span>
+              <span className={styles.attnChipMeta}>{meta}</span>
             </button>
           )
         })}

@@ -389,7 +389,15 @@ export function CommandCenter({
             project={activeProject}
             phases={allPhases}
             tasks={allTasks}
-            onSelectTask={(taskId) => { onSelectTask(taskId); onChangePage('workspace') }}
+            allProjects={projects}
+            onSelectTask={(taskId) => {
+              const t = allTasks.find(x => x.id === taskId)
+              if (t && t.projectId !== activeProject?.id) {
+                onSelectProject(t.projectId)
+              }
+              onSelectTask(taskId)
+              onChangePage('workspace')
+            }}
           />
         ) : (
           <>
