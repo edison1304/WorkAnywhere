@@ -104,7 +104,7 @@ export function ProjectEventTree({ project, phases, tasks, onSelectTask }: Props
         )}
         {mode === 'pulse'    && <PulseMode sections={sections} onSelectTask={onSelectTask} />}
         {mode === 'timeline' && <TimelineMode sections={sections} onSelectTask={onSelectTask} />}
-        {mode === 'flow'     && <ModePlaceholder label="Flow"     hint="Layer 5 — forkedFromId + 시퀀스 노드-엣지" />}
+        {mode === 'flow'     && <FlowMode sections={sections} onSelectTask={onSelectTask} />}
       </div>
     </div>
   )
@@ -608,6 +608,254 @@ function PulseLane({
   )
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Mode C — Flow graph (phase swimlane × order × lineage edges)
+
+const FLOW_CELL_W = 180
+const FLOW_CELL_H = 96
+const FLOW_NODE_W = 152
+const FLOW_NODE_H = 56
+const FLOW_GUTTER_LEFT = 132
+const FLOW_PAD = 18
+
+interface FlowNode {
+  task: Task
+  phaseIdx: number
+  col: number
+  x: number   // node top-left
+  y: number
+  cx: number  // node center
+  cy: number
+}
+
+interface FlowEdge {
+  kind: 'sequence' | 'fork' | 'depends'
+  from: FlowNode
+  to: FlowNode
+}
+
+function FlowMode({
+  sections,
+  onSelectTask,
+}: {
+  sections: Array<{ phase: Phase | null; tasks: Task[] }>
+  onSelectTask: (id: string) => void
+}) {
+  const layout = useMemo(() => flowLayout(sections), [sections])
+
+  if (layout.nodes.length === 0) {
+    return (
+      <div className={styles.flowEmpty}>
+        <div className={styles.placeholderTitle}>Flow mode</div>
+        <div className={styles.placeholderHint}>표시할 task가 없습니다.</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className={styles.flow}>
+      <div className={styles.flowLegend}>
+        <span className={styles.flowLegendItem} data-kind="sequence">
+          <svg width="22" height="6" aria-hidden="true">
+            <line x1="0" y1="3" x2="22" y2="3" stroke="var(--ink-subtle)" strokeWidth="1.4" />
+          </svg>
+          시퀀스
+        </span>
+        <span className={styles.flowLegendItem} data-kind="fork">
+          <svg width="22" height="6" aria-hidden="true">
+            <line x1="0" y1="3" x2="22" y2="3" stroke="#9d6bd0" strokeWidth="1.4" strokeDasharray="4 3" />
+          </svg>
+          fork (↳)
+        </span>
+        <span className={styles.flowLegendItem} data-kind="depends">
+          <svg width="22" height="6" aria-hidden="true">
+            <line x1="0" y1="3" x2="22" y2="3" stroke="var(--warning)" strokeWidth="1.4" strokeDasharray="1 3" />
+          </svg>
+          막힘 (dependsOn)
+        </span>
+      </div>
+
+      <div className={styles.flowCanvas}>
+        <svg
+          className={styles.flowSvg}
+          viewBox={`0 0 ${layout.width} ${layout.height}`}
+          width={layout.width}
+          height={layout.height}
+          role="img"
+          aria-label="Task flow graph"
+        >
+          {/* Phase swimlane backgrounds + labels */}
+          {sections.map((sec, i) => {
+            const y = FLOW_PAD + i * FLOW_CELL_H
+            return (
+              <g key={`lane-${sec.phase?.id ?? i}`}>
+                <rect
+                  x={0}
+                  y={y}
+                  width={layout.width}
+                  height={FLOW_CELL_H}
+                  fill={i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.012)'}
+                />
+                <text
+                  x={12}
+                  y={y + FLOW_CELL_H / 2 + 3}
+                  fill="var(--ink-subtle)"
+                  fontSize="10.5"
+                  fontWeight="700"
+                  letterSpacing="0.08em"
+                  style={{ textTransform: 'uppercase' as const }}
+                >
+                  {sec.phase?.name ?? '(orphan)'}
+                </text>
+                <line
+                  x1={FLOW_GUTTER_LEFT - 8}
+                  y1={y + FLOW_CELL_H - 0.5}
+                  x2={layout.width - FLOW_PAD}
+                  y2={y + FLOW_CELL_H - 0.5}
+                  stroke="var(--hairline)"
+                  strokeWidth="1"
+                />
+              </g>
+            )
+          })}
+
+          {/* Edges first (under nodes) */}
+          {layout.edges.map((e, i) => (
+            <FlowEdgePath key={`edge-${i}`} edge={e} />
+          ))}
+
+          {/* Nodes */}
+          {layout.nodes.map(node => (
+            <FlowNodeRect
+              key={node.task.id}
+              node={node}
+              onSelectTask={onSelectTask}
+            />
+          ))}
+        </svg>
+      </div>
+    </div>
+  )
+}
+
+function FlowEdgePath({ edge }: { edge: FlowEdge }) {
+  const { from, to, kind } = edge
+  const stroke =
+    kind === 'fork'    ? '#9d6bd0' :
+    kind === 'depends' ? 'var(--warning)' :
+                         'var(--ink-subtle)'
+  const dash =
+    kind === 'fork'    ? '4 3' :
+    kind === 'depends' ? '1 3' :
+                         undefined
+  const opacity = kind === 'depends' ? 0.8 : 1
+
+  // Start from right edge of `from`, end at left edge of `to`.
+  const x1 = from.x + FLOW_NODE_W
+  const y1 = from.cy
+  const x2 = to.x
+  const y2 = to.cy
+  // Bezier control points — horizontal departure / arrival.
+  const dx = Math.max(36, (x2 - x1) * 0.45)
+  const c1x = x1 + dx
+  const c2x = x2 - dx
+  const d = `M ${x1} ${y1} C ${c1x} ${y1}, ${c2x} ${y2}, ${x2} ${y2}`
+
+  return (
+    <path
+      d={d}
+      stroke={stroke}
+      strokeWidth="1.2"
+      strokeDasharray={dash}
+      fill="none"
+      opacity={opacity}
+    />
+  )
+}
+
+function FlowNodeRect({
+  node,
+  onSelectTask,
+}: {
+  node: FlowNode
+  onSelectTask: (id: string) => void
+}) {
+  const { task, x, y } = node
+  const attn = isAttentionTask(task)
+  const glyph = task.status === 'review' ? '✋' : task.status === 'waiting' ? '⌛' : ''
+  const statusColor =
+    task.status === 'running'   ? 'var(--primary)' :
+    task.status === 'waiting'   ? 'var(--warning)' :
+    task.status === 'review'    ? 'var(--warning)' :
+    task.status === 'completed' ? 'var(--success)' :
+    task.status === 'failed'    ? 'var(--error)' :
+                                  'var(--ink-tertiary)'
+  const opacity = (!attn && task.status === 'completed') ? 0.62 : 1
+
+  return (
+    <g
+      className={styles.flowNode}
+      transform={`translate(${x}, ${y})`}
+      onClick={() => onSelectTask(task.id)}
+      style={{ cursor: 'pointer', opacity }}
+    >
+      <rect
+        width={FLOW_NODE_W}
+        height={FLOW_NODE_H}
+        rx={6}
+        fill="var(--surface-2)"
+        stroke={attn ? 'rgba(216,160,80,0.45)' : 'var(--hairline)'}
+        strokeWidth={attn ? 1.2 : 1}
+      />
+      {/* status bar — left edge */}
+      <rect
+        width={attn ? 4 : 2}
+        height={FLOW_NODE_H}
+        fill={statusColor}
+        opacity={attn ? 0.95 : 0.85}
+      />
+      {/* glyph (attention) or status dot */}
+      {attn ? (
+        <text x={14} y={20} fontSize="12" fill="var(--status-attention-strong)">{glyph}</text>
+      ) : (
+        <circle cx={14} cy={16} r={3} fill={statusColor} />
+      )}
+      <text
+        x={attn ? 28 : 24}
+        y={20}
+        fill="var(--ink)"
+        fontSize="12"
+        fontWeight="500"
+      >
+        {clipText(task.name, 18)}
+      </text>
+      {task.summary?.currentStep && (
+        <text
+          x={10}
+          y={38}
+          fill="var(--ink-muted)"
+          fontSize="11"
+          opacity="0.85"
+        >
+          {clipText(task.summary.currentStep, 24)}
+        </text>
+      )}
+      {task.forkedFromId && (
+        <text
+          x={FLOW_NODE_W - 16}
+          y={20}
+          fill="#9d6bd0"
+          fontSize="11"
+          textAnchor="end"
+          title="forked"
+        >
+          ↳
+        </text>
+      )}
+    </g>
+  )
+}
+
 function ModePlaceholder({ label, hint }: { label: string; hint: string }) {
   return (
     <div className={styles.placeholder}>
@@ -727,6 +975,69 @@ function pulseLevel(count: number): 'zero' | 'lo' | 'mid' | 'hi' {
   if (count <= 1) return 'lo'
   if (count <= 3) return 'mid'
   return 'hi'
+}
+
+function clipText(s: string, max: number): string {
+  if (s.length <= max) return s
+  return s.slice(0, max - 1) + '…'
+}
+
+function flowLayout(
+  sections: Array<{ phase: Phase | null; tasks: Task[] }>,
+): { width: number; height: number; nodes: FlowNode[]; edges: FlowEdge[] } {
+  const nodes: FlowNode[] = []
+  const nodeById = new Map<string, FlowNode>()
+  let maxCol = 0
+
+  sections.forEach((sec, phaseIdx) => {
+    sec.tasks.forEach((task, col) => {
+      const x = FLOW_GUTTER_LEFT + col * FLOW_CELL_W + (FLOW_CELL_W - FLOW_NODE_W) / 2
+      const y = FLOW_PAD + phaseIdx * FLOW_CELL_H + (FLOW_CELL_H - FLOW_NODE_H) / 2
+      const node: FlowNode = {
+        task,
+        phaseIdx,
+        col,
+        x, y,
+        cx: x + FLOW_NODE_W / 2,
+        cy: y + FLOW_NODE_H / 2,
+      }
+      nodes.push(node)
+      nodeById.set(task.id, node)
+      if (col > maxCol) maxCol = col
+    })
+  })
+
+  const edges: FlowEdge[] = []
+  // Sequence — same phase, col n → n+1
+  sections.forEach(sec => {
+    for (let i = 0; i < sec.tasks.length - 1; i++) {
+      const from = nodeById.get(sec.tasks[i].id)
+      const to   = nodeById.get(sec.tasks[i + 1].id)
+      if (from && to) edges.push({ kind: 'sequence', from, to })
+    }
+  })
+  // Fork — forkedFromId points to a parent task, edge parent → child
+  for (const node of nodes) {
+    const fromId = node.task.forkedFromId
+    if (!fromId) continue
+    const from = nodeById.get(fromId)
+    if (!from) continue
+    edges.push({ kind: 'fork', from, to: node })
+  }
+  // Depends — task.dependsOn[] points at blockers, edge blocker → blocked
+  for (const node of nodes) {
+    const deps = node.task.dependsOn
+    if (!deps?.length) continue
+    for (const depId of deps) {
+      const from = nodeById.get(depId)
+      if (!from) continue
+      edges.push({ kind: 'depends', from, to: node })
+    }
+  }
+
+  const width  = FLOW_GUTTER_LEFT + (maxCol + 1) * FLOW_CELL_W + FLOW_PAD
+  const height = FLOW_PAD * 2 + sections.length * FLOW_CELL_H
+  return { width, height, nodes, edges }
 }
 
 function compactedDots(task: Task): Array<{ kind: DotKind; ts?: string }> {

@@ -675,6 +675,52 @@
   50%      { transform: translateY(-50%) scale(1.3); box-shadow: 0 0 10px color-mix(in srgb, var(--pulse-lane) 85%, transparent); }
 }
 
+/* ─── Flow mode (Mode C — Layer 5) ─── */
+.flow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+.flowLegend {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  font-size: 11px;
+  color: var(--ink-tertiary);
+}
+.flowLegendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.flowCanvas {
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+}
+.flowSvg {
+  display: block;
+  min-width: 100%;
+}
+.flowNode:hover rect:first-of-type {
+  fill: var(--surface-3);
+}
+.flowEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  padding: var(--space-xxl) var(--space-md);
+  border: 1px dashed var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  color: var(--ink-subtle);
+  min-height: 200px;
+}
+
 /* ─── Animations + reduced-motion guard ─── */
 @keyframes wa-tree-pulse {
   0%, 100% { background: var(--status-attention); }
