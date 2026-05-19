@@ -367,12 +367,31 @@
   flex-shrink: 0;
 }
 .cardLine2 {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
   font-size: 11.5px;
   color: var(--ink-muted);
+  line-height: 1.45;
+  min-width: 0;
+}
+.cardSummary {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  line-height: 1.45;
+}
+.cardAgo {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--ink-tertiary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.cardSpark {
+  flex-shrink: 0;
+  align-self: center;
 }
 .cardLine3 {
   display: flex;

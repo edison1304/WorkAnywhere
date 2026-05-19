@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import type { Project, Phase, Task } from '../../../shared/types'
+import type { Project, Phase, Task, TaskStatus } from '../../../shared/types'
 import { StatusDot } from '../job/StatusDot'
 import styles from './ProjectEventTree.module.css'
 
@@ -238,6 +238,12 @@ function TaskCard({
   const glyph = task.status === 'review' ? '✋' : task.status === 'waiting' ? '⌛' : ''
   const summaryLine = task.summary?.currentStep ?? task.summary?.progress ?? ''
   const dots = useMemo(() => compactedDots(task), [task.compacted])
+  // L6 synthesis: micro views of other modes inside the Attention card.
+  const sparkBuckets = useMemo(() => {
+    const end = Date.now()
+    return logBuckets(task, { start: end - ZOOM_MS.day, end }, 6)
+  }, [task])
+  const ago = relativeFromNow(lastActivityTs(task))
 
   return (
     <button
@@ -250,11 +256,17 @@ function TaskCard({
       <div className={styles.cardLine1}>
         {!attn && <StatusDot status={task.status} size={7} />}
         <span className={styles.cardName}>{task.name}</span>
+        <CardSparkline buckets={sparkBuckets} status={task.status} />
         {hasFork && <span className={styles.cardForkChip} title="forked task">↳</span>}
         {attn && <span className={styles.cardGlyph}>{glyph}</span>}
       </div>
 
-      {summaryLine && <div className={styles.cardLine2}>{summaryLine}</div>}
+      {(summaryLine || ago) && (
+        <div className={styles.cardLine2}>
+          {summaryLine && <span className={styles.cardSummary}>{summaryLine}</span>}
+          {ago && <span className={styles.cardAgo}>{ago}</span>}
+        </div>
+      )}
 
       {dots.length > 0 && (
         <div className={styles.cardLine3}>
@@ -269,6 +281,54 @@ function TaskCard({
         </div>
       )}
     </button>
+  )
+}
+
+function CardSparkline({
+  buckets,
+  status,
+}: {
+  buckets: number[]
+  status: TaskStatus
+}) {
+  if (buckets.length === 0 || buckets.every(c => c === 0)) return null
+  const W = 38, H = 10, gap = 1
+  const n = buckets.length
+  const barW = (W - gap * (n - 1)) / n
+  const color =
+    status === 'running'   ? 'var(--primary)' :
+    status === 'waiting'   ? 'var(--warning)' :
+    status === 'review'    ? 'var(--warning)' :
+    status === 'completed' ? 'var(--success)' :
+    status === 'failed'    ? 'var(--error)' :
+                             'var(--ink-tertiary)'
+
+  return (
+    <svg
+      className={styles.cardSpark}
+      width={W}
+      height={H}
+      viewBox={`0 0 ${W} ${H}`}
+      aria-hidden="true"
+    >
+      {buckets.map((c, i) => {
+        const lv = pulseLevel(c)
+        const h = lv === 'zero' ? 0 : lv === 'lo' ? 3 : lv === 'mid' ? 6 : H
+        const o = lv === 'zero' ? 0 : lv === 'lo' ? 0.4 : lv === 'mid' ? 0.7 : 0.95
+        return (
+          <rect
+            key={i}
+            x={i * (barW + gap)}
+            y={H - h}
+            width={barW}
+            height={h}
+            fill={color}
+            opacity={o}
+            rx={0.5}
+          />
+        )
+      })}
+    </svg>
   )
 }
 
