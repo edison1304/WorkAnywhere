@@ -26,7 +26,7 @@ export class PersistentShell {
   private initPromise: Promise<void> | null = null
   private commandTimeout: ReturnType<typeof setTimeout> | null = null
 
-  private static readonly CMD_TIMEOUT_MS = 30_000
+  private static readonly CMD_TIMEOUT_MS = 60_000
 
   constructor(
     private client: Client,
@@ -97,11 +97,11 @@ export class PersistentShell {
               setTimeout(checkReady, 50)
             }
           }
-          // Give it a generous window; if it doesn't respond in 5s, fail
+          // Give it a generous window; if it doesn't respond in 10s, fail
           const timeout = setTimeout(() => {
             this.initPromise = null
             reject(new Error('PersistentShell init timed out'))
-          }, 5000)
+          }, 10_000)
 
           const poll = () => {
             if (this.buffer.includes(readyMarker)) {

@@ -215,18 +215,33 @@ export class SSHService extends EventEmitter {
 
   // Execute a short-lived command via the persistent shell channel.
   // All commands share ONE shell channel instead of opening a new channel each time.
+  // IMPORTANT: Never falls back to execChannel — that would consume a dedicated
+  // channel slot and cause deadlocks when agents are running.
   async exec(command: string, useLogin = false): Promise<string> {
     if (!this.client || !this.connected) throw new Error('Not connected')
     const finalCmd = useLogin ? `bash -lc ${JSON.stringify(command)}` : command
 
-    try {
-      const shell = await this.getOrCreateShell()
-      return await shell.exec(finalCmd)
-    } catch (err: any) {
-      // If persistent shell fails, fall back to a direct channel once
-      console.log(`[SSH exec] PersistentShell failed (${err.message}), falling back to direct channel`)
-      return this.execChannel(finalCmd)
+    // Retry up to 2 times: if PersistentShell is dead, recreate it
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const shell = await this.getOrCreateShell()
+        return await shell.exec(finalCmd)
+      } catch (err: any) {
+        const msg = err.message || ''
+        // Shell died or timed out — destroy and retry with a fresh shell
+        if (msg.includes('dead') || msg.includes('timed out') || msg.includes('died') || msg.includes('reconnection')) {
+          console.log(`[SSH exec] PersistentShell failed (${msg}), recreating (attempt ${attempt + 1}/3)`)
+          this.persistentShell?.destroy()
+          this.persistentShell = null
+          // Small delay before retry to let SSH recover
+          await new Promise(r => setTimeout(r, 500))
+          continue
+        }
+        // Non-retryable error — propagate
+        throw err
+      }
     }
+    throw new Error('PersistentShell failed after 3 attempts')
   }
 
   // Execute a command via a dedicated SSH channel.
