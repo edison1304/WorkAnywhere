@@ -64,13 +64,13 @@ export class PersistentShell {
           })
 
           stream.on('error', (e: Error) => {
-            console.error('[PersistentShell] stream error:', e.message)
-            this.die()
+            console.error(`[PersistentShell] stream error: ${e.message}\n  stack: ${e.stack}`)
+            this.die('stream error: ' + e.message)
           })
 
           stream.on('close', () => {
-            console.log('[PersistentShell] stream closed')
-            this.die()
+            console.log('[PersistentShell] stream closed unexpectedly')
+            this.die('stream closed')
           })
 
           // Initialize shell: disable echo, clear all prompts
@@ -100,6 +100,7 @@ export class PersistentShell {
           // Give it a generous window; if it doesn't respond in 10s, fail
           const timeout = setTimeout(() => {
             this.initPromise = null
+            console.error(`[PersistentShell] init timed out after 10s. Buffer so far (${this.buffer.length} chars): "${this.buffer.slice(0, 300)}"`)
             reject(new Error('PersistentShell init timed out'))
           }, 10_000)
 
@@ -176,7 +177,13 @@ export class PersistentShell {
 
     // Set a timeout — if the command doesn't finish, reject and reset
     this.commandTimeout = setTimeout(() => {
-      console.error(`[PersistentShell] command timed out (${PersistentShell.CMD_TIMEOUT_MS}ms): ${command.slice(0, 100)}`)
+      console.error(
+        `[PersistentShell] command timed out (${PersistentShell.CMD_TIMEOUT_MS}ms)\n` +
+        `  command: ${command.slice(0, 200)}\n` +
+        `  capturing: ${this.capturing}\n` +
+        `  currentOutput so far (${this.currentOutput.length} chars): "${this.currentOutput.slice(0, 200)}"\n` +
+        `  buffer (${this.buffer.length} chars): "${this.buffer.slice(0, 200)}"`
+      )
       // Send Ctrl-C to kill stuck command
       this.channel?.write('\x03\n')
       const rej = this.currentReject
@@ -185,7 +192,7 @@ export class PersistentShell {
       this.currentReject = null
       this.currentOutput = ''
       this.capturing = false
-      rej?.(new Error('Command timed out'))
+      rej?.(new Error(`Command timed out: ${command.slice(0, 80)}`))
       this.processNext()
     }, PersistentShell.CMD_TIMEOUT_MS)
 
@@ -259,15 +266,17 @@ export class PersistentShell {
     this.processNext()
   }
 
-  private die(): void {
+  private die(reason?: string): void {
     if (!this.alive) return
     this.alive = false
+    const cause = reason || 'unknown'
+    console.error(`[PersistentShell] died: ${cause}. Queue length: ${this.queue.length}, has current: ${!!this.currentId}`)
     if (this.commandTimeout) {
       clearTimeout(this.commandTimeout)
       this.commandTimeout = null
     }
     this.channel = null
-    this.rejectAll(new Error('PersistentShell channel died'))
+    this.rejectAll(new Error(`PersistentShell died (${cause})`))
     this.onDeath?.()
   }
 

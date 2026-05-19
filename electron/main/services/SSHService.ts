@@ -230,7 +230,7 @@ export class SSHService extends EventEmitter {
         const msg = err.message || ''
         // Shell died or timed out — destroy and retry with a fresh shell
         if (msg.includes('dead') || msg.includes('timed out') || msg.includes('died') || msg.includes('reconnection')) {
-          console.log(`[SSH exec] PersistentShell failed (${msg}), recreating (attempt ${attempt + 1}/3)`)
+          console.log(`[SSH exec] PersistentShell failed, recreating (attempt ${attempt + 1}/3)\n  reason: ${msg}\n  command: ${command.slice(0, 120)}`)
           this.persistentShell?.destroy()
           this.persistentShell = null
           // Small delay before retry to let SSH recover
