@@ -741,7 +741,44 @@ function FileTree({ rootPath, onOpenFile }: { rootPath: string; onOpenFile?: (pa
     }
   }, [])
 
+  // Background refresh — no loading flag, dedup concurrent calls, only update on diff.
+  const bgInFlight = useRef<Set<string>>(new Set())
+  const silentRefresh = useCallback(async (dirPath: string) => {
+    if (!window.api) return
+    if (bgInFlight.current.has(dirPath)) return
+    bgInFlight.current.add(dirPath)
+    try {
+      const result = await window.api.sshListDir(dirPath)
+      if (result.success && result.entries) {
+        const next = result.entries.filter(e => e.name !== '.' && e.name !== '..')
+        setEntries(prev => {
+          const cur = prev[dirPath]
+          if (cur && cur.length === next.length && cur.every((e, i) => e.path === next[i].path && e.isDir === next[i].isDir)) {
+            return prev
+          }
+          return { ...prev, [dirPath]: next }
+        })
+      }
+    } finally {
+      bgInFlight.current.delete(dirPath)
+    }
+  }, [])
+
   useEffect(() => { loadDir(rootPath) }, [rootPath])
+
+  // Poll expanded dirs so newly-created / deleted files appear without manual reload.
+  const expandedRef = useRef(expanded)
+  useEffect(() => { expandedRef.current = expanded }, [expanded])
+  useEffect(() => {
+    const tick = () => {
+      const exp = expandedRef.current
+      for (const p of Object.keys(exp)) if (exp[p]) silentRefresh(p)
+    }
+    const id = window.setInterval(tick, 2000)
+    const onFocus = () => tick()
+    window.addEventListener('focus', onFocus)
+    return () => { window.clearInterval(id); window.removeEventListener('focus', onFocus) }
+  }, [silentRefresh])
 
   const toggleDir = useCallback((dirPath: string) => {
     setExpanded(prev => {
